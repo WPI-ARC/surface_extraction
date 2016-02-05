@@ -1,0 +1,24 @@
+
+<!-- PCL Surface reconstruction library component -->
+<library path="lib/libsurface_filters">
+  <class name="surface_filters/MovingLeastSquaresNodelet" type="surface_filters::MovingLeastSquaresNodelet" base_class_type="nodelet::Nodelet">
+    <description>
+      MovingLeastSquares is an implementation of the MLS algorithm for data reconstruction through bivariate polynomial fitting.
+    </description>
+  </class>
+  <class name="surface_filters/RegionGrowingSegmentation" type="surface_filters::RegionGrowingSegmentation" base_class_type="nodelet::Nodelet">
+    <description>
+      RegionGrowingSegmentation is an implementation of the Region Growing Segmentation for surface detection.
+    </description>
+  </class>
+  <class name="surface_filters/SACSegmentAndFit" type="surface_filters::SACSegmentAndFit" base_class_type="nodelet::Nodelet">
+    <description>
+      SACSegmentAndFit is an implementation of the SAmple Consensus algorithm to segment and fit models
+    </description>
+  </class>
+  <class name="surface_filters/PeriodicSnapshotter" type="surface_filters::PeriodicSnapshotter" base_class_type="nodelet::Nodelet">
+    <description>
+      Periodically accumulate laser scans and transform them into point clouds
+    </description>
+  </class>
+</library>

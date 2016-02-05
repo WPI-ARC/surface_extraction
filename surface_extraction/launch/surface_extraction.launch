@@ -1,0 +1,81 @@
+<launch>
+    <group ns="surface_extraction">
+        <env name="ROSCONSOLE_CONFIG_FILE" value="$(find surface_extraction)/custom_rosconsole.conf"/>
+
+        <!-- Load parameters -->
+        <rosparam command="load" file="$(find surface_extraction)/params.yaml" />
+
+        <!-- Nodelet manager -->
+        <node pkg="nodelet" type="nodelet" name="nodelet_manager" args="manager" output="screen" />
+
+        <!-- Crop -->
+        <node pkg="nodelet" type="nodelet" name="crop" args="load pcl/CropBox nodelet_manager">
+            <!-- Topics -->
+            <remap from="~input" to="/cloud_pcd" />
+
+            <!-- Params -->
+            <remap from="~min_x" to="crop_box_min/x" />
+            <remap from="~min_y" to="crop_box_min/y" />
+            <remap from="~min_z" to="crop_box_min/z" />
+            <remap from="~max_x" to="crop_box_max/x" />
+            <remap from="~max_y" to="crop_box_max/y" />
+            <remap from="~max_z" to="crop_box_max/z" />
+        </node>
+
+        <!-- Downsample -->
+        <node pkg="nodelet" type="nodelet" name="downsample" args="load pcl/VoxelGrid nodelet_manager">
+            <!-- Topics -->
+            <remap from="~input" to="crop/output" />
+
+            <!-- Params -->
+            <remap from="~leaf_size" to="downsample_resolution" />
+            <param name="filter_field_name" value="" />
+        </node>
+
+        <!-- Remove outliers -->
+        <node pkg="nodelet" type="nodelet" name="outlier_removal" args="load pcl/StatisticalOutlierRemoval nodelet_manager">
+            <!-- Topics -->
+            <remap from="~input" to="downsample/output" />
+        </node>
+
+        <!-- Smoothing and Normals Estimation -->
+        <node pkg="nodelet" type="nodelet" name="normals_estimation" args="load surface_filters/MovingLeastSquaresNodelet nodelet_manager">
+            <!-- Topics -->
+            <remap from="~input" to="outlier_removal/output" />
+
+            <!-- Params -->
+            <param name="use_polynomial_fit" value="false" />
+            <param name="compute_normals" value="true" />
+            <!-- Sets the type of spatial locator. 1 is FLANN, which seems to be the best kd-tree implementation
+                https://github.com/ros-perception/perception_pcl/blob/1.3.0/pcl_ros/include/pcl_ros/surface/moving_least_squares.h#L98 -->
+            <param name="spatial_locator" value="1" />
+        </node>
+
+        <!-- Region Growing Segmentation -->
+        <node pkg="nodelet" type="nodelet" name="region_segmentation" args="load surface_filters/RegionGrowingSegmentation nodelet_manager">
+            <!-- Topics -->
+            <remap from="~input" to="normals_estimation/output" />
+            <remap from="~normals" to="normals_estimation/normals" />
+
+            <!-- Params -->
+            <!-- Sets the type of spatial locator. 1 is FLANN, which seems to be the best kd-tree implementation
+                https://github.com/ros-perception/perception_pcl/blob/1.3.0/pcl_ros/include/pcl_ros/surface/moving_least_squares.h#L98 -->
+            <param name="spatial_locator" value="1" />
+        </node>
+
+        <!-- RANSAC -->
+        <node pkg="nodelet" type="nodelet" name="sac_segmentation" args="load surface_filters/SACSegmentAndFit nodelet_manager">
+            <!-- Topics -->
+            <remap from="~input" to="normals_estimation/output" />
+            <remap from="~normals" to="normals_estimation/normals" />
+            <remap from="~clusters" to="region_segmentation/clusters" />
+
+            <!-- Params -->
+            <!-- Sets the type of spatial locator. 1 is FLANN, which seems to be the best kd-tree implementation
+                https://github.com/ros-perception/perception_pcl/blob/1.3.0/pcl_ros/include/pcl_ros/surface/moving_least_squares.h#L98 -->
+            <param name="spatial_locator" value="1" />
+            <param name="approximate_sync" value="true" />
+        </node>
+
+    </group>
+</launch>

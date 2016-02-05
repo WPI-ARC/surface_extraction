@@ -4,7 +4,7 @@
         <remap from="cloud_pcd" to="input_cloud" />
     </node>
     <!-- Pointcloud publisher -->
-    <node pkg="pcl_ros" type="pcd_to_pointcloud" name="input_publisher" args="$(find pcl_surfaces)/data/shadwell_demo_area_binary.pcd 1" />
+    <node pkg="pcl_ros" type="pcd_to_pointcloud" name="input_publisher" args="$(find surface_extraction)/data/shadwell_demo_area_binary.pcd 1" />
 
     <include unless="$(arg cloud_only)" file="$(find surface_extraction)/launch/surface_extraction.launch" />
 </launch>

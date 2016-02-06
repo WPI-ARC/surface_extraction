@@ -125,23 +125,39 @@ void surface_filters::SACSegmentAndFit::synchronized_input_callback(const PointC
 
     // TODO: Check validity of input
 
-    NODELET_DEBUG("[%s::synchronized_input_callback]\n"
-                          "                                 - PointCloud with %d data points(%s), stamp %f, and frame %s on topic %s received.\n"
-                          "                                 - Normals PointCloud with %d data points(%s), stamp %f, and frame %s on topic %s received.\n"
-                          "                                 - PointClusters with %zu clusters, stamp %f, and frame %s on topic %s received.",
-                  getName().c_str(),
+    if (normals_ros != NULL) {
+        NODELET_DEBUG("[%s::synchronized_input_callback]\n"
+                              "                                 - PointCloud with %d data points(%s), stamp %f, and frame %s on topic %s received.\n"
+                              "                                 - Normals PointCloud with %d data points(%s), stamp %f, and frame %s on topic %s received.\n"
+                              "                                 - PointClusters with %zu clusters, stamp %f, and frame %s on topic %s received.",
+                      getName().c_str(),
 
-                  cloud->width * cloud->height, pcl::getFieldsList(*cloud).c_str(),
-                  fromPCL(cloud->header).stamp.toSec(), cloud->header.frame_id.c_str(),
-                  getMTPrivateNodeHandle().resolveName("input").c_str(),
+                      cloud->width * cloud->height, pcl::getFieldsList(*cloud).c_str(),
+                      fromPCL(cloud->header).stamp.toSec(), cloud->header.frame_id.c_str(),
+                      getMTPrivateNodeHandle().resolveName("input").c_str(),
 
-                  normals_ros->width * normals_ros->height, pcl::getFieldsList(*normals_ros).c_str(),
-                  fromPCL(normals_ros->header).stamp.toSec(), normals_ros->header.frame_id.c_str(),
-                  getMTPrivateNodeHandle().resolveName("normals").c_str(),
+                      normals_ros->width * normals_ros->height, pcl::getFieldsList(*normals_ros).c_str(),
+                      fromPCL(normals_ros->header).stamp.toSec(), normals_ros->header.frame_id.c_str(),
+                      getMTPrivateNodeHandle().resolveName("normals").c_str(),
 
-                  input_clusters->clusters.size(),
-                  fromPCL(input_clusters->header).stamp.toSec(), input_clusters->header.frame_id.c_str(),
-                  getMTPrivateNodeHandle().resolveName("clusters").c_str());
+                      input_clusters->clusters.size(),
+                      fromPCL(input_clusters->header).stamp.toSec(), input_clusters->header.frame_id.c_str(),
+                      getMTPrivateNodeHandle().resolveName("clusters").c_str());
+    } else {
+        NODELET_DEBUG("[%s::synchronized_input_callback]\n"
+                              "                                 - PointCloud with %d data points(%s), stamp %f, and frame %s on topic %s received.\n"
+                              "                                 - PointClusters with %zu clusters, stamp %f, and frame %s on topic %s received.",
+                      getName().c_str(),
+
+                      cloud->width * cloud->height, pcl::getFieldsList(*cloud).c_str(),
+                      fromPCL(cloud->header).stamp.toSec(), cloud->header.frame_id.c_str(),
+                      getMTPrivateNodeHandle().resolveName("input").c_str(),
+
+                      input_clusters->clusters.size(),
+                      fromPCL(input_clusters->header).stamp.toSec(), input_clusters->header.frame_id.c_str(),
+                      getMTPrivateNodeHandle().resolveName("clusters").c_str());
+
+    }
 
 
     bool should_populate_output_cloud = pub_output_.getNumSubscribers() > 0;

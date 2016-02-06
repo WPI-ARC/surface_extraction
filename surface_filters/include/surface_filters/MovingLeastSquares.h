@@ -45,29 +45,29 @@ namespace surface_filters {
 
     protected:
         /** \brief A pointer to the spatial search object. */
-        SpatialSearch::Ptr tree_;
+        SpatialSearch::Ptr tree_ = NULL;
 
         /** \brief The nearest neighbors search radius for each point. */
-        double search_radius_;
+        double search_radius_ = 0.02;
 
         /** \brief Whether to use a polynomial fit. */
-        bool use_polynomial_fit_;
+        bool use_polynomial_fit_ = true;
 
         /** \brief The order of the polynomial to be fit. */
-        int polynomial_order_;
+        int polynomial_order_ = 2;
 
         /** \brief How 'flat' should the neighbor weighting gaussian be (the smaller, the more local the fit). */
-        double gaussian_parameter_;
+        double gaussian_parameter_ = 0.02;
 
         /** \brief Whether the node should output point normals */
-        bool compute_normals_;
+        bool compute_normals_ = false;
 
         /** \brief Parameter for the spatial locator tree. By convention, the values represent:
           * 0: ANN (Approximate Nearest Neigbor library) kd-tree
           * 1: FLANN (Fast Library for Approximate Nearest Neighbors) kd-tree
           * 2: Organized spatial dataset index
           */
-        int spatial_locator_type_;
+        int spatial_locator_type_ = 0;
 
         /** \brief Pointer to a dynamic reconfigure service. */
         boost::shared_ptr<dynamic_reconfigure::Server<MLSConfig>> srv_;
@@ -110,7 +110,7 @@ namespace surface_filters {
         ros::Publisher pub_normals_;
 
         /** \brief Mutex for use with dynamic reconfigure */
-        boost::recursive_mutex mutex_;
+//        boost::recursive_mutex mutex_;
 
     public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW

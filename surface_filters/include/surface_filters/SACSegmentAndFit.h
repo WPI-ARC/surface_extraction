@@ -6,6 +6,7 @@
 #ifndef SAC_SEGMENT_AND_FIT_H
 #define SAC_SEGMENT_AND_FIT_H
 
+#include <limits.h>
 #include <pcl_ros/pcl_nodelet.h>
 
 // PCL includes
@@ -50,37 +51,37 @@ namespace surface_filters {
 
     protected:
         /** \brief Set the model type */
-        int model_type_;
+        int model_type_ = 0;
 
         /** \brief Set the SAC method */
-        int method_type_;
+        int method_type_ = 0;
 
         /** \brief Set the threshold for distance to the model */
-        double dist_threshold_;
+        double dist_threshold_ = 0;
 
         /** \brief Set the maximum number of iterations before giving up */
-        int max_iterations_;
+        int max_iterations_ = 50;
 
         /** \brief Set the probability of choosing at least one sample free from outliers */
-        double probability_;
+        double probability_ = 0.99;
 
         /** \brief Set to true if a coefficient refinement is required */
-        bool optimize_coefficients_;
+        bool optimize_coefficients_ = true;
 
         /** \brief Set the minimum allowable radius for the model */
-        double radius_min_;
+        double radius_min_ = INT_MIN;
 
         /** \brief Set the maximum allowable radius for the model */
-        double radius_max_;
+        double radius_max_ = INT_MAX;
 
         /** \brief Set the maximum allowed difference between the model normal and the given axis in radians */
-        double epsilon_angle_;
+        double epsilon_angle_ = 0;
 
         /** \brief Set to true to use normals */
-        bool use_normals_;
+        bool use_normals_ = false;
 
         /** \brief Minimum number of points in a cluster */
-        unsigned int min_points_;
+        unsigned int min_points_ = 50;
 
         /** \brief Pointer to a dynamic reconfigure service. */
         boost::shared_ptr<dynamic_reconfigure::Server<SACConfig> > srv_;

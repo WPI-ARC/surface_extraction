@@ -161,7 +161,7 @@ surface_filters::RegionGrowingSegmentation::synchronized_input_callback(const Po
 
     // Ensure a spatial locator object exists
     if (!tree_) {
-        NODELET_ERROR("[%s::synchronized_input_callback] MovingLeastSquares called without a valid spatial locator", getName().c_str());
+        NODELET_ERROR("[%s::synchronized_input_callback] RegionGrowingSegmentation called without a valid spatial locator", getName().c_str());
         output->header = cloud->header;
         pub_output_.publish(output);
         return;
@@ -185,13 +185,18 @@ surface_filters::RegionGrowingSegmentation::synchronized_input_callback(const Po
     // Do the reconstruction
     impl_.extract(clusters->clusters);
 
+    NODELET_DEBUG("Got clusters");
     if (clusters->clusters.size() > 0) {
+        NODELET_DEBUG("Got nonzero clusters");
         if (should_populate_output) {
+            NODELET_DEBUG("Getting colored cloud");
             output = impl_.getColoredCloud();
+            NODELET_DEBUG("Got colored cloud");
 
             // TODO: This shouldn't happen
-            if (output->size() == 0) {
+            if (output->empty() || output->size() == 0) {
                 output = boost::make_shared<PointCloudOut>();
+                NODELET_WARN("[%s::synchronized_input_callback] Region Growing Segmentation extracted clusters but getColoredCloud() returned an empty cloud", getName().c_str());
             }
         }
 

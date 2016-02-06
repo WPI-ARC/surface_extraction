@@ -6,6 +6,7 @@
 #ifndef PCL_ROS_MOVING_LEAST_SQUARES_H_
 #define PCL_ROS_MOVING_LEAST_SQUARES_H_
 
+#include <limits.h>
 #include <pcl_ros/pcl_nodelet.h>
 
 // PCL includes
@@ -56,34 +57,34 @@ namespace surface_filters {
           * 1: FLANN (Fast Library for Approximate Nearest Neighbors) kd-tree
           * 2: Organized spatial dataset index
           */
-        int spatial_locator_type_;
+        int spatial_locator_type_ = 0;
 
         /** \brief Set the minimum number of points that a cluster needs to contain in order to be considered valid */
-        int min_cluster_size_;
+        int min_cluster_size_ = 1;
 
         /** \brief Set the maximum number of points that a cluster needs to contain in order to be considered valid */
-        int max_cluster_size_;
+        int max_cluster_size_ = INT_MAX;
 
         /** \brief Smooth Mode (if true, tests normals against neighbors' normals; otherwise tests normals against the starting point's normal) */
-        bool smooth_mode_flag_;
+        bool smooth_mode_flag_ = true;
 
         /** \brief Curvature test (if this is set to False, then Residual test will be set to True)    */
-        bool curvature_test_flag_;
+        bool curvature_test_flag_ = true;
 
         /** \brief Residual test (if this is set to False, then Curvature test will be set to True) */
-        bool residual_test_flag_;
+        bool residual_test_flag_ = false;
 
         /** \brief Smoothness threshold for angle between normals */
-        double smoothness_threshold_;
+        double smoothness_threshold_ = (30.0 / 180.0 * 3.141592653589793);
 
         /** \brief Residual threshold */
-        double residual_threshold_;
+        double residual_threshold_ = 0.05;
 
         /** \brief Curvature threshold */
-        double curvature_threshold_;
+        double curvature_threshold_ = 0.05;
 
         /** \brief Number of neighbors used for knn */
-        int num_neighbors_;
+        int num_neighbors_ = 30;
 
         /** \brief Pointer to a dynamic reconfigure service. */
         boost::shared_ptr<dynamic_reconfigure::Server<RGSConfig> > srv_;

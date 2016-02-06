@@ -44,7 +44,8 @@ void surface_filters::MovingLeastSquaresNodelet::onInit() {
     setup_spatial_locator(spatial_locator_type_);
 
     // Enable the dynamic reconfigure service
-    srv_ = boost::shared_ptr<dynamic_reconfigure::Server<MLSConfig> >(new dynamic_reconfigure::Server<MLSConfig>(mutex_, *pnh_));
+//    srv_ = boost::shared_ptr<dynamic_reconfigure::Server<MLSConfig> >(new dynamic_reconfigure::Server<MLSConfig>(mutex_, *pnh_));
+    srv_ = boost::make_shared<dynamic_reconfigure::Server<MLSConfig> >(*pnh_);
     auto f = bind(&MovingLeastSquaresNodelet::config_callback, this, _1, _2);
     srv_->setCallback((const dynamic_reconfigure::Server<surface_filters::MLSConfig>::CallbackType &) f);
 
@@ -176,9 +177,10 @@ void surface_filters::MovingLeastSquaresNodelet::config_callback(MLSConfig &conf
         NODELET_DEBUG ("[config_callback] Setting the search radius: %f.", search_radius_);
         impl_.setSearchRadius(search_radius_);
         // This resets the sqr gauss parameter, so update the dynamic reconfigure service appropriately
-        boost::recursive_mutex::scoped_lock __attribute__((unused)) scoped_lock(mutex_) ;
-        config.gaussian_parameter = sqrt(impl_.getSqrGaussParam());
-        srv_->updateConfig(config);
+        // TODO: Reenable if it didn't cause the crash
+//        boost::recursive_mutex::scoped_lock __attribute__((unused)) scoped_lock(mutex_) ;
+//        config.gaussian_parameter = sqrt(impl_.getSqrGaussParam());
+//        srv_->updateConfig(config);
     }
     if (use_polynomial_fit_ != config.use_polynomial_fit) {
         use_polynomial_fit_ = config.use_polynomial_fit;

@@ -1,9 +1,0 @@
-<component name="InspectionProjectProfileManager">
-  <profile version="1.0">
-    <option name="myName" value="Project Default" />
-    <inspection_tool class="IncompatibleTypes" enabled="false" level="ERROR" enabled_by_default="false" />
-    <inspection_tool class="OCDFAInspection" enabled="true" level="WARNING" enabled_by_default="true">
-      <option name="enableIncompatibleCast" value="false" />
-    </inspection_tool>
-  </profile>
-</component>

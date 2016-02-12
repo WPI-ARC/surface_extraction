@@ -1,7 +1,11 @@
 downsample_resolution: 0.02 # Meters
 
-crop_box_min: {x: -3, y: -2, z: -3} # Meters
-crop_box_max: {x: 3, y: 1, z: 3} # Meters
+# These settings are for the static sample point cloud (which is misaligned)
+#crop_box_min: {x: -3, y: -2, z: -3} # Meters
+#crop_box_max: {x: 3, y: 1, z: 3} # Meters
+
+crop_box_min: {x: -5, y: -5, z: -5} # Meters
+crop_box_max: {x: 5, y: 5, z: 5} # Meters
 
 outlier_removal: {
   mean_k: 50,
@@ -21,5 +25,9 @@ region_segmentation: {
 sac_segmentation: {
   model_type: 0, # 0 = Plane
   method_type: 0, # 0 = RANSAC
-  distance_threshold: 0.02, # TODO: Units
+  distance_threshold: 0.1, # Meters (I think)
+}
+
+concave_hull: {
+  alpha: 0.2
 }

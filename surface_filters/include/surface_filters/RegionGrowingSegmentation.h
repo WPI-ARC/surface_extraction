@@ -3,8 +3,8 @@
  * Using framework from the pcl_ros package at http://wiki.ros.org/pcl_ros
  */
 
-#ifndef PCL_ROS_MOVING_LEAST_SQUARES_H_
-#define PCL_ROS_MOVING_LEAST_SQUARES_H_
+#ifndef SURFACE_FILTERS_CONCAVE_HULL_H_
+#define SURFACE_FILTERS_CONCAVE_HULL_H_
 
 #include <limits.h>
 #include <pcl_ros/pcl_nodelet.h>

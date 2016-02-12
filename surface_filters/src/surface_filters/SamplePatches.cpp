@@ -6,7 +6,7 @@
 #include <pluginlib/class_list_macros.h>
 #include <surface_filters/SamplePatches.h>
 #include <pcl/io/io.h>
-#include <surface_filters/SACSegmentAndFit.h>
+
 //////////////////////////////////////////////////////////////////////////////////////////////
 
 void surface_filters::SamplePatches::onInit() {
@@ -108,6 +108,6 @@ void surface_filters::SamplePatches::config_callback(SamplePatchesConfig &config
 
 }
 
-PLUGINLIB_EXPORT_CLASS(surface_filters::SACSegmentAndFit, nodelet::Nodelet
+PLUGINLIB_EXPORT_CLASS(surface_filters::SamplePatches, nodelet::Nodelet
 )
 

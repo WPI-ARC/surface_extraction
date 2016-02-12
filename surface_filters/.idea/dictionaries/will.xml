@@ -2,6 +2,7 @@
   <dictionary name="will">
     <words>
       <w>dataset</w>
+      <w>discretization</w>
       <w>flann</w>
       <w>msgs</w>
       <w>nodelet</w>

@@ -50,6 +50,8 @@ add_message_files(
     PointClusters.msg
     DiscSurfacePatch.msg
     DiscSurfacePatches.msg
+    Polygon.msg
+    Polygons.msg
 )
 
 ## Generate services in the 'srv' folder

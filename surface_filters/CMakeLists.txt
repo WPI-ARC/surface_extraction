@@ -95,6 +95,8 @@ generate_dynamic_reconfigure_options(
   cfg/RGS.cfg
   cfg/SAC.cfg
   cfg/SamplePatches.cfg
+  cfg/ChangeDetection.cfg
+  cfg/ConcaveHull.cfg
 )
 
 ###################################
@@ -165,11 +167,20 @@ add_library(surface_filters
     include/surface_filters/SamplePatches.h
     src/surface_filters/SamplePatches.cpp
 
+    include/surface_filters/ChangeDetection.h
+    src/surface_filters/ChangeDetection.cpp
+
+    include/surface_filters/ConcaveHull.h
+    src/surface_filters/ConcaveHull.cpp
+
     # Data types
     include/surfaces/PointClusters.h
     include/surfaces/PointClusters_Serialization.h
     include/surfaces/PointIndices_Serialization.h
     include/surfaces/ModelCoefficients_Serialization.h
+    include/surfaces/Polygons.h
+    include/surfaces/Polygons_Serialization.h
+    include/surfaces/Vertices_Serialization.h
 
     # Snapshotter
     src/surface_filters/PeriodicSnapshotter.cpp

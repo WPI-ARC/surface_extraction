@@ -2,7 +2,7 @@
 #define POINT_CLUSTERS_SERIALIZATION_H
 
 #include <pcl_conversions/pcl_conversions.h>
-#include <surfaces/Polygons.h>
+#include "Polygons.hpp"
 #include <surface_msgs/Polygons.h>
 #include <surfaces/Vertices_Serialization.h>
 

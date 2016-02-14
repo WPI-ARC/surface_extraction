@@ -1,0 +1,7 @@
+<launch>
+    <arg name="input_topic" />
+    <arg name="surfaces_manager_node" />
+
+
+
+</launch>

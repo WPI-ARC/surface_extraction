@@ -1,4 +1,6 @@
 <launch>
+    <arg name="topic_name" default="/onboard_worldmodel/pointcloud_vis" />
+
     <group ns="surface_extraction">
         <env name="ROSCONSOLE_CONFIG_FILE" value="$(find surface_extraction)/custom_rosconsole.conf"/>
 
@@ -11,7 +13,7 @@
         <!-- Crop -->
         <node pkg="nodelet" type="nodelet" name="crop" args="load pcl/CropBox nodelet_manager">
             <!-- Topics -->
-            <remap from="~input" to="/onboard_worldmodel/pointcloud_vis" />
+            <remap from="~input" to="$(arg topic_name)" />
 
             <!-- Params -->
             <remap from="~min_x" to="crop_box_min/x" />
@@ -20,6 +22,16 @@
             <remap from="~max_x" to="crop_box_max/x" />
             <remap from="~max_y" to="crop_box_max/y" />
             <remap from="~max_z" to="crop_box_max/z" />
+        </node>
+
+        <!-- Downsample -->
+        <node pkg="nodelet" type="nodelet" name="downsample" args="load pcl/VoxelGrid nodelet_manager">
+            <!-- Topics -->
+            <remap from="~input" to="downsample/output" />
+
+            <!-- Params -->
+            <remap from="~leaf_size" to="downsample_resolution" />
+            <param name="filter_field_name" value="" />
         </node>
 
         <!-- Change Detection -->
@@ -31,6 +43,13 @@
             <remap from="~resolution" to="downsample_resolution" />
         </node>
 
+        <!-- Full-Scene Pipeline -->
+        <include file="$(find surface_extraction)/launch/extract_surfaces_full.launch">
+            <arg name="input_topic" value="change_detect/new_scene" />
+            <arg name="surfaces_manager_node" value="__PLACEHOLDER__" />
+        </include>
+
+        <!-- Extract new points for input to partial-scene pipeline -->
         <node pkg="nodelet" type="nodelet" name="publish_new" args="load pcl/ExtractIndices nodelet_manager">
             <!-- Topics -->
             <remap from="~input" to="change_detect/output" />
@@ -40,68 +59,11 @@
             <param name="use_indices" value="true" />
         </node>
 
-        <!-- Downsample -->
-        <node pkg="nodelet" type="nodelet" name="downsample" args="load pcl/VoxelGrid nodelet_manager">
-            <!-- Topics -->
-            <remap from="~input" to="change_detect/new_scene" />
-
-            <!-- Params -->
-            <remap from="~leaf_size" to="downsample_resolution" />
-            <param name="filter_field_name" value="" />
-        </node>
-
-        <!-- Remove outliers -->
-        <node pkg="nodelet" type="nodelet" name="outlier_removal" args="load pcl/StatisticalOutlierRemoval nodelet_manager">
-            <!-- Topics -->
-            <remap from="~input" to="downsample/output" />
-        </node>
-
-        <!-- Smoothing and Normals Estimation -->
-        <node pkg="nodelet" type="nodelet" name="normals_estimation" args="load surface_filters/MovingLeastSquaresNodelet nodelet_manager">
-            <!-- Topics -->
-            <remap from="~input" to="outlier_removal/output" />
-
-            <!-- Params -->
-            <param name="use_polynomial_fit" value="false" />
-            <param name="compute_normals" value="true" />
-            <!-- Sets the type of spatial locator. 1 is FLANN, which seems to be the best kd-tree implementation
-                https://github.com/ros-perception/perception_pcl/blob/1.3.0/pcl_ros/include/pcl_ros/surface/moving_least_squares.h#L98 -->
-            <param name="spatial_locator" value="1" />
-        </node>
-
-        <!-- Region Growing Segmentation -->
-        <node pkg="nodelet" type="nodelet" name="region_segmentation" args="load surface_filters/RegionGrowingSegmentation nodelet_manager">
-            <!-- Topics -->
-            <remap from="~input" to="normals_estimation/output" />
-            <remap from="~normals" to="normals_estimation/normals" />
-
-            <!-- Params -->
-            <!-- Sets the type of spatial locator. 1 is FLANN, which seems to be the best kd-tree implementation
-                https://github.com/ros-perception/perception_pcl/blob/1.3.0/pcl_ros/include/pcl_ros/surface/moving_least_squares.h#L98 -->
-            <param name="spatial_locator" value="1" />
-        </node>
-
-        <!-- RANSAC -->
-        <node pkg="nodelet" type="nodelet" name="sac_segmentation" args="load surface_filters/SACSegmentAndFit nodelet_manager">
-            <!-- Topics -->
-            <remap from="~input" to="normals_estimation/output" />
-            <remap from="~normals" to="normals_estimation/normals" />
-            <remap from="~clusters" to="region_segmentation/clusters" />
-
-            <!-- Params -->
-            <!-- Sets the type of spatial locator. 1 is FLANN, which seems to be the best kd-tree implementation
-                https://github.com/ros-perception/perception_pcl/blob/1.3.0/pcl_ros/include/pcl_ros/surface/moving_least_squares.h#L98 -->
-            <param name="spatial_locator" value="1" />
-            <param name="approximate_sync" value="true" />
-        </node>
-
-        <node pkg="nodelet" type="nodelet" name="concave_hull" args="load surface_filters/ConcaveHull nodelet_manager">
-            <!-- Topics -->
-            <remap from="~input" to="sac_segmentation/output" />
-
-            <!-- Params -->
-            <param name="dimension" value="3" />
-        </node>
+        <!-- Partial-Scene Pipeline -->
+        <include file="$(find surface_extraction)/launch/extract_surfaces_partial.launch">
+            <arg name="input_topic" value="publish_new/output" />
+            <arg name="surfaces_manager_node" value="__PLACEHOLDER__" />
+        </include>
 
     </group>
 </launch>

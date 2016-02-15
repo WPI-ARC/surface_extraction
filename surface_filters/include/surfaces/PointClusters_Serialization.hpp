@@ -2,10 +2,10 @@
 #define POINT_CLUSTERS_SERIALIZATION_H
 
 #include <pcl_conversions/pcl_conversions.h>
-#include "PointClusters.hpp"
+#include <surfaces/PointClusters.hpp>
 #include <surface_msgs/PointClusters.h>
-#include <surfaces/PointIndices_Serialization.h>
-#include "ModelCoefficients_Serialization.hpp"
+#include <surfaces/PointIndices_Serialization.hpp>
+#include <surfaces/ModelCoefficients_Serialization.hpp>
 
 namespace ros
 {

@@ -2,9 +2,9 @@
 #define POINT_CLUSTERS_SERIALIZATION_H
 
 #include <pcl_conversions/pcl_conversions.h>
-#include "Polygons.hpp"
+#include <surfaces/Polygons.hpp>
 #include <surface_msgs/Polygons.h>
-#include <surfaces/Vertices_Serialization.h>
+#include <surfaces/Vertices_Serialization.hpp>
 
 namespace ros
 {

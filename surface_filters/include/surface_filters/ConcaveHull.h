@@ -11,8 +11,8 @@
 // PCL includes
 #include <pcl/surface/concave_hull.h>
 
-#include <surfaces/Polygons.h>
-#include <surfaces/Polygons_Serialization.h>
+#include <surfaces/Polygons.hpp>
+#include <surfaces/Polygons_Serialization.hpp>
 
 // Dynamic reconfigure
 #include <dynamic_reconfigure/server.h>

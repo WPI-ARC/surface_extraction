@@ -18,8 +18,8 @@
 #include <dynamic_reconfigure/server.h>
 #include <surface_filters/RGSConfig.h>
 
-#include <surfaces/PointClusters.h>
-#include <surfaces/PointClusters_Serialization.h>
+#include <surfaces/PointClusters.hpp>
+#include <surfaces/PointClusters_Serialization.hpp>
 
 namespace surface_filters {
     namespace sync_policies = message_filters::sync_policies;

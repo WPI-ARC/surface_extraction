@@ -155,32 +155,14 @@ include_directories(
 # Include header files so QTCreator will show them in its project view
 add_library(surface_filters
     # Filters
-    include/surface_filters/MovingLeastSquares.h
     src/surface_filters/MovingLeastSquares.cpp
-
-    include/surface_filters/RegionGrowingSegmentation.h
     src/surface_filters/RegionGrowingSegmentation.cpp
-
-    include/surface_filters/SACSegmentAndFit.h
     src/surface_filters/SACSegmentAndFit.cpp
-
-    include/surface_filters/SamplePatches.h
-    src/surface_filters/SamplePatches.cpp
-
-    include/surface_filters/ChangeDetection.h
     src/surface_filters/ChangeDetection.cpp
-
-    include/surface_filters/ConcaveHull.h
     src/surface_filters/ConcaveHull.cpp
 
-    # Data types
-    include/surfaces/PointClusters.h
-    include/surfaces/PointClusters_Serialization.h
-    include/surfaces/PointIndices_Serialization.h
-    include/surfaces/ModelCoefficients_Serialization.h
-    include/surfaces/Polygons.h
-    include/surfaces/Polygons_Serialization.h
-    include/surfaces/Vertices_Serialization.h
+    # Currently unimplemented
+    src/surface_filters/SamplePatches.cpp
 
     # Snapshotter
     src/surface_filters/PeriodicSnapshotter.cpp

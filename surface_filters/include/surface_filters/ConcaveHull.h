@@ -10,9 +10,7 @@
 
 // PCL includes
 #include <pcl/surface/concave_hull.h>
-
-#include <surfaces/Polygons.hpp>
-#include <surfaces/Polygons_Serialization.hpp>
+#include <pcl/PolygonMesh.h>
 
 // Dynamic reconfigure
 #include <dynamic_reconfigure/server.h>
@@ -34,8 +32,7 @@ namespace surface_filters {
         typedef pcl::PointCloud<PointIn> PointCloudIn;
         typedef pcl::PointCloud<PointOut> PointCloudOut;
 
-        // Vertex types
-        typedef surfaces::Polygons Polygons;
+        typedef pcl::PolygonMesh PolygonMesh;
 
         // Message synchronizer types
         template<typename ...SubscribedTypes>
@@ -81,9 +78,6 @@ namespace surface_filters {
         /** \brief Synchronized input and indices (used when 'input' is not the only required topic) */
         boost::shared_ptr<ExactTimeSynchronizer<PointCloudIn, PointIndices> > sync_input_indices_e_;
         boost::shared_ptr<ApproximateTimeSynchronizer<PointCloudIn, PointIndices> > sync_input_indices_a_;
-
-        /** \brief The output PointCloud (containing the normals) publisher. */
-        ros::Publisher pub_concave_hull_;
 
         /** \brief Mutex for use with dynamic reconfigure */
 //        boost::recursive_mutex mutex_;

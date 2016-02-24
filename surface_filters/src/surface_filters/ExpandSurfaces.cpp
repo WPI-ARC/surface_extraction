@@ -112,77 +112,80 @@ void surface_filters::ExpandSurfaces::synchronized_input_callback(const PointClo
         Surface::Ptr surface = boost::make_shared<Surface>(old_surface);
 
         bool surface_changed = false;
-        while (true) { // Breaks inside
-            NODELET_DEBUG("[%s::input_callback] ExpandSurface (re-)considering surface %u",
-                          getName().c_str(), surface->id);
+//        while (true) { // Breaks inside
+//            NODELET_DEBUG("[%s::input_callback] ExpandSurface (re-)considering surface %u",
+//                          getName().c_str(), surface->id);
 
-            // TODO: Cache this somehow [make it part of the message?]
-            std::vector<int> edge_pts;
-            BOOST_FOREACH(pcl::Vertices vertices, surface->convex_hull.polygons) {
-                            edge_pts.insert(edge_pts.end(), vertices.vertices.begin(),
-                                            vertices.vertices.end());
-                        }
-            //
-            // FILTER TO POINTS NEAR SURFACE BOUNDARY
-            //
-            search_.setInputCloud(cloud, filter_indices);
+//            PointCloudIn concave_hull_cloud;
+//            pcl::fromROSMsg(surface->concave_hull.cloud, concave_hull_cloud);
 
-            tmp_indices->clear();
-            tmp_multi_indices->clear();
-            // radiusSearch([in] PointCloud cloud, [in] vector[int] indices, [in] double radius,
-            //              [out] vector[vector[int]] indices, [out] vector[vector[float]] sqrdistances)
-            search_.radiusSearch(surface->inliers, edge_pts, parallel_dist_threshold_, *tmp_multi_indices,
-                                 *tmp_sqrdistances);
-            BOOST_FOREACH(std::vector<int> ind, *tmp_multi_indices) {
-                            tmp_indices->insert(tmp_indices->end(), ind.begin(), ind.end());
-                        }
+//            // TODO: Cache this somehow [make it part of the message?]
+//            std::vector<int> edge_pts;
+//            BOOST_FOREACH(pcl_msgs::Vertices vertices, surface->concave_hull.polygons) {
+//                            edge_pts.insert(edge_pts.end(), vertices.vertices.begin(),
+//                                            vertices.vertices.end());
+//                        }
+//            //
+//            // FILTER TO POINTS NEAR SURFACE BOUNDARY
+//            //
+//            search_.setInputCloud(cloud, filter_indices);
 
-            filter_indices.swap(tmp_indices);
+//            tmp_indices->clear();
+//            tmp_multi_indices->clear();
+//            // radiusSearch([in] PointCloud cloud, [in] vector[int] indices, [in] double radius,
+//            //              [out] vector[vector[int]] indices, [out] vector[vector[float]] sqrdistances)
+//            search_.radiusSearch(concave_hull_cloud, edge_pts, parallel_dist_threshold_, *tmp_multi_indices,
+//                                 *tmp_sqrdistances);
+//            BOOST_FOREACH(std::vector<int> ind, *tmp_multi_indices) {
+//                            tmp_indices->insert(tmp_indices->end(), ind.begin(), ind.end());
+//                        }
 
-            if (filter_indices->size() == 0) break;
+//            filter_indices.swap(tmp_indices);
 
-            //
-            // FILTER TO POINTS ON THE SURFACE
-            //
-            crop_.setIndices(filter_indices);
+//            if (filter_indices->size() == 0) break;
 
-            Eigen::Affine3f plane_tf = tf_from_plane_model(surface->plane);
-            const Eigen::Transform<float, 3, 2, 0>::TranslationPart &trans = plane_tf.translation();
-            crop_.setTranslation(Eigen::Vector3f(trans.x(), trans.y(), trans.z()));
-//                        crop_.setRotation();
+//            //
+//            // FILTER TO POINTS ON THE SURFACE
+//            //
+//            crop_.setIndices(filter_indices);
 
-            tmp_indices->clear();
-            crop_.filter(*tmp_indices);
-            filter_indices.swap(tmp_indices);
+//            Eigen::Affine3f plane_tf = tf_from_plane_model(surface->model);
+//            const Eigen::Transform<float, 3, 2, 0>::TranslationPart &trans = plane_tf.translation();
+//            crop_.setTranslation(Eigen::Vector3f(trans.x(), trans.y(), trans.z()));
+////                        crop_.setRotation();
 
-            if (filter_indices->size() == 0) break;
+//            tmp_indices->clear();
+//            crop_.filter(*tmp_indices);
+//            filter_indices.swap(tmp_indices);
 
-            //
-            // ADD NEW POINTS TO SURFACE
-            //
-            surface_changed = true;
-            surface->inliers += PointCloudIn(*cloud, *filter_indices);
+//            if (filter_indices->size() == 0) break;
 
-            // hull only takes a shared_ptr :( [this makes a copy]
-            PointCloudIn::Ptr inliers_ptr = boost::make_shared<PointCloudIn>(surface->inliers);
-            // hull wants a point cloud
-            PointCloudIn::Ptr tmp_cloud = boost::make_shared<PointCloudIn>();
-            hull_.setInputCloud(inliers_ptr);
-            hull_.reconstruct(*tmp_cloud, surface->convex_hull.polygons);
+//            //
+//            // ADD NEW POINTS TO SURFACE
+//            //
+//            surface_changed = true;
+//            surface->inliers += PointCloudIn(*cloud, *filter_indices);
 
-            //
-            // REMOVE THOSE POINTS FROM THE INPUT
-            //
-            all_removed_indices->insert(all_removed_indices->end(), filter_indices->begin(), filter_indices->end());
-        }
+//            // hull only takes a shared_ptr :( [this makes a copy]
+//            PointCloudIn::Ptr inliers_ptr = boost::make_shared<PointCloudIn>(surface->inliers);
+//            // hull wants a point cloud
+//            PointCloudIn::Ptr tmp_cloud = boost::make_shared<PointCloudIn>();
+//            hull_.setInputCloud(inliers_ptr);
+//            hull_.reconstruct(*tmp_cloud, surface->convex_hull.polygons);
 
-        if (surface_changed) {
-            pub_replace_surface_.publish(surface);
+//            //
+//            // REMOVE THOSE POINTS FROM THE INPUT
+//            //
+//            all_removed_indices->insert(all_removed_indices->end(), filter_indices->begin(), filter_indices->end());
+//        }
 
-            NODELET_DEBUG("[%s::input_callback] ExpandSurface expanded surface %u from %zu to %zu points.",
-                          getName().c_str(), surface->id, old_surface.inliers.size(), surface->inliers.size());
+//        if (surface_changed) {
+//            pub_replace_surface_.publish(surface);
 
-        }
+//            NODELET_DEBUG("[%s::input_callback] ExpandSurface expanded surface %u from %zu to %zu points.",
+//                          getName().c_str(), surface->id, old_surface.inliers.size(), surface->inliers.size());
+
+//        }
     }
 
     // Always publish remaining indices

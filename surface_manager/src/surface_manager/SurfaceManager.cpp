@@ -19,7 +19,7 @@ void surface_manager::SurfaceManager::onInit() {
     }
 
     // Advertise a topic called "surfaces" with a queue size of max_queue_size and latched=true
-    surfaces_pub_ = private_nh.advertise<surfaces::Surfaces<PointIn> >("surfaces", (uint32_t) max_queue_size, true);
+    surfaces_pub_ = private_nh.advertise<Surfaces>("surfaces", (uint32_t) max_queue_size, true);
 
     // Subscribe to new_surface_* inputs (for adding surfaces)
     new_surface_inliers_sub_.subscribe(private_nh, INLIERS_TOPIC, (uint32_t) max_queue_size);
@@ -38,10 +38,11 @@ void surface_manager::SurfaceManager::onInit() {
                   private_nh.resolveName(PLANE_TOPIC).c_str());
 }
 
-void surface_manager::SurfaceManager::add_surface_synchronized(PointCloudIn::ConstPtr inliers,
-                                                               surfaces::Polygons::ConstPtr convex_hull,
-                                                               pcl::ModelCoefficients::ConstPtr plane) {
-    NODELET_DEBUG("New Surface received with %lu points, %lu vertices", inliers->size(), convex_hull->size());
+void surface_manager::SurfaceManager::add_surface_synchronized(const PointCloudIn::ConstPtr inliers,
+                                                               const PolygonMesh::ConstPtr concave_hull,
+                                                               const ModelCoefficients::ConstPtr model) {
+    auto cloud_size = concave_hull->cloud.width * concave_hull->cloud.height;
+    NODELET_DEBUG("New Surface received with %lu points, %u vertices", inliers->size(), cloud_size);
 
     unsigned long id = surfaces.size();
     surfaces.resize(id+1);
@@ -52,16 +53,20 @@ void surface_manager::SurfaceManager::add_surface_synchronized(PointCloudIn::Con
     surfaces[id].color.g = static_cast <float> (rand()) / static_cast <float> (RAND_MAX);
     surfaces[id].color.b = static_cast <float> (rand()) / static_cast <float> (RAND_MAX);
     surfaces[id].color.a = 1;
-    surfaces[id].inliers = *inliers;
-    surfaces[id].convex_hull = *convex_hull;
-    surfaces[id].plane = *plane;
+    surfaces[id].model = *model;
+    surfaces[id].concave_hull = *concave_hull;
 
-    std::sort(surfaces.begin(), surfaces.end(), [](surfaces::Surface<PointIn> a, surfaces::Surface<PointIn> b) {
-        return b.convex_hull.size() > a.convex_hull.size();
+//    surfaces[id].inliers = *inliers;
+
+    std::sort(surfaces.begin(), surfaces.end(), [](const Surface& a, const Surface& b) {
+        auto a_size = a.concave_hull.cloud.width * a.concave_hull.cloud.height;
+        auto b_size = b.concave_hull.cloud.width * b.concave_hull.cloud.height;
+        // A should come first (compare lower) if its size is greater than B's
+        return a_size > b_size;
     });
 
-    surfaces::Surfaces<PointIn>::Ptr surfaces_msg = boost::make_shared<surfaces::Surfaces<PointIn> >();
-    surfaces_msg->header = inliers->header;
+    Surfaces::Ptr surfaces_msg = boost::make_shared<Surfaces>();
+    surfaces_msg->header = concave_hull->header;
     surfaces_msg->surfaces = surfaces;
 
     surfaces_pub_.publish(surfaces_msg);

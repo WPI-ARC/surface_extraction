@@ -7,6 +7,7 @@
 #include <pcl_ros/pcl_nodelet.h>
 
 // PCL includes
+#include <pcl/conversions.h>
 #include <pcl/search/search.h>
 #include <pcl/filters/crop_box.h>
 #include <pcl/surface/concave_hull.h>
@@ -14,10 +15,12 @@
 // Dynamic reconfigure
 #include <dynamic_reconfigure/server.h>
 
-#include <surfaces/Surfaces.hpp>
-#include <surfaces/Surfaces_Serialization.hpp>
+//#include <surfaces/Surfaces.hpp>
+//#include <surfaces/Surfaces_Serialization.hpp>
 #include <message_filters/cache.h>
 #include <surfaces/PointIndices_Serialization.hpp>
+#include <surface_msgs/Surface.h>
+#include <surface_msgs/Surfaces.h>
 
 namespace surface_filters {
     namespace sync_policies = message_filters::sync_policies;
@@ -35,8 +38,10 @@ namespace surface_filters {
 
         typedef pcl::PointIndices PointIndices;
 
-        typedef surfaces::Surface<PointIn> Surface;
-        typedef surfaces::Surfaces<PointIn> Surfaces;
+//        typedef surfaces::Surface<PointIn> Surface;
+//        typedef surfaces::Surfaces<PointIn> Surfaces;
+        typedef surface_msgs::Surface Surface;
+        typedef surface_msgs::Surfaces Surfaces;
 
         typedef message_filters::sync_policies::ExactTime<PointCloud, pcl_msgs::PointIndices> ExactPolicy;
         typedef message_filters::sync_policies::ApproximateTime<PointCloud, pcl_msgs::PointIndices> ApproxPolicy;

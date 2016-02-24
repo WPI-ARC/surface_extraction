@@ -16,7 +16,7 @@
             <!-- TODO: Do this remapping inside extract_surfaces_full for separation of concerns -->
             <remap from="~new_surface_inliers" to="sac_segmentation/inliers" />
             <remap from="~new_surface_plane" to="sac_segmentation/planes" />
-            <remap from="~new_surface_concave_hull" to="concave_hull/concave_hull" />
+            <remap from="~new_surface_concave_hull" to="concave_hull/output" />
 
             <!-- Params -->
             <param name="max_queue_size" value="1000" />

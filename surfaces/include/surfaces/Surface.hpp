@@ -23,8 +23,7 @@ namespace surfaces {
 
         unsigned int id;
         std_msgs::ColorRGBA color;
-        surfaces::Polygons concave_hull;
-        
+        pcl::PolygonMesh concave_hull;
         pcl::ModelCoefficients model;
 
     public:

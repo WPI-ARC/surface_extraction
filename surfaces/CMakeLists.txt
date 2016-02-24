@@ -12,8 +12,7 @@ find_package(catkin REQUIRED COMPONENTS
 
 ## System dependencies are found with CMake's conventions
 find_package(Boost REQUIRED COMPONENTS system)
-
-find_package(PCL)
+find_package(PCL REQUIRED)
 
 ## Uncomment this if the package has a setup.py. This macro ensures
 ## modules and global scripts declared therein get installed
@@ -104,32 +103,35 @@ catkin_package(
   INCLUDE_DIRS include
   LIBRARIES surfaces
   CATKIN_DEPENDS roscpp pcl_conversions pcl_ros
-#  DEPENDS system_lib
+  DEPENDS Boost PCL
 )
 
 ###########
 ## Build ##
 ###########
+set(CMAKE_CXX_COMPILER "clang++")
+set(CMAKE_C_COMPILER "clang")
+set(CMAKE_BUILD_TYPE Debug)
+
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O3 -std=c++11 -Wall -Wextra -Wno-unused-parameter")
+
 
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 include_directories(
     include
-  ${catkin_INCLUDE_DIRS}
+    ${catkin_INCLUDE_DIRS}
+    ${PCL_INCLUDE_DIRS}
 )
 
 ## Declare a C++ library that's never installed or exported
 add_library(surfaces
     include/surfaces/ModelCoefficients_Serialization.hpp
     include/surfaces/PointClusters.hpp
-    include/surfaces/PointClusters_Serialization.hpp
     include/surfaces/PointIndices_Serialization.hpp
     include/surfaces/Polygons.hpp
-    include/surfaces/Polygons_Serialization.hpp
     include/surfaces/Surface.hpp
-    include/surfaces/Surface_Serialization.hpp
     include/surfaces/Surfaces.hpp
-    include/surfaces/Surfaces_Serialization.hpp
     include/surfaces/Vertices_Serialization.hpp
 )
 set_target_properties(surfaces PROPERTIES LINKER_LANGUAGE CXX)

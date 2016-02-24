@@ -32,10 +32,16 @@ namespace surface_manager {
         typedef pcl::PointXYZ PointIn;
         typedef pcl::PointCloud<PointIn> PointCloudIn;
 
+        typedef pcl_msgs::PolygonMesh PolygonMesh;
+        typedef pcl_msgs::ModelCoefficients ModelCoefficients;
+
+        typedef surface_msgs::Surface Surface;
+        typedef surface_msgs::Surfaces Surfaces;
+
         template<typename ...S>
         using ExactTimeSynchronizer = message_filters::Synchronizer<message_filters::sync_policies::ExactTime<S...> >;
 
-        typedef ExactTimeSynchronizer<PointCloudIn, surfaces::Polygons, pcl::ModelCoefficients> NewSurfaceSynchronizer;
+        typedef ExactTimeSynchronizer<PointCloudIn, PolygonMesh, ModelCoefficients> NewSurfaceSynchronizer;
 
         virtual void onInit();
 
@@ -43,16 +49,17 @@ namespace surface_manager {
         ros::Publisher surfaces_pub_;
 
         message_filters::Subscriber<PointCloudIn>  new_surface_inliers_sub_;
-        message_filters::Subscriber<surfaces::Polygons> new_surface_convex_hull_sub_;
-        message_filters::Subscriber<pcl::ModelCoefficients>  new_surface_plane_sub_;
+        message_filters::Subscriber<PolygonMesh> new_surface_convex_hull_sub_;
+        message_filters::Subscriber<ModelCoefficients>  new_surface_plane_sub_;
 
         boost::shared_ptr<NewSurfaceSynchronizer> new_surface_synchronizer_;
 
-        std::vector<surfaces::Surface<PointIn> > surfaces;
+        std::vector<Surface> surfaces;
 //        std::vector<surfa
 
-        void add_surface_synchronized(pcl::PointCloud<pcl::PointXYZ>::ConstPtr inliers,
-                                      surfaces::Polygons::ConstPtr convex_hull, pcl::ModelCoefficients::ConstPtr model);
+        void add_surface_synchronized(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr inliers,
+                                      const PolygonMesh::ConstPtr concave_hull,
+                                      const ModelCoefficients::ConstPtr model);
     };
 }
 

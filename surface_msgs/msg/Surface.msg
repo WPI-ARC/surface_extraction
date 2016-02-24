@@ -1,5 +1,4 @@
 uint32 id
 std_msgs/ColorRGBA color
 pcl_msgs/ModelCoefficients model
-pcl_msgs/PointIndices concave_hull
-sensor_msgs/PointCloud2 vertices
+pcl_msgs/PolygonMesh concave_hull

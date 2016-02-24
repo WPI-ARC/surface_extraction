@@ -12,9 +12,9 @@
 void surface_filters::ChangeDetection::onInit() {
     pcl_ros::PCLNodelet::onInit();
 
-    pub_output_ = pnh_->advertise<PointCloudOut>("output", (uint32_t) max_queue_size_);
-    pub_new_scene_ = pnh_->advertise<PointCloudOut>("new_scene", (uint32_t) max_queue_size_);
-    pub_indices_ = pnh_->advertise<PointIndices>("new_indices", (uint32_t) max_queue_size_);
+    pub_output_ = pnh_->advertise<PointCloudOut>("output", max_queue_size_);
+    pub_new_scene_ = pnh_->advertise<PointCloudOut>("new_scene", max_queue_size_);
+    pub_indices_ = pnh_->advertise<PointIndices>("new_indices", max_queue_size_);
 
     if (!pnh_->getParam("resolution", resolution_)) {
         NODELET_ERROR("[%s::onInit] Need a 'resolution' parameter to be set before continuing!",
@@ -26,12 +26,10 @@ void surface_filters::ChangeDetection::onInit() {
 
     // Enable the dynamic reconfigure service
     srv_ = boost::make_shared<dynamic_reconfigure::Server<ChangeDetectionConfig> >(*pnh_);
-    auto f = boost::bind(&ChangeDetection::config_callback, this, _1, _2);
-    const dynamic_reconfigure::Server<ChangeDetectionConfig>::CallbackType &f_2 = f;
-    srv_->setCallback(f_2);
+    srv_->setCallback(boost::bind(&ChangeDetection::config_callback, this, _1, _2));
 
     // Subscribe to the input directly b/c there is nothing to synchronize
-    sub_input_ = pnh_->subscribe<PointCloudIn>("input", 1, bind(&ChangeDetection::synchronized_input_callback, this, _1));
+    sub_input_ = pnh_->subscribe<PointCloudIn>("input", max_queue_size_, bind(&ChangeDetection::synchronized_input_callback, this, _1));
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////
@@ -46,9 +44,9 @@ void surface_filters::ChangeDetection::synchronized_input_callback(const PointCl
     // TODO: If cloud is given, check if it's valid
 
     /// DEBUG
-    NODELET_DEBUG("[%s::input_callback] PointCloud with %d data points, stamp %f, and frame %s on topic %s received.",
-                  getName().c_str(), cloud->width * cloud->height, fromPCL(cloud->header).stamp.toSec(),
-                  cloud->header.frame_id.c_str(), getMTPrivateNodeHandle().resolveName("input").c_str());
+//    NODELET_DEBUG("[%s::input_callback] PointCloud with %d data points, stamp %f, and frame %s on topic %s received.",
+//                  getName().c_str(), cloud->width * cloud->height, fromPCL(cloud->header).stamp.toSec(),
+//                  cloud->header.frame_id.c_str(), getMTPrivateNodeHandle().resolveName("input").c_str());
 
     ros::WallTime start = ros::WallTime::now();
 
@@ -64,10 +62,10 @@ void surface_filters::ChangeDetection::synchronized_input_callback(const PointCl
 
     float new_percentage = indices->indices.size() / (float) cloud->size();
 
-    NODELET_INFO_STREAM(std::setprecision(3) <<
-                        "(" << (ros::WallTime::now() - start) << " sec, " << cloud->size() << " points) "
-                        << "Change Detection Finished with " << indices->indices.size()
-                        << " new points (" << new_percentage*100 <<"%)");
+//    NODELET_INFO_STREAM(std::setprecision(3) <<
+//                        "(" << (ros::WallTime::now() - start) << " sec, " << cloud->size() << " points) "
+//                        << "Change Detection Finished with " << indices->indices.size()
+//                        << " new points (" << new_percentage*100 <<"%)");
 
 
     if (new_percentage >= new_scene_threshold_) {

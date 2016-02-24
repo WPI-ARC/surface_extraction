@@ -10,11 +10,10 @@ void surface_filters::ConcaveHull::onInit() {
     pcl_ros::PCLNodelet::onInit();
 
     // Advertise output nodes
-    pub_output_ = pnh_->advertise<PointCloudIn>("output", (uint32_t) max_queue_size_);
-    pub_indices_ = pnh_->advertise<Polygons>("polygons", (uint32_t) max_queue_size_);
+    pub_output_ = pnh_->advertise<PointCloudIn>("output", max_queue_size_);
+    pub_concave_hull_ = pnh_->advertise<Polygons>("concave_hull", max_queue_size_);
 
     // Enable the dynamic reconfigure service
-//    srv_ = boost::shared_ptr<dynamic_reconfigure::Server<MLSConfig> >(new dynamic_reconfigure::Server<MLSConfig>(mutex_, *pnh_));
     srv_ = boost::make_shared<dynamic_reconfigure::Server<ConcaveHullConfig> >(*pnh_);
     srv_->setCallback(bind(&ConcaveHull::config_callback, this, _1, _2));
 
@@ -23,8 +22,8 @@ void surface_filters::ConcaveHull::onInit() {
 
     if (use_indices_) {
         // If using indices, subscribe to the input and indices using a filter
-        sub_input_filter_.subscribe(*pnh_, "input", 1);
-        sub_indices_filter_.subscribe(*pnh_, "indices", 1);
+        sub_input_filter_.subscribe(*pnh_, "input", max_queue_size_);
+        sub_indices_filter_.subscribe(*pnh_, "indices", max_queue_size_);
 
         if (approximate_sync_) {
             sync_input_indices_a_ = boost::make_shared<ApproximateTimeSynchronizer<PointCloudIn, PointIndices> >(max_queue_size_);
@@ -39,7 +38,7 @@ void surface_filters::ConcaveHull::onInit() {
         }
     } else {
         // If not using indices, subscribe to the cloud directly
-        sub_input_ = pnh_->subscribe<PointCloudIn>("input", 1,
+        sub_input_ = pnh_->subscribe<PointCloudIn>("input", max_queue_size_,
                                                    bind(&ConcaveHull::synchronized_input_callback, this,
                                                         _1,
                                                         PointIndicesConstPtr()));
@@ -56,7 +55,8 @@ void surface_filters::ConcaveHull::onInit() {
 void surface_filters::ConcaveHull::synchronized_input_callback(const PointCloudIn::ConstPtr &cloud,
                                                                const PointIndices::ConstPtr &indices) {
     // No subscribers, no work
-    if (pub_output_.getNumSubscribers() <= 0 && pub_indices_.getNumSubscribers() <= 0) {
+    NODELET_DEBUG("[%s] Input recieved, subscriber numbers are %d and %d", getName().c_str(), pub_output_.getNumSubscribers(), pub_concave_hull_.getNumSubscribers());
+    if (pub_output_.getNumSubscribers() <= 0 && pub_concave_hull_.getNumSubscribers() <= 0) {
         NODELET_DEBUG ("[%s::synchronized_input_callback] Input received but there are no subscribers; returning.",
                        getName().c_str());
         return;
@@ -64,7 +64,7 @@ void surface_filters::ConcaveHull::synchronized_input_callback(const PointCloudI
 
     // Create output objects
     PointCloudOut::Ptr output = boost::make_shared<PointCloudOut>();
-    boost::shared_ptr<Polygons> polygons = boost::make_shared<Polygons>();
+    boost::shared_ptr<Polygons> concave_hull = boost::make_shared<Polygons>();
 
     // TODO: Check that inputs are valid
 
@@ -91,14 +91,14 @@ void surface_filters::ConcaveHull::synchronized_input_callback(const PointCloudI
 
     // Pass inputs to PCL
     impl_.setInputCloud(cloud);
-    if (use_indices_) {
+    if (use_indices_ && indices != NULL) {
         impl_.setIndices(boost::make_shared<std::vector<int> >(indices->indices));
     }
 
     // Do the reconstruction
-    impl_.reconstruct(*output, polygons->polygons);
+    impl_.reconstruct(*output, concave_hull->polygons);
 
-    NODELET_INFO_STREAM(std::setprecision(3) <<
+    NODELET_INFO_STREAM("[" << getName().c_str() << "::synchronized_input_callback] " << std::setprecision(3) <<
                         "(" << (ros::WallTime::now() - start) << " sec, " << output->size() << " points) "
                         << "Concave Hull Finished");
 
@@ -107,8 +107,8 @@ void surface_filters::ConcaveHull::synchronized_input_callback(const PointCloudI
     output->header = cloud->header;
     pub_output_.publish(output);
 
-    polygons->header = cloud->header;
-    pub_indices_.publish(polygons);
+    concave_hull->header = cloud->header;
+    pub_concave_hull_.publish(concave_hull);
 }
 
 void surface_filters::ConcaveHull::config_callback(ConcaveHullConfig &config, uint32_t level __attribute__((unused))) {
@@ -119,7 +119,7 @@ void surface_filters::ConcaveHull::config_callback(ConcaveHullConfig &config, ui
     }
     if (alpha_ != config.alpha) {
         alpha_ = config.alpha;
-        NODELET_DEBUG ("[config_callback] Setting the gaussian parameter to: %f.", alpha_);
+        NODELET_DEBUG ("[config_callback] Setting the alpha parameter to: %f.", alpha_);
         impl_.setAlpha(alpha_);
     }
 }

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(surface_extraction)
+project(surface_extraction_launch)
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
@@ -7,6 +7,7 @@ project(surface_extraction)
 find_package(catkin REQUIRED COMPONENTS
   surface_filters
   surface_msgs
+  surface_manager
 )
 
 ## System dependencies are found with CMake's conventions

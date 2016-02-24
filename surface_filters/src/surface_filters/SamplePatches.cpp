@@ -12,7 +12,7 @@
 void surface_filters::SamplePatches::onInit() {
     pcl_ros::PCLNodelet::onInit();
 
-    pub_output_ = pnh_->advertise<PointClusters>("output", (uint32_t) max_queue_size_);
+    pub_output_ = pnh_->advertise<PointClusters>("output", max_queue_size_);
 
     if (!pnh_->getParam("spatial_locator", spatial_locator_type_)) {
         NODELET_ERROR("[%s::onInit] Need a 'spatial_locator' parameter to be set before continuing!",
@@ -22,13 +22,12 @@ void surface_filters::SamplePatches::onInit() {
 
     // Enable the dynamic reconfigure service
     srv_ = boost::make_shared < dynamic_reconfigure::Server < SamplePatchesConfig > > (*pnh_);
-    auto f = boost::bind(&SamplePatches::config_callback, this, _1, _2);
-    srv_->setCallback((dynamic_reconfigure::Server<SamplePatchesConfig>::CallbackType &) f);
+    srv_->setCallback(bind(&SamplePatches::config_callback, this, _1, _2));
 
     // Subscribe to the input using a filter
-    sub_input_filter_.subscribe(*pnh_, "input", 1);
+    sub_input_filter_.subscribe(*pnh_, "input", max_queue_size_);
     // Subscribe to the clusters
-    sub_clusters_filter_.subscribe(*pnh_, "clusters", 1);
+    sub_clusters_filter_.subscribe(*pnh_, "clusters", max_queue_size_);
 
     // TODO: Surely there's some way to do this without 4 copies of this stuff
     if (approximate_sync_) {
@@ -59,7 +58,7 @@ void surface_filters::SamplePatches::synchronized_input_callback(const PointClou
                                                                  const PointClusters::ConstPtr clusters) {
     // No subscribers, no work
     if (pub_disc_patches_.getNumSubscribers() <= 0) {
-        NODELET_DEBUG("[%s::synchronized_input_callback] Input recieved but there are no subscribers; returning.",
+        NODELET_DEBUG("[%s::synchronized_input_callback] Input received but there are no subscribers; returning.",
                       getName().c_str());
         return;
     }

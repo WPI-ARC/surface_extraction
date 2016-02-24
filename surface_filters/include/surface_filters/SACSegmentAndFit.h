@@ -112,7 +112,8 @@ namespace surface_filters {
         pcl::ProjectInliers<PointIn> project_;
 
         /** \brief The clusters PointCloud publisher. */
-        ros::Publisher pub_clusters_;
+        ros::Publisher pub_planes_;
+        ros::Publisher pub_inliers_;
 
         /** \brief Synchronized input, and indices.*/
         boost::shared_ptr<ExactTimeSynchronizer<PointCloudIn, NormalCloudIn, PointClusters> > sync_input_normals_clusters_e_;

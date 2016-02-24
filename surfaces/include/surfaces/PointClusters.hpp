@@ -23,7 +23,7 @@ struct PointClusters
   public:
     typedef boost::shared_ptr< ::surfaces::PointClusters> Ptr;
     typedef boost::shared_ptr< ::surfaces::PointClusters const> ConstPtr;
-}; // struct PointClusters
+}; // struct Surface
 
 typedef boost::shared_ptr< ::surfaces::PointClusters> PointClustersPtr;
 typedef boost::shared_ptr< ::surfaces::PointClusters const> PointClustersConstPtr;

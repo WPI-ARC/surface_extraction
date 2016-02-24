@@ -5,7 +5,7 @@
         <param name="fixed_frame" type="string" value="base_link" />
     </node>
 
-    <include file="$(find surface_extraction)/launch/surface_extraction.launch" />
+    <include file="$(find surface_extraction_launch)/launch/surface_extraction.launch" />
 
     <!-- Snapshotter -->
     <node pkg="nodelet" type="nodelet" name="snapshot" args="load surface_filters/PeriodicSnapshotter /surface_extraction/nodelet_manager">

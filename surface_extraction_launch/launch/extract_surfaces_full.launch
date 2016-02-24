@@ -35,7 +35,7 @@
 
     <!-- RANSAC -->
     <node pkg="nodelet" type="nodelet" name="sac_segmentation" args="load surface_filters/SACSegmentAndFit nodelet_manager">
-        <!-- Topics -->
+        <!-- Input Topics -->
         <remap from="~input" to="normals_estimation/output" />
         <remap from="~normals" to="normals_estimation/normals" />
         <remap from="~clusters" to="region_segmentation/clusters" />
@@ -45,14 +45,21 @@
             https://github.com/ros-perception/perception_pcl/blob/1.3.0/pcl_ros/include/pcl_ros/surface/moving_least_squares.h#L98 -->
         <param name="spatial_locator" value="1" />
         <param name="approximate_sync" value="true" />
+
+        <!-- This nodelet publishes lots of near-simultaneous messages -->
+        <param name="max_queue_size" value="1000" />
     </node>
 
     <node pkg="nodelet" type="nodelet" name="concave_hull" args="load surface_filters/ConcaveHull nodelet_manager">
         <!-- Topics -->
-        <remap from="~input" to="sac_segmentation/output" />
+        <remap from="~input" to="sac_segmentation/inliers" />
 
         <!-- Params -->
-        <param name="dimension" value="3" />
+        <param name="dimension" value="2" />
+        <remap from="~alpha" to="concave_hull/alpha" />
+
+        <!-- This nodelet recieves and publishes lots of near-simultaneous messages -->
+        <param name="max_queue_size" value="1000" />
     </node>
 
 </launch>

@@ -2,13 +2,25 @@
     <arg name="topic_name" default="/onboard_worldmodel/pointcloud_vis" />
 
     <group ns="surface_extraction">
-        <env name="ROSCONSOLE_CONFIG_FILE" value="$(find surface_extraction)/custom_rosconsole.conf"/>
+        <env name="ROSCONSOLE_CONFIG_FILE" value="$(find surface_extraction_launch)/custom_rosconsole.conf"/>
 
         <!-- Load parameters -->
-        <rosparam command="load" file="$(find surface_extraction)/params.yaml" />
+        <rosparam command="load" file="$(find surface_extraction_launch)/params.yaml" />
 
         <!-- Nodelet manager -->
         <node pkg="nodelet" type="nodelet" name="nodelet_manager" args="manager" required="true" output="screen" />
+
+        <!-- SurfaceManager -->
+        <node pkg="nodelet" type="nodelet" name="surface_manager" args="load surface_manager/SurfaceManager nodelet_manager">
+            <!-- Topics -->
+            <!-- TODO: Do this remapping inside extract_surfaces_full for separation of concerns -->
+            <remap from="~new_surface_inliers" to="sac_segmentation/inliers" />
+            <remap from="~new_surface_plane" to="sac_segmentation/planes" />
+            <remap from="~new_surface_concave_hull" to="concave_hull/concave_hull" />
+
+            <!-- Params -->
+            <param name="max_queue_size" value="1000" />
+        </node>
 
         <!-- Crop -->
         <node pkg="nodelet" type="nodelet" name="crop" args="load pcl/CropBox nodelet_manager">
@@ -44,9 +56,9 @@
         </node>
 
         <!-- Full-Scene Pipeline -->
-        <include file="$(find surface_extraction)/launch/extract_surfaces_full.launch">
+        <include file="$(find surface_extraction_launch)/launch/extract_surfaces_full.launch">
             <arg name="input_topic" value="change_detect/new_scene" />
-            <arg name="surfaces_manager_node" value="__PLACEHOLDER__" />
+            <arg name="surfaces_manager_node" value="surface_manager" />
         </include>
 
         <!-- Extract new points for input to partial-scene pipeline -->
@@ -60,7 +72,7 @@
         </node>
 
         <!-- Partial-Scene Pipeline -->
-        <include file="$(find surface_extraction)/launch/extract_surfaces_partial.launch">
+        <include file="$(find surface_extraction_launch)/launch/extract_surfaces_partial.launch">
             <arg name="input_topic" value="publish_new/output" />
             <arg name="surfaces_manager_node" value="__PLACEHOLDER__" />
         </include>

@@ -1,5 +1,5 @@
-#ifndef POINT_INDICES_SERIALIZATION_H
-#define POINT_INDICES_SERIALIZATION_H
+#ifndef VERTICES_SERIALIZATION_H
+#define VERTICES_SERIALIZATION_H
 
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/Vertices.h>
@@ -86,4 +86,4 @@ struct Serializer<pcl::Vertices>
 } // namespace serialization
 } // namespace ros
 
-#endif // POINT_INDICES_SERIALIZATION_H
+#endif // VERTICES_SERIALIZATION_H

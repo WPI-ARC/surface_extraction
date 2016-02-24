@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package>
-  <name>surface_extraction</name>
+  <name>surface_extraction_launch</name>
   <version>0.0.0</version>
-  <description>The surface_extraction package</description>
+  <description>The surface_extraction_launch package</description>
 
   <!-- One maintainer tag required, multiple allowed, one person per tag --> 
   <!-- Example:  -->
@@ -41,8 +41,10 @@
   <!--   <test_depend>gtest</test_depend> -->
   <buildtool_depend>catkin</buildtool_depend>
   <build_depend>surface_filters</build_depend>
+  <build_depend>surface_manager</build_depend>
   <build_depend>surface_msgs</build_depend>
   <run_depend>surface_filters</run_depend>
+  <run_depend>surface_manager</run_depend>
   <run_depend>surface_msgs</run_depend>
 
 

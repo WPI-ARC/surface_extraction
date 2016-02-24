@@ -24,7 +24,6 @@ namespace surface_filters {
     /** \brief @b MovingLeastSquares represents a nodelet using the MovingLeastSquares implementation.
     * The type of the output is the same as the input, it only smooths the XYZ coordinates according to the parameters.
     * Normals are estimated at each point as well and published on a separate topic.
-    * \author Radu Bogdan Rusu, Zoltan-Csaba Marton
     */
     class ConcaveHull : public pcl_ros::PCLNodelet {
         // Point types
@@ -71,11 +70,6 @@ namespace surface_filters {
         void synchronized_input_callback(const PointCloudIn::ConstPtr &cloud,
                                          const PointIndices::ConstPtr &indices);
 
-        /** \brief Initialize a search object
-          * \param type Int indicating the type of the object
-          */
-        void setup_spatial_locator(int type);
-
 
     private:
         /** \brief The PCL implementation used. */
@@ -89,7 +83,7 @@ namespace surface_filters {
         boost::shared_ptr<ApproximateTimeSynchronizer<PointCloudIn, PointIndices> > sync_input_indices_a_;
 
         /** \brief The output PointCloud (containing the normals) publisher. */
-        ros::Publisher pub_indices_;
+        ros::Publisher pub_concave_hull_;
 
         /** \brief Mutex for use with dynamic reconfigure */
 //        boost::recursive_mutex mutex_;

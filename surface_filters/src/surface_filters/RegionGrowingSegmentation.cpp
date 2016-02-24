@@ -25,8 +25,8 @@ void surface_filters::RegionGrowingSegmentation::onInit() {
     pcl_ros::PCLNodelet::onInit();
 
     // Set up output publishers
-    pub_output_ = pnh_->advertise<NormalCloudIn>("output", (uint32_t) max_queue_size_);
-    pub_clusters_ = pnh_->advertise<PointClusters>("clusters", (uint32_t) max_queue_size_);
+    pub_output_ = pnh_->advertise<NormalCloudIn>("output", max_queue_size_);
+    pub_clusters_ = pnh_->advertise<PointClusters>("clusters", max_queue_size_);
 
     // Check required parameters
     if (!pnh_->getParam("spatial_locator", spatial_locator_type_)) {
@@ -40,20 +40,19 @@ void surface_filters::RegionGrowingSegmentation::onInit() {
 
     // Enable the dynamic reconfigure service
     srv_ = boost::shared_ptr<dynamic_reconfigure::Server<RGSConfig> >(new dynamic_reconfigure::Server<RGSConfig>(*pnh_));
-    auto f = boost::bind(&RegionGrowingSegmentation::config_callback, this, _1, _2);
-    srv_->setCallback((const dynamic_reconfigure::Server<surface_filters::RGSConfig>::CallbackType &) f);
+    srv_->setCallback(boost::bind(&RegionGrowingSegmentation::config_callback, this, _1, _2));
 
     // Optional parameters
     pnh_->getParam("use_indices", use_indices_);
 
     // Subscribe to the inputs using a filter
-    sub_input_filter_.subscribe(*pnh_, "input", 1);
-    sub_normals_filter_.subscribe(*pnh_, "normals", 1);
+    sub_input_filter_.subscribe(*pnh_, "input", max_queue_size_);
+    sub_normals_filter_.subscribe(*pnh_, "normals", max_queue_size_);
 
     // TODO: Surely there's some way to do this without 4 copies of this stuff
     if (use_indices_) {
         // If indices are enabled, subscribe to the indices
-        sub_indices_filter_.subscribe(*pnh_, "indices", 1);
+        sub_indices_filter_.subscribe(*pnh_, "indices", max_queue_size_);
 
         if (approximate_sync_) {
             sync_input_normals_indices_a_ = boost::make_shared<ApproximateTimeSynchronizer<

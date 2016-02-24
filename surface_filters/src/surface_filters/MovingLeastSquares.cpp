@@ -25,8 +25,8 @@ void surface_filters::MovingLeastSquaresNodelet::onInit() {
     pcl_ros::PCLNodelet::onInit();
 
     // Advertise output nodes
-    pub_output_ = pnh_->advertise<PointCloudIn>("output", (uint32_t) max_queue_size_);
-    pub_normals_ = pnh_->advertise<NormalCloudOut>("normals", (uint32_t) max_queue_size_);
+    pub_output_ = pnh_->advertise<PointCloudIn>("output", max_queue_size_);
+    pub_normals_ = pnh_->advertise<NormalCloudOut>("normals", max_queue_size_);
 
     // Check for required parameters
     if (!pnh_->getParam("search_radius", search_radius_)) {
@@ -46,16 +46,15 @@ void surface_filters::MovingLeastSquaresNodelet::onInit() {
     // Enable the dynamic reconfigure service
 //    srv_ = boost::shared_ptr<dynamic_reconfigure::Server<MLSConfig> >(new dynamic_reconfigure::Server<MLSConfig>(mutex_, *pnh_));
     srv_ = boost::make_shared<dynamic_reconfigure::Server<MLSConfig> >(*pnh_);
-    auto f = bind(&MovingLeastSquaresNodelet::config_callback, this, _1, _2);
-    srv_->setCallback((const dynamic_reconfigure::Server<surface_filters::MLSConfig>::CallbackType &) f);
+    srv_->setCallback(bind(&MovingLeastSquaresNodelet::config_callback, this, _1, _2));
 
     // Optional parameters
     pnh_->getParam("use_indices", use_indices_);
 
     if (use_indices_) {
         // If using indices, subscribe to the input and indices using a filter
-        sub_input_filter_.subscribe(*pnh_, "input", 1);
-        sub_indices_filter_.subscribe(*pnh_, "indices", 1);
+        sub_input_filter_.subscribe(*pnh_, "input", max_queue_size_);
+        sub_indices_filter_.subscribe(*pnh_, "indices", max_queue_size_);
 
         if (approximate_sync_) {
             sync_input_indices_a_ = boost::make_shared<ApproximateTimeSynchronizer<PointCloudIn, PointIndices> >(max_queue_size_);
@@ -70,7 +69,7 @@ void surface_filters::MovingLeastSquaresNodelet::onInit() {
         }
     } else {
         // If not using indices, subscribe to the cloud directly
-        sub_input_ = pnh_->subscribe<PointCloudIn>("input", 1,
+        sub_input_ = pnh_->subscribe<PointCloudIn>("input", max_queue_size_,
                                                    bind(&MovingLeastSquaresNodelet::synchronized_input_callback, this,
                                                         _1,
                                                         PointIndicesConstPtr()));

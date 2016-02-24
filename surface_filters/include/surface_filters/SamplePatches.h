@@ -47,8 +47,9 @@ namespace surface_filters {
         /** \brief A pointer to the spatial search object. */
         SpatialSearch::Ptr tree_;
 
-        /** \brief Parameter for the spatial locator tree. By convention, the values represent:
-          * 0: ANN (Approximate Nearest Neigbor library) kd-tree
+    protected:
+/** \brief Parameter for the spatial locator tree. By convention, the values represent:
+          * 0: ANN (Approximate Nearest Neighbor library) kd-tree
           * 1: FLANN (Fast Library for Approximate Nearest Neighbors) kd-tree
           * 2: Organized spatial dataset index
           */

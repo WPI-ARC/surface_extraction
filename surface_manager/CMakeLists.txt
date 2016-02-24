@@ -1,19 +1,19 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(surface_filters)
+project(surface_manager)
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
-  geometry_msgs
-  pcl_conversions
-  pcl_ros
-  roscpp
-  sensor_msgs
-  nodelet
-  dynamic_reconfigure
-  surface_msgs
-  surfaces
+    geometry_msgs
+    pcl_conversions
+    pcl_ros
+    roscpp
+    sensor_msgs
+    nodelet
+    dynamic_reconfigure
+    surface_msgs
+    surfaces
 )
 
 ## System dependencies are found with CMake's conventions
@@ -91,12 +91,7 @@ find_package(catkin REQUIRED COMPONENTS
 
 ## Generate dynamic reconfigure parameters in the 'cfg' folder
 generate_dynamic_reconfigure_options(
-  cfg/MLS.cfg
-  cfg/RGS.cfg
-  cfg/SAC.cfg
-  cfg/SamplePatches.cfg
-  cfg/ChangeDetection.cfg
-  cfg/ConcaveHull.cfg
+
 )
 
 ###################################
@@ -109,28 +104,25 @@ generate_dynamic_reconfigure_options(
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
-  INCLUDE_DIRS include
-  LIBRARIES surface_filters
-  CATKIN_DEPENDS pcl_conversions pcl_ros roscpp sensor_msgs dynamic_reconfigure nodelet
-#  DEPENDS system_lib
+    INCLUDE_DIRS include
+    LIBRARIES surface_manager
+    CATKIN_DEPENDS pcl_conversions pcl_ros roscpp sensor_msgs dynamic_reconfigure nodelet
+    #  DEPENDS system_lib
 )
 
 ###########
 ## Build ##
 ###########
-set(CMAKE_CXX_COMPILER "clang++")
-set(CMAKE_C_COMPILER "clang")
+
 set(CMAKE_BUILD_TYPE Debug)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O3 -std=c++11 -Wall -Wextra -Wno-unused-parameter")
-# Flags to make Clang ignore directories that Catkin should have marked as system imports
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Xclang -isystem-prefix -Xclang pcl/")
 
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 include_directories(
-  include
-  ${catkin_INCLUDE_DIRS}
+    include
+    ${catkin_INCLUDE_DIRS}
 )
 
 ## Declare a C++ library
@@ -156,24 +148,13 @@ include_directories(
 # )
 
 # Include header files so QTCreator will show them in its project view
-add_library(surface_filters
-    # Filters
-    src/surface_filters/MovingLeastSquares.cpp
-    src/surface_filters/RegionGrowingSegmentation.cpp
-    src/surface_filters/SACSegmentAndFit.cpp
-    src/surface_filters/ChangeDetection.cpp
-    src/surface_filters/ConcaveHull.cpp
+add_library(surface_manager
+    src/surface_manager/SurfaceManager.cpp
+)
 
-    # Currently unimplemented
-    src/surface_filters/SamplePatches.cpp
+add_dependencies(surface_manager ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencfg surfaces)
 
-    # Snapshotter
-    src/surface_filters/PeriodicSnapshotter.cpp
-    include/surface_filters/ExpandSurfaces.h src/surface_filters/ExpandSurfaces.cpp)
-
-add_dependencies(surface_filters ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencfg surface_msgs surfaces)
-
-target_link_libraries(surface_filters ${Boost_LIBRARIES} ${catkin_LIBRARIES} ${Eigen3_LIBRARIES} ${PCL_LIBRARIES})
+target_link_libraries(surface_manager ${Boost_LIBRARIES} ${catkin_LIBRARIES} ${Eigen3_LIBRARIES} ${PCL_LIBRARIES})
 
 #############
 ## Install ##
@@ -211,10 +192,10 @@ target_link_libraries(surface_filters ${Boost_LIBRARIES} ${catkin_LIBRARIES} ${E
 # )
 
 ## Mark the nodelet library for installations
-install(TARGETS surface_filters
-  ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
+install(TARGETS surface_manager
+    ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+    LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+    RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
 
 #############
 ## Testing ##

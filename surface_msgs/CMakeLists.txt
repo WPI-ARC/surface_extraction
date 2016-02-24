@@ -7,6 +7,7 @@ project(surface_msgs)
 find_package(catkin REQUIRED COMPONENTS
     pcl_msgs
     std_msgs
+    shape_msgs
     geometry_msgs
     message_generation
 )
@@ -52,6 +53,10 @@ add_message_files(
     DiscSurfacePatches.msg
     Polygon.msg
     Polygons.msg
+    Surface.msg
+    Surfaces.msg
+    SurfaceMesh.msg
+    SurfaceMeshes.msg
 )
 
 ## Generate services in the 'srv' folder
@@ -73,6 +78,7 @@ generate_messages(
     DEPENDENCIES
     pcl_msgs
     std_msgs
+    shape_msgs
     geometry_msgs
 )
 

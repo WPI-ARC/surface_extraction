@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package>
-  <name>surface_filters</name>
+  <name>surfaces</name>
   <version>0.0.0</version>
-  <description>The surface_filters package</description>
+  <description>The surfaces package</description>
 
   <!-- One maintainer tag required, multiple allowed, one person per tag --> 
   <!-- Example:  -->
@@ -16,10 +16,10 @@
   <license>TODO</license>
 
 
-  <!-- Url tags are optional, but multiple are allowed, one per tag -->
+  <!-- Url tags are optional, but mutiple are allowed, one per tag -->
   <!-- Optional attribute type can be: website, bugtracker, or repository -->
   <!-- Example: -->
-  <!-- <url type="website">http://wiki.ros.org/surface_filters</url> -->
+  <!-- <url type="website">http://wiki.ros.org/surfaces</url> -->
 
 
   <!-- Author tags are optional, mutiple are allowed, one per tag -->
@@ -40,30 +40,17 @@
   <!-- Use test_depend for packages you need only for testing: -->
   <!--   <test_depend>gtest</test_depend> -->
   <buildtool_depend>catkin</buildtool_depend>
-  <build_depend>libpcl-all-dev</build_depend>
-  <build_depend>pcl_conversions</build_depend>
-  <build_depend>pcl_ros</build_depend>
   <build_depend>roscpp</build_depend>
-  <build_depend>sensor_msgs</build_depend>
-  <build_depend>dynamic_reconfigure</build_depend>
-  <build_depend>nodelet</build_depend>
-  <build_depend>pcl_msgs</build_depend>
-  <build_depend>surface_msgs</build_depend>
-  <build_depend>surfaces</build_depend>
-  <run_depend>libpcl-all-dev</run_depend>
-  <run_depend>pcl_conversions</run_depend>
-  <run_depend>pcl_ros</run_depend>
   <run_depend>roscpp</run_depend>
-  <run_depend>sensor_msgs</run_depend>
-  <run_depend>dynamic_reconfigure</run_depend>
-  <run_depend>nodelet</run_depend>
-  <run_depend>pcl_msgs</run_depend>
-  <run_depend>surface_msgs</run_depend>
-  <run_depend>surfacs</run_depend>
+    <build_depend>pcl_conversions</build_depend>
+    <run_depend>pcl_conversions</run_depend>
+    <build_depend>pcl_ros</build_depend>
+    <run_depend>pcl_ros</run_depend>
 
 
   <!-- The export tag contains other, unspecified, tags -->
   <export>
-    <nodelet plugin="${prefix}/nodelets.xml" />
+    <!-- Other tools can request additional information be placed here -->
+
   </export>
 </package>

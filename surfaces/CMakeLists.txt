@@ -1,24 +1,19 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(surface_filters)
+project(surfaces)
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
-  geometry_msgs
-  pcl_conversions
-  pcl_ros
-  roscpp
-  sensor_msgs
-  nodelet
-  dynamic_reconfigure
-  surface_msgs
-  surfaces
+    pcl_conversions
+    pcl_ros
+    roscpp
 )
 
 ## System dependencies are found with CMake's conventions
-# find_package(Boost REQUIRED COMPONENTS system)
+find_package(Boost REQUIRED COMPONENTS system)
 
+find_package(PCL)
 
 ## Uncomment this if the package has a setup.py. This macro ensures
 ## modules and global scripts declared therein get installed
@@ -52,7 +47,8 @@ find_package(catkin REQUIRED COMPONENTS
 ## Generate messages in the 'msg' folder
 # add_message_files(
 #   FILES
-#   PointClusters.msg
+#   Message1.msg
+#   Message2.msg
 # )
 
 ## Generate services in the 'srv' folder
@@ -72,7 +68,7 @@ find_package(catkin REQUIRED COMPONENTS
 ## Generate added messages and services with any dependencies listed here
 # generate_messages(
 #   DEPENDENCIES
-#   pcl_msgs
+#   std_msgs  # Or other packages containing msgs
 # )
 
 ################################################
@@ -90,14 +86,10 @@ find_package(catkin REQUIRED COMPONENTS
 ##     and list every .cfg file to be processed
 
 ## Generate dynamic reconfigure parameters in the 'cfg' folder
-generate_dynamic_reconfigure_options(
-  cfg/MLS.cfg
-  cfg/RGS.cfg
-  cfg/SAC.cfg
-  cfg/SamplePatches.cfg
-  cfg/ChangeDetection.cfg
-  cfg/ConcaveHull.cfg
-)
+# generate_dynamic_reconfigure_options(
+#   cfg/DynReconf1.cfg
+#   cfg/DynReconf2.cfg
+# )
 
 ###################################
 ## catkin specific configuration ##
@@ -110,70 +102,56 @@ generate_dynamic_reconfigure_options(
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
   INCLUDE_DIRS include
-  LIBRARIES surface_filters
-  CATKIN_DEPENDS pcl_conversions pcl_ros roscpp sensor_msgs dynamic_reconfigure nodelet
+  LIBRARIES surfaces
+  CATKIN_DEPENDS roscpp pcl_conversions pcl_ros
 #  DEPENDS system_lib
 )
 
 ###########
 ## Build ##
 ###########
-set(CMAKE_CXX_COMPILER "clang++")
-set(CMAKE_C_COMPILER "clang")
-set(CMAKE_BUILD_TYPE Debug)
-
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O3 -std=c++11 -Wall -Wextra -Wno-unused-parameter")
-# Flags to make Clang ignore directories that Catkin should have marked as system imports
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Xclang -isystem-prefix -Xclang pcl/")
 
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 include_directories(
-  include
+    include
   ${catkin_INCLUDE_DIRS}
 )
 
-## Declare a C++ library
-# add_library(surface_filters
-#   src/${PROJECT_NAME}/surface_filters.cpp
-# )
+## Declare a C++ library that's never installed or exported
+add_library(surfaces
+    include/surfaces/ModelCoefficients_Serialization.hpp
+    include/surfaces/PointClusters.hpp
+    include/surfaces/PointClusters_Serialization.hpp
+    include/surfaces/PointIndices_Serialization.hpp
+    include/surfaces/Polygons.hpp
+    include/surfaces/Polygons_Serialization.hpp
+    include/surfaces/Surface.hpp
+    include/surfaces/Surface_Serialization.hpp
+    include/surfaces/Surfaces.hpp
+    include/surfaces/Surfaces_Serialization.hpp
+    include/surfaces/Vertices_Serialization.hpp
+)
+set_target_properties(surfaces PROPERTIES LINKER_LANGUAGE CXX)
+add_dependencies(surfaces ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+target_link_libraries(surfaces ${Boost_LIBRARIES} ${catkin_LIBRARIES} ${Eigen3_LIBRARIES} ${PCL_LIBRARIES})
 
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
 ## either from message generation or dynamic reconfigure
-# add_dependencies(surface_filters ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+# add_dependencies(surfaces ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Declare a C++ executable
-# add_executable(surface_filters_node src/surface_filters_node.cpp)
+# add_executable(surfaces_node src/surfaces_node.cpp)
 
 ## Add cmake target dependencies of the executable
 ## same as for the library above
-# add_dependencies(surface_filters_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+# add_dependencies(surfaces_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
-# target_link_libraries(surface_filters_node
+# target_link_libraries(surfaces_node
 #   ${catkin_LIBRARIES}
 # )
-
-# Include header files so QTCreator will show them in its project view
-add_library(surface_filters
-    # Filters
-    src/surface_filters/MovingLeastSquares.cpp
-    src/surface_filters/RegionGrowingSegmentation.cpp
-    src/surface_filters/SACSegmentAndFit.cpp
-    src/surface_filters/ChangeDetection.cpp
-    src/surface_filters/ConcaveHull.cpp
-
-    # Currently unimplemented
-    src/surface_filters/SamplePatches.cpp
-
-    # Snapshotter
-    src/surface_filters/PeriodicSnapshotter.cpp
-    include/surface_filters/ExpandSurfaces.h src/surface_filters/ExpandSurfaces.cpp)
-
-add_dependencies(surface_filters ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencfg surface_msgs surfaces)
-
-target_link_libraries(surface_filters ${Boost_LIBRARIES} ${catkin_LIBRARIES} ${Eigen3_LIBRARIES} ${PCL_LIBRARIES})
 
 #############
 ## Install ##
@@ -190,18 +168,15 @@ target_link_libraries(surface_filters ${Boost_LIBRARIES} ${catkin_LIBRARIES} ${E
 # )
 
 ## Mark executables and/or libraries for installation
-# install(TARGETS surface_filters surface_filters_node
-#   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-#   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-#   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-# )
+install(TARGETS surfaces
+  ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
 
 ## Mark cpp header files for installation
-# install(DIRECTORY include/${PROJECT_NAME}/
-#   DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
-#   FILES_MATCHING PATTERN "*.h"
-#   PATTERN ".svn" EXCLUDE
-# )
+install(DIRECTORY include/${PROJECT_NAME}/
+    DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION})
 
 ## Mark other files for installation (e.g. launch and bag files, etc.)
 # install(FILES
@@ -210,23 +185,15 @@ target_link_libraries(surface_filters ${Boost_LIBRARIES} ${catkin_LIBRARIES} ${E
 #   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
 # )
 
-## Mark the nodelet library for installations
-install(TARGETS surface_filters
-  ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
-
 #############
 ## Testing ##
 #############
 
 ## Add gtest based cpp test target and link libraries
-# catkin_add_gtest(${PROJECT_NAME}-test test/test_surface_filters.cpp)
+# catkin_add_gtest(${PROJECT_NAME}-test test/test_surfaces.cpp)
 # if(TARGET ${PROJECT_NAME}-test)
 #   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
 # endif()
 
 ## Add folders to be run by python nosetests
 # catkin_add_nosetests(test)
-
-add_definitions(-std=c++11)

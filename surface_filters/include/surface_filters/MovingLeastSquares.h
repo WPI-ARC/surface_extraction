@@ -21,7 +21,6 @@ namespace surface_filters {
     /** \brief @b MovingLeastSquares represents a nodelet using the MovingLeastSquares implementation.
     * The type of the output is the same as the input, it only smooths the XYZ coordinates according to the parameters.
     * Normals are estimated at each point as well and published on a separate topic.
-    * \author Radu Bogdan Rusu, Zoltan-Csaba Marton
     */
     class MovingLeastSquaresNodelet : public pcl_ros::PCLNodelet {
         // Point types
@@ -63,7 +62,7 @@ namespace surface_filters {
         bool compute_normals_ = false;
 
         /** \brief Parameter for the spatial locator tree. By convention, the values represent:
-          * 0: ANN (Approximate Nearest Neigbor library) kd-tree
+          * 0: ANN (Approximate Nearest Neighbor library) kd-tree
           * 1: FLANN (Fast Library for Approximate Nearest Neighbors) kd-tree
           * 2: Organized spatial dataset index
           */

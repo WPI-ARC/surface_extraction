@@ -79,6 +79,7 @@ generate_messages(
     pcl_msgs
     std_msgs
     shape_msgs
+    sensor_msgs
     geometry_msgs
 )
 

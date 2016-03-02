@@ -9,9 +9,10 @@
 #define INLIERS_TOPIC "new_surface_inliers"
 #define CONCAVE_HULL_TOPIC "new_surface_concave_hull"
 #define PLANE_TOPIC "new_surface_plane"
+#define REPLACE_SURFACE_TOPIC "replace_surface"
 
 void surface_manager::SurfaceManager::onInit() {
-    ros::NodeHandle& private_nh = getPrivateNodeHandle();
+    ros::NodeHandle &private_nh = getPrivateNodeHandle();
 
     int max_queue_size = 3;
     if (!private_nh.getParam("max_queue_size", max_queue_size)) {
@@ -29,12 +30,16 @@ void surface_manager::SurfaceManager::onInit() {
     new_surface_convex_hull_sub_.subscribe(private_nh, CONCAVE_HULL_TOPIC, (uint32_t) max_queue_size);
     new_surface_plane_sub_.subscribe(private_nh, PLANE_TOPIC, (uint32_t) max_queue_size);
 
+    replace_surface_sub_ = private_nh.subscribe<SurfaceStamped>(REPLACE_SURFACE_TOPIC, (uint32_t) max_queue_size,
+                                                                bind(&SurfaceManager::replace_surface, this, _1));
+
     new_surface_synchronizer_ = boost::make_shared<NewSurfaceSynchronizer>(max_queue_size);
-    new_surface_synchronizer_->connectInput(new_surface_inliers_sub_, new_surface_convex_hull_sub_, new_surface_plane_sub_);
+    new_surface_synchronizer_->connectInput(new_surface_inliers_sub_, new_surface_convex_hull_sub_,
+                                            new_surface_plane_sub_);
     new_surface_synchronizer_->registerCallback(bind(&SurfaceManager::add_surface_synchronized, this, _1, _2, _3));
 
     NODELET_DEBUG("[%s::onInit] SurfaceManager started with max_queue_size = %d\n", getName().c_str(), max_queue_size);
-    
+
     NODELET_DEBUG("[%s::onInit] Subscribed to topics %s, %s, %s", getName().c_str(),
                   private_nh.resolveName(INLIERS_TOPIC).c_str(),
                   private_nh.resolveName(CONCAVE_HULL_TOPIC).c_str(),
@@ -49,9 +54,9 @@ void surface_manager::SurfaceManager::add_surface_synchronized(const PointCloudI
     NODELET_DEBUG("New Surface received with %u points, %u vertices", cloud_size, hull_size);
 
     unsigned long id = surfaces.size();
-    surfaces.resize(id+1);
+    surfaces.resize(id + 1);
 //    surface_clouds.resize(id+1);
-    surface_meshes.resize(id+1);
+    surface_meshes.resize(id + 1);
 
     surfaces[id].id = static_cast<unsigned int>(id);
     surfaces[id].color = std_msgs::ColorRGBA();
@@ -132,6 +137,21 @@ void surface_manager::SurfaceManager::publish(std_msgs::Header header) {
         output_pub_.publish(output);
     }
 
+    NODELET_DEBUG("SurfaceManager published surfaces on all topics with any subscribers");
+}
+
+void surface_manager::SurfaceManager::replace_surface(const SurfaceStamped::ConstPtr new_surface) {
+    NODELET_DEBUG("Replacement for surface %u received", new_surface->surface.id);
+    auto old_surface = std::find_if(surfaces.begin(), surfaces.end(), [&new_surface](Surface &test_surface) {
+        return test_surface.id == new_surface->surface.id;
+    });
+
+    NODELET_DEBUG_STREAM("Old version of surface found at " << std::distance(surfaces.begin(), old_surface) <<
+                         " (length of array is " << surfaces.size() << ")");
+
+    *old_surface = new_surface->surface;
+
+    this->publish(new_surface->header);
 }
 
 

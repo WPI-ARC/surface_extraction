@@ -37,6 +37,7 @@
 #include <surface_msgs/SurfaceMeshes.h>
 #include <surface_msgs/SurfaceCloud.h>
 #include <surface_msgs/SurfaceClouds.h>
+#include <surface_msgs/SurfaceStamped.h>
 
 namespace surface_manager {
     class SurfaceManager : public nodelet::Nodelet {
@@ -48,6 +49,7 @@ namespace surface_manager {
         typedef pcl_msgs::ModelCoefficients ModelCoefficients;
 
         typedef surface_msgs::Surface Surface;
+        typedef surface_msgs::SurfaceStamped SurfaceStamped;
         typedef surface_msgs::Surfaces Surfaces;
 
 //        typedef surface_msgs::SurfaceCloud SurfaceCloud;
@@ -83,6 +85,8 @@ namespace surface_manager {
         message_filters::Subscriber<PolygonMesh> new_surface_convex_hull_sub_;
         message_filters::Subscriber<ModelCoefficients>  new_surface_plane_sub_;
 
+        ros::Subscriber replace_surface_sub_;
+
         boost::shared_ptr<NewSurfaceSynchronizer> new_surface_synchronizer_;
 
         std::vector<Surface> surfaces;
@@ -92,6 +96,8 @@ namespace surface_manager {
         void add_surface_synchronized(const PointCloudIn::ConstPtr inliers,
                                       const PolygonMesh::ConstPtr concave_hull,
                                       const ModelCoefficients::ConstPtr model);
+
+        void replace_surface(const SurfaceStamped::ConstPtr new_surface);
 
         void publish(std_msgs::Header header);
 

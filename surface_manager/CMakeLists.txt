@@ -114,9 +114,13 @@ catkin_package(
 ## Build ##
 ###########
 
+set(CMAKE_CXX_COMPILER "clang++")
+set(CMAKE_C_COMPILER "clang")
 set(CMAKE_BUILD_TYPE Debug)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O3 -std=c++11 -Wall -Wextra -Wno-unused-parameter")
+# Flags to make Clang ignore directories that Catkin should have marked as system imports
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Xclang -isystem-prefix -Xclang pcl/")
 
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations

@@ -62,11 +62,12 @@ void surface_filters::ChangeDetection::synchronized_input_callback(const PointCl
 
     float new_percentage = indices->indices.size() / (float) cloud->size();
 
-//    NODELET_INFO_STREAM(std::setprecision(3) <<
-//                        "(" << (ros::WallTime::now() - start) << " sec, " << cloud->size() << " points) "
-//                        << "Change Detection Finished with " << indices->indices.size()
-//                        << " new points (" << new_percentage*100 <<"%)");
-
+    if (new_percentage > 0) {
+//        NODELET_DEBUG_STREAM(std::setprecision(3) <<
+//                             "(" << (ros::WallTime::now() - start) << " sec, " << cloud->size() << " points) "
+//                             << "Change Detection Finished with " << indices->indices.size()
+//                             << " new points (" << new_percentage*100 <<"%)");
+    }
 
     if (new_percentage >= new_scene_threshold_) {
         // Then it's a new scene -- republish the cloud

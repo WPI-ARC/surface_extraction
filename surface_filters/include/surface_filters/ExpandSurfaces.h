@@ -6,11 +6,14 @@
 #define SURFACE_FILTERS_EXPANDSURFACES_H
 #include <pcl_ros/pcl_nodelet.h>
 
+#include <mutex>
+
 // PCL includes
 #include <pcl/conversions.h>
 #include <pcl/search/search.h>
 #include <pcl/filters/crop_box.h>
 #include <pcl/surface/concave_hull.h>
+#include <pcl/common/transforms.h>
 
 // Dynamic reconfigure
 #include <dynamic_reconfigure/server.h>
@@ -21,6 +24,8 @@
 #include <surfaces/PointIndices_Serialization.hpp>
 #include <surface_msgs/Surface.h>
 #include <surface_msgs/Surfaces.h>
+#include <surface_msgs/SurfaceClouds.h>
+#include <surface_msgs/SurfaceStamped.h>
 
 namespace surface_filters {
     namespace sync_policies = message_filters::sync_policies;
@@ -41,7 +46,9 @@ namespace surface_filters {
 //        typedef surfaces::Surface<PointIn> Surface;
 //        typedef surfaces::Surfaces<PointIn> Surfaces;
         typedef surface_msgs::Surface Surface;
+        typedef surface_msgs::SurfaceStamped SurfaceStamped;
         typedef surface_msgs::Surfaces Surfaces;
+        typedef surface_msgs::SurfaceClouds SurfaceClouds;
 
         typedef message_filters::sync_policies::ExactTime<PointCloud, pcl_msgs::PointIndices> ExactPolicy;
         typedef message_filters::sync_policies::ApproximateTime<PointCloud, pcl_msgs::PointIndices> ApproxPolicy;
@@ -90,14 +97,18 @@ namespace surface_filters {
 
 
         message_filters::Subscriber<Surfaces> sub_surfaces_;
+        message_filters::Subscriber<SurfaceClouds> sub_surface_clouds_;
 
         boost::shared_ptr<message_filters::Cache<Surfaces> > surfaces_cache_;
+        boost::shared_ptr<message_filters::Cache<SurfaceClouds> > surface_clouds_cache_;
 
         /** \brief The output publisher. */
         ros::Publisher pub_replace_surface_;
 
         /** \brief The output publisher. */
-        ros::Publisher pub_removed_indices_;
+        ros::Publisher pub_remaining_indices_;
+
+        std::mutex hull_mutex_;
 
     public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW

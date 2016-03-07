@@ -1,2 +1,2 @@
 Header header
-surface_msgs/SurfaceCloud surfaces
+surface_msgs/SurfaceCloud[] surfaces

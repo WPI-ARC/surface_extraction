@@ -10,5 +10,14 @@
     <!-- Time publisher -->
     <node pkg="surface_extraction_launch" type="emit_current_time.py" name="time_emitter" />
 
-    <include file="$(find surface_extraction_launch)/launch/surface_extraction.launch" />
+    <include file="$(find surface_extraction_launch)/launch/surface_extraction.launch">
+        <arg name="topic_name" value="/filter/output" />
+    </include>
+
+    <node pkg="nodelet" type="nodelet" name="filter" args="load pcl/PassThrough /surface_extraction/nodelet_manager">
+        <param name="filter_field_name" value="intensity" />
+        <param name="filter_limit_max" value="2" />
+        <remap from="~input" to="cloud_pcd" />
+    </node>
+
 </launch>

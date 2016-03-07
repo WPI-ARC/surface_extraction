@@ -24,6 +24,8 @@ void surface_manager::SurfaceManager::onInit() {
 //    surface_clouds_pub_ = private_nh.advertise<SurfaceClouds>("surface_clouds", (uint32_t) max_queue_size, true);
     surface_meshes_pub_ = private_nh.advertise<SurfaceMeshes>("surface_meshes", (uint32_t) max_queue_size, true);
     output_pub_ = private_nh.advertise<PointCloudOut>("output", (uint32_t) max_queue_size);
+    perimeter_pub_ = private_nh.advertise<PointCloudOut>("perimeter", (uint32_t) max_queue_size);
+    visualization_pub_ = private_nh.advertise<vis::MarkerArray>("surfaces_visualization", (uint32_t) max_queue_size);
 
     // Subscribe to new_surface_* inputs (for adding surfaces)
     new_surface_inliers_sub_.subscribe(private_nh, INLIERS_TOPIC, (uint32_t) max_queue_size);
@@ -135,6 +137,76 @@ void surface_manager::SurfaceManager::publish(std_msgs::Header header) {
 
         pcl_conversions::toPCL(header, output->header);
         output_pub_.publish(output);
+    }
+
+    if (perimeter_pub_.getNumSubscribers() > 0) {
+        PointCloudOut::Ptr output = boost::make_shared<PointCloudOut>();
+
+        for (Surface surface : surfaces) {
+            size_t outputPointsSize = output->points.size();
+            size_t projectedPointsSize = surface.concave_hull.cloud.height * surface.concave_hull.cloud.width;
+            output->points.resize(outputPointsSize + projectedPointsSize);
+
+            // C++ makes me sad
+            sensor_msgs::PointCloud2Iterator<float> iter_x(surface.concave_hull.cloud, "x");
+            sensor_msgs::PointCloud2Iterator<float> iter_y(surface.concave_hull.cloud, "y");
+            sensor_msgs::PointCloud2Iterator<float> iter_z(surface.concave_hull.cloud, "z");
+
+            for (int i = 0; iter_x != iter_x.end(); ++iter_x, ++iter_y, ++iter_z, ++i) {
+                output->points[outputPointsSize + i].x = *iter_x;
+                output->points[outputPointsSize + i].y = *iter_y;
+                output->points[outputPointsSize + i].z = *iter_z;
+                output->points[outputPointsSize + i].r = static_cast<uint8_t>(surface.color.r * 255);
+                output->points[outputPointsSize + i].g = static_cast<uint8_t>(surface.color.g * 255);
+                output->points[outputPointsSize + i].b = static_cast<uint8_t>(surface.color.b * 255);
+            }
+        }
+
+        pcl_conversions::toPCL(header, output->header);
+        perimeter_pub_.publish(output);
+    }
+
+    if (visualization_pub_.getNumSubscribers() > 0) {
+        vis::MarkerArray all_markers;
+
+        for (Surface surface : surfaces) {
+            vis::Marker perimeter;
+            perimeter.header = header;
+            perimeter.ns = "surface_perimeter";
+            perimeter.id = surface.id;
+            perimeter.type = vis::Marker::LINE_LIST;
+            perimeter.action = vis::Marker::MODIFY;
+            // perimeter.pose not needed
+            perimeter.scale.x = 0.05; // scale.x controls the width of the line segments
+            perimeter.color = surface.color;
+
+            sensor_msgs::PointCloud2Iterator<float> iter_x(surface.concave_hull.cloud, "x");
+            sensor_msgs::PointCloud2Iterator<float> iter_y(surface.concave_hull.cloud, "y");
+            sensor_msgs::PointCloud2Iterator<float> iter_z(surface.concave_hull.cloud, "z");
+
+            for (pcl_msgs::Vertices& polygon : surface.concave_hull.polygons) {
+                for (int i = 0; i < polygon.vertices.size(); i++) {
+                    geometry_msgs::Point pointA, pointB;
+                    pointA.x = *(iter_x + polygon.vertices[i]);
+                    pointA.y = *(iter_y + polygon.vertices[i]);
+                    pointA.z = *(iter_z + polygon.vertices[i]);
+
+                    // Connect each point to the next, and the last point back to the first
+                    unsigned long next_i = (i + 1) % polygon.vertices.size();
+
+                    pointB.x = *(iter_x + polygon.vertices[next_i]);
+                    pointB.y = *(iter_y + polygon.vertices[next_i]);
+                    pointB.z = *(iter_z + polygon.vertices[next_i]);
+
+                    perimeter.points.push_back(pointA);
+                    perimeter.points.push_back(pointB);
+                }
+            }
+
+            all_markers.markers.push_back(perimeter);
+        }
+
+        visualization_pub_.publish(all_markers);
     }
 
     NODELET_DEBUG("SurfaceManager published surfaces on all topics with any subscribers");

@@ -54,9 +54,12 @@ add_message_files(
     Polygon.msg
     Polygons.msg
     Surface.msg
+    SurfaceStamped.msg
     Surfaces.msg
     SurfaceMesh.msg
     SurfaceMeshes.msg
+    SurfaceCloud.msg
+    SurfaceClouds.msg
 )
 
 ## Generate services in the 'srv' folder

@@ -51,7 +51,7 @@ namespace surface_filters {
         int min_points_in_leaf_ = 0;
 
         /** \brief Percentage of points which must be new for the cloud to be considered a new scene */
-        double new_scene_threshold_ = 0.2;
+        double new_scene_threshold_ = 0.8;
 
         /** \brief Pointer to a dynamic reconfigure service. */
         boost::shared_ptr<dynamic_reconfigure::Server<ChangeDetectionConfig> > srv_;

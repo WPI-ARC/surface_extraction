@@ -31,4 +31,9 @@
       ChangeDetection subscribes to a stream of point clouds of the same scene and outputs the indices of the new points
     </description>
   </class>
+  <class name="surface_filters/ExpandSurfaces" type="surface_filters::ExpandSurfaces" base_class_type="nodelet::Nodelet">
+    <description>
+      ExpandSurfaces is a dedicated nodelet for surface expansion and requires a SurfaceManager
+    </description>
+  </class>
 </library>

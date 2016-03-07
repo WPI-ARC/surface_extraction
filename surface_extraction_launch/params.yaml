@@ -1,12 +1,12 @@
 downsample_resolution: 0.02 # Meters
 
 # These settings are for the static sample point cloud (which is misaligned)
-crop_box_min: {x: -3, y: -2, z: -3} # Meters
-crop_box_max: {x: 3, y: 1, z: 3} # Meters
+#crop_box_min: {x: -2, y: -2, z: -1} # Meters
+#crop_box_max: {x: 2, y: 1, z: 1} # Meters
 
 # These settings are for Gazebo
-#crop_box_min: {x: -5, y: -5, z: -5} # Meters
-#crop_box_max: {x: 5, y: 5, z: 5} # Meters
+crop_box_min: {x: -5, y: -5, z: -5} # Meters
+crop_box_max: {x: 5, y: 5, z: 5} # Meters
 
 outlier_removal: {
   mean_k: 50,

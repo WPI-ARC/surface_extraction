@@ -24,6 +24,8 @@
 #include <message_filters/synchronizer.h>
 #include <message_filters/sync_policies/exact_time.h>
 #include <message_filters/sync_policies/approximate_time.h>
+#include <visualization_msgs/MarkerArray.h>
+#include <visualization_msgs/Marker.h>
 //#include <surfaces/Polygons.hpp>
 //#include <surfaces/Polygons_Serialization.hpp>
 //#include <surfaces/Vertices_Serialization.hpp>
@@ -39,8 +41,11 @@
 #include <surface_msgs/SurfaceClouds.h>
 #include <surface_msgs/SurfaceStamped.h>
 
+namespace vis = visualization_msgs;
+
 namespace surface_manager {
     class SurfaceManager : public nodelet::Nodelet {
+
 //        typedef pcl::PointXYZ PointIn;
         typedef sensor_msgs::PointCloud2 PointCloudIn;
 
@@ -80,6 +85,8 @@ namespace surface_manager {
 //        ros::Publisher surface_clouds_pub_;
         ros::Publisher surface_meshes_pub_;
         ros::Publisher output_pub_;
+        ros::Publisher perimeter_pub_;
+        ros::Publisher visualization_pub_;
 
         message_filters::Subscriber<PointCloudIn>  new_surface_inliers_sub_;
         message_filters::Subscriber<PolygonMesh> new_surface_convex_hull_sub_;
@@ -88,6 +95,7 @@ namespace surface_manager {
         ros::Subscriber replace_surface_sub_;
 
         boost::shared_ptr<NewSurfaceSynchronizer> new_surface_synchronizer_;
+
 
         std::vector<Surface> surfaces;
 //        std::vector<SurfaceCloud> surface_clouds;

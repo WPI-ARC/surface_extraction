@@ -10,13 +10,15 @@ if __name__ == "__main__":
 
     client = dynamic_reconfigure.client.Client('filter')
 
+    rospy.sleep(4)
+
     start = rospy.get_time()
 
-    rospy.sleep(10)
-
-    rate = rospy.Rate(10) # Hz
+    rate = rospy.Rate(10)  # Hz
 
     speedup_factor = 1
+
+    print("Starting filter_limit expansion")
 
     while not rospy.is_shutdown():
         config = client.update_configuration({'filter_limit_max': (rospy.get_time() - start) * speedup_factor})

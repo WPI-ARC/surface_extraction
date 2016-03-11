@@ -115,15 +115,16 @@ namespace surface_filters {
         ros::Publisher pub_planes_;
         ros::Publisher pub_inliers_;
 
+        /** \brief The message filter subscriber for PointCloud2. */
+        // NOTE these have to come before the synchronizer members or you get a mutex lock error on destruction
+        message_filters::Subscriber<NormalCloudIn> sub_normals_filter_;
+        message_filters::Subscriber<PointClusters> sub_clusters_filter_;
+
         /** \brief Synchronized input, and indices.*/
         boost::shared_ptr<ExactTimeSynchronizer<PointCloudIn, NormalCloudIn, PointClusters> > sync_input_normals_clusters_e_;
         boost::shared_ptr<ApproximateTimeSynchronizer<PointCloudIn, NormalCloudIn, PointClusters> > sync_input_normals_clusters_a_;
         boost::shared_ptr<ExactTimeSynchronizer<PointCloudIn, PointClusters> > sync_input_clusters_e_;
         boost::shared_ptr<ApproximateTimeSynchronizer<PointCloudIn, PointClusters> > sync_input_clusters_a_;
-
-        /** \brief The message filter subscriber for PointCloud2. */
-        message_filters::Subscriber<NormalCloudIn> sub_normals_filter_;
-        message_filters::Subscriber<PointClusters> sub_clusters_filter_;
 
     public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW

@@ -91,22 +91,22 @@ void surface_filters::ExpandSurfaces::synchronized_input_callback(const PointClo
     }
 
     /// DEBUG
-    NODELET_DEBUG("[%s::synchronized_input_callback]\n"
-                          "                                 - PointCloud with %d data points (%s), stamp %f, and frame %s on topic %s received.\n"
-                          "                                 - PointIndices with %zu values, stamp %f, and frame %s on topic %s received.",
-                  getName().c_str(),
-                  cloud->width * cloud->height, pcl::getFieldsList(*cloud).c_str(),
-                  fromPCL(cloud->header).stamp.toSec(), cloud->header.frame_id.c_str(),
-                  getMTPrivateNodeHandle().resolveName("input").c_str(),
-                  indices->indices.size(), indices->header.stamp.toSec(), indices->header.frame_id.c_str(),
-                  getMTPrivateNodeHandle().resolveName("indices").c_str());
+//    NODELET_DEBUG("[%s::synchronized_input_callback]\n"
+//                          "                                 - PointCloud with %d data points (%s), stamp %f, and frame %s on topic %s received.\n"
+//                          "                                 - PointIndices with %zu values, stamp %f, and frame %s on topic %s received.",
+//                  getName().c_str(),
+//                  cloud->width * cloud->height, pcl::getFieldsList(*cloud).c_str(),
+//                  fromPCL(cloud->header).stamp.toSec(), cloud->header.frame_id.c_str(),
+//                  getMTPrivateNodeHandle().resolveName("input").c_str(),
+//                  indices->indices.size(), indices->header.stamp.toSec(), indices->header.frame_id.c_str(),
+//                  getMTPrivateNodeHandle().resolveName("indices").c_str());
 
     ros::WallTime start = ros::WallTime::now();
 
     Surfaces::ConstPtr surfaces = surfaces_cache_->getElemBeforeTime(ros::Time::now());
 
     if (surfaces == NULL) {
-        NODELET_DEBUG("[%s::input_callback] No surfaces yet... returning.", getName().c_str());
+//        NODELET_DEBUG("[%s::input_callback] No surfaces yet... returning.", getName().c_str());
         return;
     }
 

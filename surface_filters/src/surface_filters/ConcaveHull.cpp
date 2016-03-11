@@ -82,6 +82,7 @@ void surface_filters::ConcaveHull::synchronized_input_callback(const PointCloudI
                 cloud->header.frame_id.c_str(), getMTPrivateNodeHandle().resolveName("input").c_str());
     }
 
+    std::unique_lock<std::mutex> hull_lock(hull_mutex_);
 
     ros::WallTime start = ros::WallTime::now();
 
@@ -93,6 +94,8 @@ void surface_filters::ConcaveHull::synchronized_input_callback(const PointCloudI
 
     // Do the reconstruction
     impl_.reconstruct(*concave_hull);
+
+    hull_lock.unlock();
 
     auto num_pts = concave_hull->cloud.height * concave_hull->cloud.width;
     NODELET_INFO_STREAM("[" << getName().c_str() << "::synchronized_input_callback] " << std::setprecision(3) <<

@@ -10,6 +10,9 @@
         <!-- Nodelet manager -->
         <node pkg="nodelet" type="nodelet" name="nodelet_manager" args="manager" required="true" output="screen" />
 
+        <!-- Nodelet manager -->
+        <!--<node pkg="nodelet" type="nodelet" name="gdb_nodelet_manager" args="manager" required="true" output="screen" launch-prefix="xterm -e gdb -s /home/will/arc_ws/devel/lib/libsurface_manager.so &#45;&#45;args" />-->
+
         <!-- SurfaceManager -->
         <node pkg="nodelet" type="nodelet" name="surface_manager" args="load surface_manager/SurfaceManager nodelet_manager">
             <!-- Topics -->

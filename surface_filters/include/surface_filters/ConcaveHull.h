@@ -7,6 +7,7 @@
 #define SURFACE_FILTERS_CONCAVE_HULL_H_
 
 #include <pcl_ros/pcl_nodelet.h>
+#include <mutex>
 
 // PCL includes
 #include <pcl/surface/concave_hull.h>
@@ -80,7 +81,7 @@ namespace surface_filters {
         boost::shared_ptr<ApproximateTimeSynchronizer<PointCloudIn, PointIndices> > sync_input_indices_a_;
 
         /** \brief Mutex for use with dynamic reconfigure */
-//        boost::recursive_mutex mutex_;
+        std::mutex hull_mutex_;
 
     public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW

@@ -40,6 +40,9 @@
 #include <surface_msgs/SurfaceCloud.h>
 #include <surface_msgs/SurfaceClouds.h>
 #include <surface_msgs/SurfaceStamped.h>
+#include <pcl/surface/ear_clipping.h>
+#include <shape_msgs/MeshTriangle.h>
+#include <shape_msgs/Mesh.h>
 
 namespace vis = visualization_msgs;
 
@@ -88,6 +91,8 @@ namespace surface_manager {
         ros::Publisher perimeter_pub_;
         ros::Publisher visualization_pub_;
 
+        ros::Timer publish_timer_;
+
         message_filters::Subscriber<PointCloudIn>  new_surface_inliers_sub_;
         message_filters::Subscriber<PolygonMesh> new_surface_convex_hull_sub_;
         message_filters::Subscriber<ModelCoefficients>  new_surface_plane_sub_;
@@ -107,7 +112,9 @@ namespace surface_manager {
 
         void replace_surface(const SurfaceStamped::ConstPtr new_surface);
 
-        void publish(std_msgs::Header header);
+        void publish(const ros::TimerEvent &event);
+
+        shape_msgs::Mesh make_3d_mesh(PolygonMesh hull, Eigen::Affine3f tf);
 
     };
 }

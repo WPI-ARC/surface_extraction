@@ -49,17 +49,4 @@
         <!-- This nodelet publishes lots of near-simultaneous messages -->
         <param name="max_queue_size" value="1000" />
     </node>
-
-    <node pkg="nodelet" type="nodelet" name="concave_hull" args="load surface_filters/ConcaveHull nodelet_manager">
-        <!-- Topics -->
-        <remap from="~input" to="sac_segmentation/inliers" />
-
-        <!-- Params -->
-        <param name="dimension" value="2" />
-        <remap from="~alpha" to="concave_hull/alpha" />
-
-        <!-- This nodelet recieves and publishes lots of near-simultaneous messages -->
-        <param name="max_queue_size" value="1000" />
-    </node>
-
 </launch>

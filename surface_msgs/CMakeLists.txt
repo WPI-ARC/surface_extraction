@@ -53,10 +53,12 @@ add_message_files(
     DiscSurfacePatches.msg
     Polygon.msg
     Polygons.msg
+    Segment.msg
     Surface.msg
     SurfaceStamped.msg
     Surfaces.msg
     SurfaceMesh.msg
+    SurfaceMeshStamped.msg
     SurfaceMeshes.msg
     SurfaceCloud.msg
     SurfaceClouds.msg

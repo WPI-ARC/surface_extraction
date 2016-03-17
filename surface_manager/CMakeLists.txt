@@ -5,19 +5,21 @@ project(surface_manager)
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
-    geometry_msgs
-    pcl_conversions
-    pcl_ros
     roscpp
-    sensor_msgs
     nodelet
     dynamic_reconfigure
+    pcl_ros
+    pcl_conversions
+    geometry_msgs
+    sensor_msgs
     surface_msgs
     surfaces
 )
 
 ## System dependencies are found with CMake's conventions
 find_package(Boost REQUIRED COMPONENTS system)
+find_package(PCL REQUIRED)
+
 
 ## Uncomment this if the package has a setup.py. This macro ensures
 ## modules and global scripts declared therein get installed
@@ -90,7 +92,7 @@ find_package(Boost REQUIRED COMPONENTS system)
 
 ## Generate dynamic reconfigure parameters in the 'cfg' folder
 generate_dynamic_reconfigure_options(
-
+    cfg/SurfaceManager.cfg
 )
 
 ###################################
@@ -105,7 +107,7 @@ generate_dynamic_reconfigure_options(
 catkin_package(
     INCLUDE_DIRS include
     LIBRARIES surface_manager
-    CATKIN_DEPENDS pcl_conversions pcl_ros roscpp sensor_msgs dynamic_reconfigure nodelet
+    CATKIN_DEPENDS roscpp pcl_conversions pcl_ros sensor_msgs dynamic_reconfigure nodelet
     #  DEPENDS system_lib
 )
 
@@ -157,7 +159,7 @@ add_library(surface_manager
 
 add_dependencies(surface_manager ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencfg surfaces)
 
-target_link_libraries(surface_manager ${Boost_LIBRARIES} ${catkin_LIBRARIES} ${Eigen3_LIBRARIES} ${PCL_LIBRARIES} triangle)
+target_link_libraries(surface_manager ${Boost_LIBRARIES} ${catkin_LIBRARIES} ${Eigen3_LIBRARIES} ${PCL_LIBRARIES})
 
 #############
 ## Install ##

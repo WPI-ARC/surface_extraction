@@ -8,21 +8,34 @@
         <rosparam command="load" file="$(find surface_extraction_launch)/params.yaml" />
 
         <!-- Nodelet manager -->
-        <node pkg="nodelet" type="nodelet" name="nodelet_manager" args="manager" required="true" output="screen" />
+        <!--<node pkg="nodelet" type="nodelet" name="nodelet_manager" args="manager" required="true" output="screen" />-->
 
         <!-- Nodelet manager -->
-        <!--<node pkg="nodelet" type="nodelet" name="gdb_nodelet_manager" args="manager" required="true" output="screen" launch-prefix="xterm -e gdb -s /home/will/arc_ws/devel/lib/libsurface_manager.so &#45;&#45;args" />-->
+        <node pkg="nodelet" type="nodelet" name="nodelet_manager" args="manager" required="true" output="screen"
+              launch-prefix="xterm -e gdb -s /home/will/arc_ws/devel/lib/libsurface_manager.so --args" />
 
         <!-- SurfaceManager -->
         <node pkg="nodelet" type="nodelet" name="surface_manager" args="load surface_manager/SurfaceManager nodelet_manager">
             <!-- Topics -->
             <!-- TODO: Do this remapping inside extract_surfaces_full for separation of concerns -->
-            <remap from="~new_surface_inliers" to="sac_segmentation/inliers" />
-            <remap from="~new_surface_plane" to="sac_segmentation/planes" />
-            <remap from="~new_surface_concave_hull" to="concave_hull/output" />
+            <remap from="~add_surface" to="surface_builder/new_surface" />
+            <remap from="~add_surface_mesh" to="surface_builder/new_surface_mesh" />
 
             <!-- Params -->
             <param name="new_scene_threshold" value="0.8" />
+            <param name="max_queue_size" value="1000" />
+        </node>
+
+        <!-- SurfaceBuilder -->
+        <node pkg="nodelet" type="nodelet" name="surface_builder" args="load surface_filters/BuildSurface nodelet_manager">
+            <!-- Topics -->
+            <remap from="~create_surface" to="sac_segmentation/segments" />
+
+            <!-- Params -->
+            <param name="dimension" value="2" />
+            <remap from="~alpha" to="build_surface/alpha" />
+
+            <!-- This nodelet recieves and publishes lots of near-simultaneous messages -->
             <param name="max_queue_size" value="1000" />
         </node>
 

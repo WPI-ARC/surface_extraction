@@ -91,12 +91,11 @@ find_package(catkin REQUIRED COMPONENTS
 
 ## Generate dynamic reconfigure parameters in the 'cfg' folder
 generate_dynamic_reconfigure_options(
-  cfg/MLS.cfg
-  cfg/RGS.cfg
-  cfg/SAC.cfg
-  cfg/SamplePatches.cfg
-  cfg/ChangeDetection.cfg
-  cfg/ConcaveHull.cfg
+    cfg/MLS.cfg
+    cfg/RGS.cfg
+    cfg/SAC.cfg
+    cfg/ChangeDetection.cfg
+    cfg/BuildSurface.cfg
 )
 
 ###################################
@@ -162,18 +161,12 @@ add_library(surface_filters
     src/surface_filters/RegionGrowingSegmentation.cpp
     src/surface_filters/SACSegmentAndFit.cpp
     src/surface_filters/ChangeDetection.cpp
-    src/surface_filters/ConcaveHull.cpp
-
-    # Currently unimplemented
-    src/surface_filters/SamplePatches.cpp
-
-    # Snapshotter
-    src/surface_filters/PeriodicSnapshotter.cpp
-    include/surface_filters/ExpandSurfaces.h src/surface_filters/ExpandSurfaces.cpp)
+    src/surface_filters/BuildSurface.cpp
+    src/surface_filters/ExpandSurfaces.cpp)
 
 add_dependencies(surface_filters ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencfg surface_msgs surfaces)
 
-target_link_libraries(surface_filters ${Boost_LIBRARIES} ${catkin_LIBRARIES} ${Eigen3_LIBRARIES} ${PCL_LIBRARIES})
+target_link_libraries(surface_filters ${Boost_LIBRARIES} ${catkin_LIBRARIES} ${Eigen3_LIBRARIES} ${PCL_LIBRARIES} triangle)
 
 #############
 ## Install ##

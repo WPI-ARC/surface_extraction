@@ -18,13 +18,14 @@
 #include <dynamic_reconfigure/server.h>
 #include <surface_filters/SACConfig.h>
 
+#include <surfaces/utils.hpp>
 #include <surfaces/PointClusters.hpp>
-#include <surfaces/PointClusters_Serialization.hpp>
+#include <surfaces/Segment.hpp>
 
 namespace surface_filters {
     namespace sync_policies = message_filters::sync_policies;
 
-    /** \brief @b RegionGrowingSegmentation represents a nodelet using the RegionGrowingSegmentation implementation.
+    /**
     * \author Will Pryor
     */
     class SACSegmentAndFit : public pcl_ros::PCLNodelet {
@@ -41,6 +42,7 @@ namespace surface_filters {
         typedef pcl::PointIndices PointIndices;
 
         typedef surfaces::PointClusters PointClusters;
+        typedef surfaces::Segment<PointIn> Segment;
 
         // Message synchronizer types
         template<typename ...SubscribedTypes>
@@ -51,7 +53,7 @@ namespace surface_filters {
 
     protected:
         /** \brief Set the model type */
-        int model_type_ = 0;
+        pcl::SacModel model_type_ = pcl::SACMODEL_PLANE;
 
         /** \brief Set the SAC method */
         int method_type_ = 0;
@@ -112,8 +114,7 @@ namespace surface_filters {
         pcl::ProjectInliers<PointIn> project_;
 
         /** \brief The clusters PointCloud publisher. */
-        ros::Publisher pub_planes_;
-        ros::Publisher pub_inliers_;
+        ros::Publisher pub_segments_;
 
         /** \brief The message filter subscriber for PointCloud2. */
         // NOTE these have to come before the synchronizer members or you get a mutex lock error on destruction

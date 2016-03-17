@@ -21,7 +21,7 @@
 //#include <surfaces/Surfaces.hpp>
 //#include <surfaces/Surfaces_Serialization.hpp>
 #include <message_filters/cache.h>
-#include <surfaces/PointIndices_Serialization.hpp>
+#include <surfaces/pcl_shim/PointIndices_Serialization.hpp>
 #include <surface_msgs/Surface.h>
 #include <surface_msgs/Surfaces.h>
 #include <surface_msgs/SurfaceClouds.h>

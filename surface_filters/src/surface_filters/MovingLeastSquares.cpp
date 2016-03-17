@@ -178,7 +178,7 @@ void surface_filters::MovingLeastSquaresNodelet::config_callback(MLSConfig &conf
         // This resets the sqr gauss parameter, so update the dynamic reconfigure service appropriately
         // TODO: Reenable if it didn't cause the crash
 //        boost::recursive_mutex::scoped_lock __attribute__((unused)) scoped_lock(mutex_) ;
-//        config.gaussian_parameter = sqrt(impl_.getSqrGaussParam());
+//        config.gaussian_parameter = sqrt(hull_.getSqrGaussParam());
 //        srv_->updateConfig(config);
     }
     if (use_polynomial_fit_ != config.use_polynomial_fit) {

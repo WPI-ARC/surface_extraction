@@ -26,9 +26,9 @@ region_segmentation: {
 sac_segmentation: {
   model_type: 0, # 0 = Plane
   method_type: 0, # 0 = RANSAC
-  distance_threshold: 0.1, # Meters (I think)
+  distance_threshold: 0.05, # Meters (I think)
 }
 
-concave_hull: {
+build_surface: {
   alpha: 0.05
 }

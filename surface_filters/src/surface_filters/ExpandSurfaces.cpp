@@ -246,7 +246,7 @@ void surface_filters::ExpandSurfaces::synchronized_input_callback(const PointClo
 //void surface_filters::ExpandSurfaces::config_callback(ChangeDetectionConfig &config, uint32_t level) {
 //    if (resolution_ != config.resolution) {
 //        resolution_ = config.resolution;
-//        impl_ = ChangeDetector(resolution_);
+//        hull_ = ChangeDetector(resolution_);
 //        NODELET_DEBUG("[config_callback] Setting the resolution to: %f. Note that changing the resolution requires restarting change detection", resolution_);
 //    }
 //

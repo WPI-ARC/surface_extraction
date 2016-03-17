@@ -1,11 +1,6 @@
 
 <!-- PCL Surface reconstruction library component -->
 <library path="lib/libsurface_filters">
-  <class name="surface_filters/PeriodicSnapshotter" type="surface_filters::PeriodicSnapshotter" base_class_type="nodelet::Nodelet">
-    <description>
-      Periodically accumulate laser scans and transform them into point clouds
-    </description>
-  </class>
   <class name="surface_filters/MovingLeastSquaresNodelet" type="surface_filters::MovingLeastSquaresNodelet" base_class_type="nodelet::Nodelet">
     <description>
       MovingLeastSquares is an implementation of the MLS algorithm for data reconstruction through bivariate polynomial fitting.
@@ -21,11 +16,6 @@
       SACSegmentAndFit is an implementation of the SAmple Consensus algorithm to segment and fit models
     </description>
   </class>
-  <class name="surface_filters/ConcaveHull" type="surface_filters::ConcaveHull" base_class_type="nodelet::Nodelet">
-    <description>
-      ConcaveHull computes the concave hull of a shape
-    </description>
-  </class>
   <class name="surface_filters/ChangeDetection" type="surface_filters::ChangeDetection" base_class_type="nodelet::Nodelet">
     <description>
       ChangeDetection subscribes to a stream of point clouds of the same scene and outputs the indices of the new points
@@ -34,6 +24,11 @@
   <class name="surface_filters/ExpandSurfaces" type="surface_filters::ExpandSurfaces" base_class_type="nodelet::Nodelet">
     <description>
       ExpandSurfaces is a dedicated nodelet for surface expansion and requires a SurfaceManager
+    </description>
+  </class>
+  <class name="surface_filters/BuildSurface" type="surface_filters::BuildSurface" base_class_type="nodelet::Nodelet">
+    <description>
+      BuildSurface takes a segment (cloud and shape model) as input and outputs a surface containing inliers, model, concave hull, and trimesh.
     </description>
   </class>
 </library>

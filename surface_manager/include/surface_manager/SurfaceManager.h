@@ -5,7 +5,6 @@
 #ifndef SURFACE_MANAGER_SURFACEMANAGER_H
 #define SURFACE_MANAGER_SURFACEMANAGER_H
 
-#include <boost/thread/mutex.hpp>
 #include <nodelet/nodelet.h>
 
 #include <pcl/point_types.h>
@@ -17,75 +16,60 @@
 #include <sensor_msgs/point_cloud2_iterator.h>
 #include <sensor_msgs/point_cloud_conversion.h>
 #include <pcl/PointIndices.h>
-#include <surfaces/PointIndices_Serialization.hpp>
+#include <surfaces/pcl_shim/PointIndices_Serialization.hpp>
 #include <pcl/ModelCoefficients.h>
-#include <surfaces/ModelCoefficients_Serialization.hpp>
+#include <surfaces/pcl_shim/ModelCoefficients_Serialization.hpp>
 #include <message_filters/subscriber.h>
 #include <message_filters/synchronizer.h>
 #include <message_filters/sync_policies/exact_time.h>
 #include <message_filters/sync_policies/approximate_time.h>
 #include <visualization_msgs/MarkerArray.h>
 #include <visualization_msgs/Marker.h>
-//#include <surfaces/Polygons.hpp>
-//#include <surfaces/Polygons_Serialization.hpp>
-//#include <surfaces/Vertices_Serialization.hpp>
-//#include <surfaces/Surface.hpp>
-//#include <surfaces/Surfaces.hpp>
-//#include <surfaces/Surfaces_Serialization.hpp>
 #include <sensor_msgs/PointCloud2.h>
-#include <surface_msgs/Surface.h>
-#include <surface_msgs/Surfaces.h>
-#include <surface_msgs/SurfaceMesh.h>
-#include <surface_msgs/SurfaceMeshes.h>
-#include <surface_msgs/SurfaceCloud.h>
-#include <surface_msgs/SurfaceClouds.h>
-#include <surface_msgs/SurfaceStamped.h>
-#include <pcl/surface/ear_clipping.h>
 #include <shape_msgs/MeshTriangle.h>
 #include <shape_msgs/Mesh.h>
+#include <surfaces/SurfaceMeshStamped.hpp>
+#include <surfaces/SurfaceStamped.hpp>
+#include <surfaces/SurfaceMeshes.hpp>
+#include <surfaces/Surfaces.hpp>
+#include <dynamic_reconfigure/server.h>
+#include <surface_manager/SurfaceManagerConfig.h>
+#include <pcl/common/time.h>
 
 namespace vis = visualization_msgs;
 
 namespace surface_manager {
+
     class SurfaceManager : public nodelet::Nodelet {
 
-//        typedef pcl::PointXYZ PointIn;
-        typedef sensor_msgs::PointCloud2 PointCloudIn;
+        typedef pcl::PointXYZ PointIn;
+        typedef pcl::PointXYZRGB PointOut;
+        typedef pcl::PointCloud<PointIn> PointCloudIn;
+        typedef pcl::PointCloud<PointOut> PointCloudOut;
 
 
         typedef pcl_msgs::PolygonMesh PolygonMesh;
         typedef pcl_msgs::ModelCoefficients ModelCoefficients;
 
-        typedef surface_msgs::Surface Surface;
-        typedef surface_msgs::SurfaceStamped SurfaceStamped;
-        typedef surface_msgs::Surfaces Surfaces;
+        typedef surfaces::Surface<PointIn> Surface;
+        typedef surfaces::SurfaceStamped<PointIn> SurfaceStamped;
+        typedef surfaces::Surfaces<PointIn> Surfaces;
 
-//        typedef surface_msgs::SurfaceCloud SurfaceCloud;
-//        typedef surface_msgs::SurfaceClouds SurfaceClouds;
+        typedef surfaces::SurfaceMesh SurfaceMesh;
+        typedef surfaces::SurfaceMeshStamped SurfaceMeshStamped;
+        typedef surfaces::SurfaceMeshes SurfaceMeshes;
 
-        typedef surface_msgs::SurfaceMesh SurfaceMesh;
-        typedef surface_msgs::SurfaceMeshes SurfaceMeshes;
-
-        template <bool IsManifoldT>
-        struct MeshTraits
-        {
-            typedef int                                          VertexData;
-            typedef pcl::geometry::NoData                        HalfEdgeData;
-            typedef pcl::geometry::NoData                        EdgeData;
-            typedef pcl::geometry::NoData                        FaceData;
-            typedef boost::integral_constant <bool, IsManifoldT> IsManifold;
-        };
+        typedef std::pair<Surface, SurfaceMesh> SurfaceMeshPair;
 
         template<typename ...S>
         using ExactTimeSynchronizer = message_filters::Synchronizer<message_filters::sync_policies::ExactTime<S...> >;
 
-        typedef ExactTimeSynchronizer<PointCloudIn, PolygonMesh, ModelCoefficients> NewSurfaceSynchronizer;
+        typedef ExactTimeSynchronizer<SurfaceStamped, SurfaceMeshStamped> SurfaceSynchronizer;
 
         virtual void onInit();
 
     private:
         ros::Publisher surfaces_pub_;
-//        ros::Publisher surface_clouds_pub_;
         ros::Publisher surface_meshes_pub_;
         ros::Publisher output_pub_;
         ros::Publisher perimeter_pub_;
@@ -93,32 +77,49 @@ namespace surface_manager {
 
         ros::Timer publish_timer_;
 
-        message_filters::Subscriber<PointCloudIn>  new_surface_inliers_sub_;
-        message_filters::Subscriber<PolygonMesh> new_surface_convex_hull_sub_;
-        message_filters::Subscriber<ModelCoefficients>  new_surface_plane_sub_;
+        message_filters::Subscriber<SurfaceStamped>      new_surface_sub_;
+        message_filters::Subscriber<SurfaceMeshStamped>  new_surface_mesh_sub_;
+        message_filters::Subscriber<SurfaceStamped>      updated_surface_sub_;
+        message_filters::Subscriber<SurfaceMeshStamped>  updated_surface_mesh_sub_;
 
-        ros::Subscriber replace_surface_sub_;
+        boost::shared_ptr<SurfaceSynchronizer> new_surface_synchronizer_;
+        boost::shared_ptr<SurfaceSynchronizer> updated_surface_synchronizer_;
 
-        boost::shared_ptr<NewSurfaceSynchronizer> new_surface_synchronizer_;
+        boost::shared_ptr<dynamic_reconfigure::Server<SurfaceManagerConfig> > srv_;
 
+        struct surface_lower_bound_comparator {
+            bool operator()(const SurfaceMeshPair& a, const Surface& b) const {
+                return (a.first.concave_hull.cloud.height * a.first.concave_hull.cloud.width) <
+                        (b.concave_hull.cloud.height * b.concave_hull.cloud.width);
+            }
+        };
 
-        std::vector<Surface> surfaces;
-//        std::vector<SurfaceCloud> surface_clouds;
-        std::vector<SurfaceMesh> surface_meshes;
+        std::vector<SurfaceMeshPair> surfaces_;
 
-        void add_surface_synchronized(const PointCloudIn::ConstPtr inliers,
-                                      const PolygonMesh::ConstPtr concave_hull,
-                                      const ModelCoefficients::ConstPtr model);
+        int max_queue_size_;
 
-        void replace_surface(const SurfaceStamped::ConstPtr new_surface);
+        float publish_interval_;
 
-        void publish(const ros::TimerEvent &event);
+        std::string target_frame_;
 
-        shape_msgs::Mesh make_3d_mesh(PolygonMesh hull, Eigen::Affine3f tf);
+        unsigned int next_surface_id_ = 0;
+
+        void add_surface(const SurfaceStamped::ConstPtr surface, const SurfaceMeshStamped::ConstPtr mesh);
+
+        void replace_surface(const SurfaceStamped::ConstPtr surface, const SurfaceMeshStamped::ConstPtr mesh);
+
+        void publish(const ros::TimerEvent &event) const;
+
+        void publish_surfaces_mesh_pairs() const;
+        void publish_inliers() const;
+        void publish_perimeter_points() const;
+        void publish_perimeter_lines() const;
+        void publish_mesh_triangles() const;
+
+        void config_callback(SurfaceManagerConfig &config, uint32_t level);
 
     };
 }
 
 
 #endif //SURFACE_MANAGER_SURFACEMANAGER_H
-typedef pcl::PointCloud<pcl::PointXYZRGB> PointCloudOut;

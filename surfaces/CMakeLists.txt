@@ -5,14 +5,17 @@ project(surfaces)
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
-    pcl_conversions
-    pcl_ros
-    roscpp
+  pcl_conversions
+  pcl_ros
+  roscpp
+  surface_msgs
 )
 
 ## System dependencies are found with CMake's conventions
+# find_package(Boost REQUIRED COMPONENTS system)
 find_package(Boost REQUIRED COMPONENTS system)
 find_package(PCL REQUIRED)
+
 
 ## Uncomment this if the package has a setup.py. This macro ensures
 ## modules and global scripts declared therein get installed
@@ -67,7 +70,7 @@ find_package(PCL REQUIRED)
 ## Generate added messages and services with any dependencies listed here
 # generate_messages(
 #   DEPENDENCIES
-#   std_msgs  # Or other packages containing msgs
+#   surface_msgs
 # )
 
 ################################################
@@ -102,8 +105,8 @@ find_package(PCL REQUIRED)
 catkin_package(
   INCLUDE_DIRS include
   LIBRARIES surfaces
-  CATKIN_DEPENDS roscpp pcl_conversions pcl_ros
-  DEPENDS Boost PCL
+  CATKIN_DEPENDS pcl_conversions pcl_ros roscpp surface_msgs
+#  DEPENDS PCL boost
 )
 
 ###########
@@ -114,46 +117,42 @@ set(CMAKE_C_COMPILER "clang")
 set(CMAKE_BUILD_TYPE Debug)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O3 -std=c++11 -Wall -Wextra -Wno-unused-parameter")
+# Flags to make Clang ignore directories that Catkin should have marked as system imports
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Xclang -isystem-prefix -Xclang pcl/")
 
 
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
+# include_directories(include)
+# TODO: Check names of system library include directories (PCL, boost)
 include_directories(
     include
-    ${catkin_INCLUDE_DIRS}
-    ${PCL_INCLUDE_DIRS}
+  ${catkin_INCLUDE_DIRS}
+  ${Boost_INCLUDE_DIRS}
+  ${PCL_INCLUDE_DIRS}
+    ${Eigen3_INCLUDE_DIRS}
 )
 
-## Declare a C++ library that's never installed or exported
+## Declare a C++ library
 add_library(surfaces
-    include/surfaces/ModelCoefficients_Serialization.hpp
+    include/surfaces/pcl_shim/ModelCoefficients_Serialization.hpp
+    include/surfaces/pcl_shim/PointIndices_Serialization.hpp
+    include/surfaces/pcl_shim/PolygonMesh_Serialization.hpp
+    include/surfaces/pcl_shim/Vertices_Serialization.hpp
+
     include/surfaces/PointClusters.hpp
-    include/surfaces/PointIndices_Serialization.hpp
     include/surfaces/Polygons.hpp
+    include/surfaces/Segment.hpp
     include/surfaces/Surface.hpp
+    include/surfaces/SurfaceMesh.hpp
+    include/surfaces/SurfaceMeshStamped.hpp
     include/surfaces/Surfaces.hpp
-    include/surfaces/Vertices_Serialization.hpp
-)
-set_target_properties(surfaces PROPERTIES LINKER_LANGUAGE CXX)
+    include/surfaces/SurfaceStamped.hpp
+
+    include/surfaces/utils.hpp)
+SET_TARGET_PROPERTIES(surfaces PROPERTIES LINKER_LANGUAGE CXX)
 add_dependencies(surfaces ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(surfaces ${Boost_LIBRARIES} ${catkin_LIBRARIES} ${Eigen3_LIBRARIES} ${PCL_LIBRARIES})
-
-## Add cmake target dependencies of the library
-## as an example, code may need to be generated before libraries
-## either from message generation or dynamic reconfigure
-# add_dependencies(surfaces ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-
-## Declare a C++ executable
-# add_executable(surfaces_node src/surfaces_node.cpp)
-
-## Add cmake target dependencies of the executable
-## same as for the library above
-# add_dependencies(surfaces_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-
-## Specify libraries to link a library or executable target against
-# target_link_libraries(surfaces_node
-#   ${catkin_LIBRARIES}
-# )
 
 #############
 ## Install ##
@@ -170,15 +169,18 @@ target_link_libraries(surfaces ${Boost_LIBRARIES} ${catkin_LIBRARIES} ${Eigen3_L
 # )
 
 ## Mark executables and/or libraries for installation
-install(TARGETS surfaces
-  ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-)
+# install(TARGETS surfaces surfaces_node
+#   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+#   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+#   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+# )
 
 ## Mark cpp header files for installation
-install(DIRECTORY include/${PROJECT_NAME}/
-    DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION})
+# install(DIRECTORY include/${PROJECT_NAME}/
+#   DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
+#   FILES_MATCHING PATTERN "*.h"
+#   PATTERN ".svn" EXCLUDE
+# )
 
 ## Mark other files for installation (e.g. launch and bag files, etc.)
 # install(FILES

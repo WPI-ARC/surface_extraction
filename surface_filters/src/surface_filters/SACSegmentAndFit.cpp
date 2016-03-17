@@ -7,64 +7,20 @@
 #include <surface_filters/SACSegmentAndFit.h>
 #include <inttypes.h>
 
-int sacModelFromConfigInt(int config_model_type) {
-    switch (config_model_type) {
-        case 0:
-            return pcl::SACMODEL_PLANE;
-        case 1:
-            return pcl::SACMODEL_LINE;
-        case 2:
-            return pcl::SACMODEL_CIRCLE2D;
-        case 3:
-            return pcl::SACMODEL_CIRCLE3D;
-        case 4:
-            return pcl::SACMODEL_SPHERE;
-        case 5:
-            return pcl::SACMODEL_CYLINDER;
-        case 6:
-            return pcl::SACMODEL_CONE;
-        case 7:
-            return pcl::SACMODEL_TORUS;
-        case 8:
-            return pcl::SACMODEL_PARALLEL_LINE;
-        case 9:
-            return pcl::SACMODEL_PERPENDICULAR_PLANE;
-        case 10:
-            return pcl::SACMODEL_PARALLEL_LINES;
-        case 11:
-            return pcl::SACMODEL_NORMAL_PLANE;
-        case 12:
-            return pcl::SACMODEL_NORMAL_SPHERE;
-        case 13:
-            return pcl::SACMODEL_REGISTRATION;
-        case 14:
-            return pcl::SACMODEL_REGISTRATION_2D;
-        case 15:
-            return pcl::SACMODEL_PARALLEL_PLANE;
-        case 16:
-            return pcl::SACMODEL_NORMAL_PARALLEL_PLANE;
-        case 17:
-            return pcl::SACMODEL_STICK;
-        default:
-            return -1;
-    }
-}
-
 void surface_filters::SACSegmentAndFit::onInit() {
     pcl_ros::PCLNodelet::onInit();
 
     pub_output_ = pnh_->advertise<NormalCloudIn>("output", max_queue_size_);
-//    pub_clusters_ = pnh_->advertise<PointClusters>("model_clusters", max_queue_size_);
-    pub_inliers_ = pnh_->advertise<PointCloudIn>("inliers", max_queue_size_);
-    pub_planes_ = pnh_->advertise<pcl::ModelCoefficients>("planes", max_queue_size_);
+    pub_segments_ = pnh_->advertise<surface_msgs::Segment>("segments", max_queue_size_);
 
-    if (!pnh_->getParam("model_type", model_type_)) {
+    int model_type_int;
+    if (!pnh_->getParam("model_type", model_type_int)) {
         NODELET_ERROR ("[%s::onInit] Need a 'model_type' parameter to be set before continuing!", getName().c_str());
         return;
     }
-
-    impl_.setModelType(sacModelFromConfigInt(model_type_));
-    project_.setModelType(sacModelFromConfigInt(model_type_));
+    model_type_ = surfaces::sacModelFromConfigInt(model_type_int);
+    impl_.setModelType(model_type_);
+    project_.setModelType(model_type_);
 
     // Enable the dynamic reconfigure service
     srv_ = boost::make_shared<dynamic_reconfigure::Server<SACConfig> >(*pnh_);
@@ -119,7 +75,7 @@ void surface_filters::SACSegmentAndFit::synchronized_input_callback(const PointC
                                                                const NormalCloudIn::ConstPtr &normals_ros,
                                                                const PointClusters::ConstPtr &input_clusters) {
     // No subscribers, no work
-    if (pub_output_.getNumSubscribers() <= 0 && pub_inliers_.getNumSubscribers() <= 0 && pub_planes_.getNumSubscribers() <= 0) {
+    if (pub_output_.getNumSubscribers() <= 0 && pub_segments_.getNumSubscribers() <= 0) {
         NODELET_DEBUG("[%s::synchronized_input_callback] Input received but there are no subscribers; returning.",
                       getName().c_str());
         return;
@@ -175,95 +131,79 @@ void surface_filters::SACSegmentAndFit::synchronized_input_callback(const PointC
     NODELET_DEBUG("[%s::synchronized_input_callback] Performing SAC segmentation and fitting with should_output_cloud = %d",
                   getName().c_str(), should_populate_output_cloud);
 
-    BOOST_FOREACH(PointIndices input_cluster, input_clusters->clusters) {
+    for (PointIndices input_cluster : input_clusters->clusters) {
+        PointIndices::Ptr remaining_cluster = boost::make_shared<PointIndices>(input_cluster);
+        PointIndices::Ptr remaining_temp;
+        bool first_run = true;
+        do {
+            PointIndices::Ptr indices = boost::make_shared<PointIndices>();
+            Segment::Ptr segment = boost::make_shared<Segment>();
 
-                    PointIndices::Ptr remaining_cluster = boost::make_shared<PointIndices>(input_cluster);
-                    PointIndices::Ptr remaining_temp;
-                    bool first_run = true;
-                    do {
-                        PointIndices::Ptr indices = boost::make_shared<PointIndices>();
-                        // These two things should be published more-or-less simultaneously
-                        pcl::ModelCoefficientsPtr plane = boost::make_shared<pcl::ModelCoefficients>();
-                        PointCloudIn::Ptr projected_surface = boost::make_shared<PointCloudIn>();
+            // Limit SAC to only the points in this cluster
+            impl_.setIndices(remaining_cluster);
 
-                        // Limit SAC to only the points in this cluster
-                        impl_.setIndices(remaining_cluster);
+            // Do the segmentation
+            impl_.segment(*indices, segment->model);
 
-                        // Do the segmentation
-                        impl_.segment(*indices, *plane);
+            if (indices->indices.size() < min_points_) break;
 
-                        if (indices->indices.size() < min_points_) break;
+            segment->inliers = PointCloudIn(*cloud, indices->indices);
 
-                        project_.setIndices(indices);
-                        project_.setModelCoefficients(plane);
-                        project_.filter(*projected_surface);
+            if (should_populate_output_cloud) {
+                uint8_t r = (uint8_t) (rand() % 256), g = (uint8_t) (rand() % 256), b = (uint8_t) (rand() % 256);
 
-                        if (should_populate_output_cloud) {
-                            uint8_t r = (uint8_t) (rand() % 256), g = (uint8_t) (rand() % 256), b = (uint8_t) (rand() % 256);
+                size_t outputPointsSize = output->points.size();
+                size_t projectedPointsSize = segment->inliers.points.size();
+                output->points.resize(outputPointsSize + projectedPointsSize);
 
-                            size_t outputPointsSize = output->points.size();
-                            size_t projectedPointsSize = projected_surface->points.size();
-                            output->points.resize(outputPointsSize + projectedPointsSize);
-
-                            for (size_t i = 0; i < projectedPointsSize; i++) {
-                                output->points[outputPointsSize + i].x = projected_surface->points[i].x;
-                                output->points[outputPointsSize + i].y = projected_surface->points[i].y;
-                                output->points[outputPointsSize + i].z = projected_surface->points[i].z;
-                                output->points[outputPointsSize + i].r = r;
-                                output->points[outputPointsSize + i].g = g;
-                                output->points[outputPointsSize + i].b = b;
-                            }
-                        }
-
-                        // Only sort & make a copy if necessary
-                        if (first_run) {
-                            remaining_temp = boost::make_shared<PointIndices>();
-                            remaining_temp->header = remaining_cluster->header;
-
-                            std::sort(remaining_cluster->indices.begin(), remaining_cluster->indices.end());
-                            first_run = false;
-                        } else {
-                            remaining_temp->indices.clear();
-                        }
-
-                        // The inliers have no guarantee of sorted-ness
-                        std::sort(indices->indices.begin(), indices->indices.end());
-
-                        // Copies everything in remaining_src EXCEPT the contents of inliners into remaining_dst
-                        std::set_difference(remaining_cluster->indices.begin(), remaining_cluster->indices.end(),
-                                            indices->indices.begin(), indices->indices.end(),
-                                            std::back_inserter(remaining_temp->indices));
-
-                        remaining_cluster.swap(remaining_temp);
-
-                        // Time synchronizers don't like it when all of the timestamps are the same, so update
-                        // the input cloud's header to match with
-                        pcl::PCLHeader header = cloud->header;
-                        pcl_conversions::toPCL(ros::Time::now(), header.stamp);
-
-                        projected_surface->header = header;
-                        plane->header = header;
-                        pub_inliers_.publish(projected_surface);
-                        pub_planes_.publish(plane);
-
-                        NODELET_DEBUG("[%s] Published segment with %zu points at time %" PRIu64,
-                                      getName().c_str(), projected_surface->size(), header.stamp);
-
-                    } while (remaining_cluster->indices.size() >= min_points_);
-
+                for (size_t i = 0; i < projectedPointsSize; i++) {
+                    output->points[outputPointsSize + i].x = segment->inliers.points[i].x;
+                    output->points[outputPointsSize + i].y = segment->inliers.points[i].y;
+                    output->points[outputPointsSize + i].z = segment->inliers.points[i].z;
+                    output->points[outputPointsSize + i].r = r;
+                    output->points[outputPointsSize + i].g = g;
+                    output->points[outputPointsSize + i].b = b;
                 }
+            }
 
-    NODELET_INFO_STREAM(std::setprecision(3) <<
-                        "(" << (ros::WallTime::now() - start) << " sec, " << cloud->size() << " points) "
+            // Only sort & make a copy if necessary
+            if (first_run) {
+                remaining_temp = boost::make_shared<PointIndices>();
+                remaining_temp->header = remaining_cluster->header;
+
+                std::sort(remaining_cluster->indices.begin(), remaining_cluster->indices.end());
+                first_run = false;
+            } else {
+                remaining_temp->indices.clear();
+            }
+
+            // The inliers have no guarantee of sorted-ness
+            std::sort(indices->indices.begin(), indices->indices.end());
+
+            // Copies everything in remaining_src EXCEPT the contents of inliners into remaining_temp
+            std::set_difference(remaining_cluster->indices.begin(), remaining_cluster->indices.end(),
+                                indices->indices.begin(), indices->indices.end(),
+                                std::back_inserter(remaining_temp->indices));
+
+            remaining_cluster.swap(remaining_temp);
+
+            segment->header = cloud->header;
+            segment->surface_id = Segment::NEW_SURFACE;
+            pub_segments_.publish(segment);
+
+            NODELET_DEBUG("[%s] Published segment with %zu points at time %" PRIu64,
+                          getName().c_str(), segment->inliers.size(), segment->header.stamp);
+
+        } while (remaining_cluster->indices.size() >= min_points_);
+    }
+
+    NODELET_INFO_STREAM("(" << std::setprecision(3) << (ros::WallTime::now() - start) << " sec, " << cloud->size() << " points) "
                         << "Plane fitting finished");
 
     // Publish a Boost shared ptr const data
     // Enforce that the TF frame and the timestamp are copied
     output->header = cloud->header;
     pub_output_.publish(output);
-
-//    clusters->header = cloud->header;
-//    pub_clusters_.publish(clusters);
 
     NODELET_DEBUG("[%s::synchronized_input_callback] Successfully published output and clusters.", getName().c_str());
 }
@@ -274,10 +214,10 @@ void surface_filters::SACSegmentAndFit::config_callback(SACConfig &config, uint3
         NODELET_DEBUG ("[config_callback] Setting use normals: %d.", use_normals_);
     }
 
-    if (model_type_ != config.model_type) {
-        impl_.setModelType(sacModelFromConfigInt(config.model_type));
-        project_.setModelType(sacModelFromConfigInt(config.model_type));
-        model_type_ = config.model_type;
+    if (model_type_ != surfaces::sacModelFromConfigInt(config.model_type)) {
+        model_type_ = surfaces::sacModelFromConfigInt(config.model_type);
+        impl_.setModelType(model_type_);
+        project_.setModelType(model_type_);
         NODELET_DEBUG ("[config_callback] Setting the model type to: %d.", model_type_);
     }
 

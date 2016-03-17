@@ -8,11 +8,11 @@
         <rosparam command="load" file="$(find surface_extraction_launch)/params.yaml" />
 
         <!-- Nodelet manager -->
-        <!--<node pkg="nodelet" type="nodelet" name="nodelet_manager" args="manager" required="true" output="screen" />-->
+        <node pkg="nodelet" type="nodelet" name="nodelet_manager" args="manager" required="true" output="screen" />
 
         <!-- Nodelet manager -->
-        <node pkg="nodelet" type="nodelet" name="nodelet_manager" args="manager" required="true" output="screen"
-              launch-prefix="xterm -e gdb -s /home/will/arc_ws/devel/lib/libsurface_manager.so --args" />
+        <!--<node pkg="nodelet" type="nodelet" name="nodelet_manager" args="manager" required="true" output="screen"-->
+              <!--launch-prefix="xterm -e gdb -s /home/will/arc_ws/devel/lib/libsurface_manager.so &#45;&#45;args" />-->
 
         <!-- SurfaceManager -->
         <node pkg="nodelet" type="nodelet" name="surface_manager" args="load surface_manager/SurfaceManager nodelet_manager">
@@ -34,8 +34,9 @@
             <!-- Params -->
             <param name="dimension" value="2" />
             <remap from="~alpha" to="build_surface/alpha" />
+            <remap from="~target_frame" to="target_frame" />
 
-            <!-- This nodelet recieves and publishes lots of near-simultaneous messages -->
+            <!-- This nodelet receives and publishes lots of near-simultaneous messages -->
             <param name="max_queue_size" value="1000" />
         </node>
 
@@ -51,6 +52,10 @@
             <remap from="~max_x" to="crop_box_max/x" />
             <remap from="~max_y" to="crop_box_max/y" />
             <remap from="~max_z" to="crop_box_max/z" />
+            <!-- input_frame transforms the cloud into the frame before the crop -->
+            <remap from="~input_frame" to="target_frame" />
+            <!-- output_frame tells the nodelet to not re-transform the cloud into the original frame -->
+            <remap from="~output_frame" to="target_frame" />
         </node>
 
         <!-- Downsample -->

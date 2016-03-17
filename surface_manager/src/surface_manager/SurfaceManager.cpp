@@ -18,10 +18,12 @@ void surface_manager::SurfaceManager::onInit() {
 
     // Advertise a topic called "surfaces" with a queue size of max_queue_size and latched=true
     surfaces_pub_ = private_nh.advertise<Surfaces>("surfaces", static_cast<uint32_t>(max_queue_size_), true);
-    surface_meshes_pub_ = private_nh.advertise<SurfaceMeshes>("surface_meshes", static_cast<uint32_t>(max_queue_size_), true);
+    surface_meshes_pub_ = private_nh.advertise<SurfaceMeshes>("surface_meshes", static_cast<uint32_t>(max_queue_size_),
+                                                              true);
     output_pub_ = private_nh.advertise<PointCloudOut>("output", static_cast<uint32_t>(max_queue_size_));
     perimeter_pub_ = private_nh.advertise<PointCloudOut>("perimeter", static_cast<uint32_t>(max_queue_size_));
-    visualization_pub_ = private_nh.advertise<vis::MarkerArray>("surfaces_visualization", static_cast<uint32_t>(max_queue_size_));
+    visualization_pub_ = private_nh.advertise<vis::MarkerArray>("surfaces_visualization",
+                                                                static_cast<uint32_t>(max_queue_size_));
 
     // Subscribe to inputs (for adding surfaces)
     new_surface_sub_.subscribe(private_nh, "add_surface", static_cast<uint32_t>(max_queue_size_));
@@ -47,7 +49,22 @@ void surface_manager::SurfaceManager::add_surface(const SurfaceStamped::ConstPtr
                                                   const SurfaceMeshStamped::ConstPtr mesh) {
     auto hull_size = surface->surface.concave_hull.cloud.width * surface->surface.concave_hull.cloud.height;
     NODELET_DEBUG_STREAM("New Surface received with " << surface->surface.inliers.size() << " points, " << hull_size <<
-                                 " vertices, " << mesh->surface_mesh.surface_mesh.triangles.size() << " triangles");
+                         " vertices, " << mesh->surface_mesh.surface_mesh.triangles.size() << " triangles");
+
+    if (surface->header.frame_id != target_frame_) {
+        NODELET_ERROR_STREAM("[" << getName().c_str() <<
+                             "::add_surface] Cannot add surface because surface is not in the right frame (expected " <<
+                             target_frame_ << ", got " << surface->header.frame_id << ")");
+
+        return;
+    }
+
+    if (mesh->header.frame_id != target_frame_) {
+        NODELET_ERROR_STREAM("[" << getName().c_str() <<
+                             "::add_surface] Cannot add surface because mesh is not in the right frame (expected " <<
+                             target_frame_ << ", got " << mesh->header.frame_id << ")");
+        return;
+    }
 
     auto pos = std::lower_bound(surfaces_.begin(), surfaces_.end(), surface->surface, surface_lower_bound_comparator());
     auto &new_surface = surfaces_.insert(pos, {surface->surface, mesh->surface_mesh})->first;
@@ -61,6 +78,23 @@ void surface_manager::SurfaceManager::add_surface(const SurfaceStamped::ConstPtr
 void surface_manager::SurfaceManager::replace_surface(const SurfaceStamped::ConstPtr surface,
                                                       const SurfaceMeshStamped::ConstPtr mesh) {
     NODELET_DEBUG("Replacement for surface %u received", surface->surface.id);
+
+    if (surface->header.frame_id != target_frame_) {
+        NODELET_ERROR_STREAM(
+                "[" << getName().c_str() << "::replace_surface] Cannot replace surface " << surface->surface.id <<
+                " because surface is not in the right frame (expected " << target_frame_ << ", got " <<
+                surface->header.frame_id << ")");
+        return;
+    }
+
+    if (mesh->header.frame_id != target_frame_) {
+        NODELET_ERROR_STREAM(
+                "[" << getName().c_str() << "::replace_surface] Cannot replace surface " << surface->surface.id <<
+                " because mesh is not in the right frame (expected " << target_frame_ << ", got " <<
+                mesh->header.frame_id << ")");
+        return;
+    }
+
     auto prev_pos = std::find_if(surfaces_.begin(), surfaces_.end(), [&surface](SurfaceMeshPair &test_surface) {
         return test_surface.first.id == surface->surface.id;
     });
@@ -73,10 +107,10 @@ void surface_manager::SurfaceManager::replace_surface(const SurfaceStamped::Cons
     prev_pos->first.color = color;
 
     if (std::distance(prev_pos, pos) > 0) {
-        std::rotate(prev_pos, prev_pos+1, pos);
+        std::rotate(prev_pos, prev_pos + 1, pos);
     } else if (std::distance(prev_pos, pos) < 0) {
         using reverse = std::vector<SurfaceMeshPair>::reverse_iterator;
-        std::rotate(reverse(prev_pos)-1, reverse(prev_pos), reverse(pos));
+        std::rotate(reverse(prev_pos) - 1, reverse(prev_pos), reverse(pos));
     }
 
     NODELET_DEBUG_STREAM("Old version of surface found at " << std::distance(surfaces_.begin(), prev_pos) <<
@@ -157,13 +191,17 @@ void surface_manager::SurfaceManager::publish_perimeter_lines() const {
                     geometry_msgs::Point pointA, pointB;
 
                     const pcl::PointXYZ &pt_i = perimeter_cloud.points[polygon.vertices[i]];
-                    pointA.x = pt_i.x; pointA.y = pt_i.y; pointA.z = pt_i.z;
+                    pointA.x = pt_i.x;
+                    pointA.y = pt_i.y;
+                    pointA.z = pt_i.z;
 
                     // Connect each point to the next, and the last point back to the first
                     unsigned long next_i = (i + 1) % polygon.vertices.size();
 
                     const pcl::PointXYZ &pt_nexti = perimeter_cloud.points[polygon.vertices[next_i]];
-                    pointB.x = pt_nexti.x; pointB.y = pt_nexti.y; pointB.z = pt_nexti.z;
+                    pointB.x = pt_nexti.x;
+                    pointB.y = pt_nexti.y;
+                    pointB.z = pt_nexti.z;
 
                     perimeter.points.push_back(pointA);
                     perimeter.points.push_back(pointB);
@@ -265,7 +303,7 @@ void surface_manager::SurfaceManager::publish_surfaces_mesh_pairs() const {
 }
 
 void surface_manager::SurfaceManager::config_callback(SurfaceManagerConfig &config,
-                                                        uint32_t level __attribute((unused))) {
+                                                      uint32_t level __attribute((unused))) {
     if (publish_interval_ != config.publish_interval) {
         publish_interval_ = static_cast<float>(config.publish_interval);
         publish_timer_.setPeriod(ros::Duration(publish_interval_));

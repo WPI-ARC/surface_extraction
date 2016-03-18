@@ -7,12 +7,12 @@
         <!-- Load parameters -->
         <rosparam command="load" file="$(find surface_extraction_launch)/params.yaml" />
 
-        <!-- Nodelet manager -->
-        <node pkg="nodelet" type="nodelet" name="nodelet_manager" args="manager" required="true" output="screen" />
+         <!--Nodelet manager -->
+        <!--<node pkg="nodelet" type="nodelet" name="nodelet_manager" args="manager" required="true" output="screen" />-->
 
         <!-- Nodelet manager -->
-        <!--<node pkg="nodelet" type="nodelet" name="nodelet_manager" args="manager" required="true" output="screen"-->
-              <!--launch-prefix="xterm -e gdb -s /home/will/arc_ws/devel/lib/libsurface_manager.so &#45;&#45;args" />-->
+        <node pkg="nodelet" type="nodelet" name="nodelet_manager" args="manager" required="true" output="screen"
+              launch-prefix="xterm -e gdb -s /home/will/arc_ws/devel/lib/libsurface_manager.so --args" />
 
         <!-- SurfaceManager -->
         <node pkg="nodelet" type="nodelet" name="surface_manager" args="load surface_manager/SurfaceManager nodelet_manager">
@@ -20,6 +20,8 @@
             <!-- TODO: Do this remapping inside extract_surfaces_full for separation of concerns -->
             <remap from="~add_surface" to="surface_builder/new_surface" />
             <remap from="~add_surface_mesh" to="surface_builder/new_surface_mesh" />
+            <remap from="~replace_surface" to="surface_builder/updated_surface" />
+            <remap from="~replace_surface_mesh" to="surface_builder/updated_surface_mesh" />
 
             <!-- Params -->
             <param name="new_scene_threshold" value="0.8" />
@@ -30,10 +32,11 @@
         <node pkg="nodelet" type="nodelet" name="surface_builder" args="load surface_filters/BuildSurface nodelet_manager">
             <!-- Topics -->
             <remap from="~create_surface" to="sac_segmentation/segments" />
+            <remap from="~update_surface" to="expand_surfaces/expanded_segments" />
 
             <!-- Params -->
             <param name="dimension" value="2" />
-            <remap from="~alpha" to="build_surface/alpha" />
+            <remap from="~alpha" to="parallel_distance_threshold" />
             <remap from="~target_frame" to="target_frame" />
 
             <!-- This nodelet receives and publishes lots of near-simultaneous messages -->

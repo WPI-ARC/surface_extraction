@@ -45,6 +45,8 @@
             https://github.com/ros-perception/perception_pcl/blob/1.3.0/pcl_ros/include/pcl_ros/surface/moving_least_squares.h#L98 -->
         <param name="spatial_locator" value="1" />
         <param name="approximate_sync" value="true" />
+        <remap from="~distance_threshold" to="perpendicular_distance_threshold" />
+        <remap from="~cluster_tolerance" to="parallel_distance_threshold" />
 
         <!-- This nodelet publishes lots of near-simultaneous messages -->
         <param name="max_queue_size" value="1000" />

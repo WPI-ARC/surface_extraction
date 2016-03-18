@@ -34,6 +34,9 @@ namespace surfaces {
     public:
         typedef boost::shared_ptr< ::surfaces::Surface<PointType> > Ptr;
         typedef boost::shared_ptr< ::surfaces::Surface<PointType> const> ConstPtr;
+
+        typedef PointType Point;
+        typedef pcl::PointCloud<PointType> PointCloud;
     }; // struct Surface
 
     template <typename PointType>

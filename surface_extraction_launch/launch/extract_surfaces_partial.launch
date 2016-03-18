@@ -10,10 +10,7 @@
         <!-- Topics -->
         <remap from="~input" to="$(arg input_topic)" />
         <remap from="~indices" to="$(arg new_indices)" />
-
         <remap from="~surfaces" to="$(arg surfaces_manager_node)/surfaces" />
-
-        <remap from="~replace_surface" to="$(arg surfaces_manager_node)/replace_surface" />
     </node>
 
 

@@ -51,7 +51,8 @@ void surface_filters::BuildSurface::synchronized_input_callback(const Segment::C
     NODELET_DEBUG(
             "[%s::synchronized_input_callback] PointCloud with %lu data points, stamp %f, and frame %s on topic %s received.",
             getName().c_str(), segment->inliers.size(), fromPCL(segment->header).stamp.toSec(),
-            segment->header.frame_id.c_str(), getMTPrivateNodeHandle().resolveName("input").c_str());
+            segment->header.frame_id.c_str(),
+            getMTPrivateNodeHandle().resolveName(is_new ? "create_surface" : "update_surface").c_str());
 
 
     Surface::Ptr surface = this->publish_surface(segment, is_new);
@@ -145,13 +146,16 @@ void surface_filters::BuildSurface::get_projected_cloud(const Segment::ConstPtr 
 void surface_filters::BuildSurface::get_3d_mesh(const Surface::ConstPtr &surface, shape_msgs::Mesh &output_trimesh) {
     PointCloudIn hull_cloud;
     pcl::fromPCLPointCloud2(surface->surface.concave_hull.cloud, hull_cloud);
+    assert(hull_cloud.size() == surface->surface.concave_hull.cloud.width * surface->surface.concave_hull.cloud.height);
 
     std::vector<double> points_2d;
     std::vector<int> segment_list;
     std::vector<double> holes;
 
     this->get_triangulation_vertices(surface->surface.model, hull_cloud, output_trimesh, points_2d);
+    assert(points_2d.size() == hull_cloud.size()  * 2);
     this->get_triangulation_segments(surface->surface.concave_hull, points_2d, segment_list, holes);
+    assert(points_2d.size() == hull_cloud.size()  * 2);
     this->get_triangluation_trimesh(points_2d, segment_list, holes, surface->surface.concave_hull, output_trimesh);
 }
 

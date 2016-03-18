@@ -28,8 +28,8 @@ void surface_manager::SurfaceManager::onInit() {
     // Subscribe to inputs (for adding surfaces)
     new_surface_sub_.subscribe(private_nh, "add_surface", static_cast<uint32_t>(max_queue_size_));
     new_surface_mesh_sub_.subscribe(private_nh, "add_surface_mesh", static_cast<uint32_t>(max_queue_size_));
-    updated_surface_sub_.subscribe(private_nh, "updated_surface", static_cast<uint32_t>(max_queue_size_));
-    updated_surface_mesh_sub_.subscribe(private_nh, "updated_surface_mesh", static_cast<uint32_t>(max_queue_size_));
+    updated_surface_sub_.subscribe(private_nh, "replace_surface", static_cast<uint32_t>(max_queue_size_));
+    updated_surface_mesh_sub_.subscribe(private_nh, "replace_surface_mesh", static_cast<uint32_t>(max_queue_size_));
 
     new_surface_synchronizer_ = boost::make_shared<SurfaceSynchronizer>(max_queue_size_);
     new_surface_synchronizer_->connectInput(new_surface_sub_, new_surface_mesh_sub_);
@@ -98,6 +98,13 @@ void surface_manager::SurfaceManager::replace_surface(const SurfaceStamped::Cons
     auto prev_pos = std::find_if(surfaces_.begin(), surfaces_.end(), [&surface](SurfaceMeshPair &test_surface) {
         return test_surface.first.id == surface->surface.id;
     });
+
+    if (prev_pos == surfaces_.end()) {
+        NODELET_ERROR_STREAM(
+                "[" << getName().c_str() << "::replace_surface] Cannot replace surface " << surface->surface.id <<
+                " because a surface with that ID was not found");
+        return;
+    }
 
     auto pos = std::lower_bound(surfaces_.begin(), surfaces_.end(), surface->surface, surface_lower_bound_comparator());
 

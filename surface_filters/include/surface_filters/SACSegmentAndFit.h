@@ -11,6 +11,7 @@
 
 // PCL includes
 #include <pcl/segmentation/sac_segmentation.h>
+#include <pcl/segmentation/extract_clusters.h>
 #include <pcl/search/pcl_search.h>
 #include <pcl/filters/project_inliers.h>
 
@@ -61,6 +62,9 @@ namespace surface_filters {
         /** \brief Set the threshold for distance to the model */
         double dist_threshold_ = 0;
 
+        /** \brief Set the threshold for distance between points in a cluster */
+        double cluster_tolerance_ = 0;
+
         /** \brief Set the maximum number of iterations before giving up */
         int max_iterations_ = 50;
 
@@ -85,6 +89,9 @@ namespace surface_filters {
         /** \brief Minimum number of points in a cluster */
         unsigned int min_points_ = 50;
 
+        /** \brief Maximum number of points in a cluster */
+        unsigned int max_points_ = static_cast<unsigned int>(10e6);
+
         /** \brief Pointer to a dynamic reconfigure service. */
         boost::shared_ptr<dynamic_reconfigure::Server<SACConfig> > srv_;
 
@@ -108,10 +115,9 @@ namespace surface_filters {
 
     private:
         /** \brief The PCL implementation used. */
-        pcl::SACSegmentation<PointIn> impl_;
+        pcl::SACSegmentation<PointIn> sac_;
 
-        /** \brief The concave hull implementation, used for visualization only */
-        pcl::ProjectInliers<PointIn> project_;
+        pcl::EuclideanClusterExtraction<PointIn> euclidean_;
 
         /** \brief The clusters PointCloud publisher. */
         ros::Publisher pub_segments_;

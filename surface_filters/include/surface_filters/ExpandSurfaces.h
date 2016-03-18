@@ -22,10 +22,10 @@
 //#include <surfaces/Surfaces_Serialization.hpp>
 #include <message_filters/cache.h>
 #include <surfaces/pcl_shim/PointIndices_Serialization.hpp>
-#include <surface_msgs/Surface.h>
-#include <surface_msgs/Surfaces.h>
-#include <surface_msgs/SurfaceClouds.h>
-#include <surface_msgs/SurfaceStamped.h>
+#include <surfaces/Surface.hpp>
+#include <surfaces/Surfaces.hpp>
+#include <surfaces/Segment.hpp>
+#include <surfaces/utils.hpp>
 
 namespace surface_filters {
     namespace sync_policies = message_filters::sync_policies;
@@ -43,12 +43,10 @@ namespace surface_filters {
 
         typedef pcl::PointIndices PointIndices;
 
-//        typedef surfaces::Surface<PointIn> Surface;
-//        typedef surfaces::Surfaces<PointIn> Surfaces;
-        typedef surface_msgs::Surface Surface;
-        typedef surface_msgs::SurfaceStamped SurfaceStamped;
-        typedef surface_msgs::Surfaces Surfaces;
-        typedef surface_msgs::SurfaceClouds SurfaceClouds;
+        typedef surfaces::Surface<PointIn> Surface;
+        typedef surfaces::Surfaces<PointIn> Surfaces;
+
+        typedef surfaces::Segment<PointIn> Segment;
 
         typedef message_filters::sync_policies::ExactTime<PointCloud, pcl_msgs::PointIndices> ExactPolicy;
         typedef message_filters::sync_policies::ApproximateTime<PointCloud, pcl_msgs::PointIndices> ApproxPolicy;
@@ -58,9 +56,9 @@ namespace surface_filters {
 
     protected:
         /** \brief Discretization resolution */
-        double perpendicular_dist_threshold_ = 0.025;
-        double parallel_dist_threshold_ = 0.1;
-        double concave_hull_alpha_ = 0.2;
+        double perpendicular_dist_threshold_ = 0.01; //0.025;
+
+        double parallel_dist_threshold_ = 0.05; //0.1;
 
         /** \brief Pointer to a dynamic reconfigure service. */
 //        boost::shared_ptr<dynamic_reconfigure::Server<ChangeDetectionConfig> > srv_;
@@ -86,8 +84,6 @@ namespace surface_filters {
 
         pcl::CropBox<PointIn> crop_;
 
-        pcl::ConcaveHull<PointIn> hull_;
-
         /** \brief The input PointCloud subscriber */
         ros::Subscriber sub_input_;
 
@@ -95,12 +91,8 @@ namespace surface_filters {
         boost::shared_ptr<ExactTimeSynchronizer> sync_input_indices_e_;
         boost::shared_ptr<ApproxTimeSynchronizer> sync_input_indices_a_;
 
-
         message_filters::Subscriber<Surfaces> sub_surfaces_;
-        message_filters::Subscriber<SurfaceClouds> sub_surface_clouds_;
-
         boost::shared_ptr<message_filters::Cache<Surfaces> > surfaces_cache_;
-        boost::shared_ptr<message_filters::Cache<SurfaceClouds> > surface_clouds_cache_;
 
         /** \brief The output publisher. */
         ros::Publisher pub_replace_surface_;
@@ -109,6 +101,10 @@ namespace surface_filters {
         ros::Publisher pub_remaining_indices_;
 
         std::mutex hull_mutex_;
+
+        PointCloudIn::Ptr pending_points_;
+
+        std::mutex pending_points_mutex_;
 
     public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW

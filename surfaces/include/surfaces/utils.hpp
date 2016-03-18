@@ -11,6 +11,8 @@
 #include <Eigen/Geometry>
 #include <pcl_msgs/ModelCoefficients.h>
 #include <pcl/ModelCoefficients.h>
+#include <pcl/point_cloud.h>
+#include <pcl_msgs/PointIndices.h>
 
 #define tri_x(points, i) (points[i * 2])
 #define tri_y(points, i) (points[i * 2 + 1])
@@ -89,6 +91,15 @@ namespace surfaces {
 
     inline Eigen::Affine3f tf_from_plane_model(const pcl::ModelCoefficients &plane) {
         return tf_from_plane_model(plane.values[0], plane.values[1], plane.values[2], plane.values[3]);
+    }
+
+    template <typename T>
+    inline pcl_msgs::PointIndices::ConstPtr all_indices(typename pcl::PointCloud<T>::ConstPtr cloud) {
+        pcl_msgs::PointIndices::Ptr indices = boost::make_shared<pcl_msgs::PointIndices>();
+        pcl_conversions::fromPCL(cloud->header, indices->header);
+        indices->indices.resize(cloud->size());
+        std::iota(indices->indices.begin(), indices->indices.end(), 0);
+        return indices;
     }
 
 }

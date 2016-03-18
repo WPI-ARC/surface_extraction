@@ -10,7 +10,7 @@
 void surface_filters::ExpandSurfaces::onInit() {
     pcl_ros::PCLNodelet::onInit();
 
-    pub_replace_surface_ = pnh_->advertise<SurfaceStamped>("replace_surface", max_queue_size_);
+    pub_replace_surface_ = pnh_->advertise<Segment>("expanded_segments", max_queue_size_);
     pub_remaining_indices_ = pnh_->advertise<PointIndices>("removed_indices", max_queue_size_);
 
 //    if (!pnh_->getParam("resolution", resolution_)) {
@@ -54,29 +54,9 @@ void surface_filters::ExpandSurfaces::onInit() {
 }
 
 
-Eigen::Affine3f tf_from_plane_model(pcl_msgs::ModelCoefficients &plane) {
-    Eigen::Vector3f new_normal(plane.values[0], plane.values[1], plane.values[2]);
-    Eigen::Vector3f old_normal(0, 0, 1);
-
-    Eigen::Vector3f v = old_normal.cross(new_normal);
-    float s2 = v.squaredNorm();
-    float c = old_normal.dot(new_normal);
-    Eigen::Matrix3f v_cross;
-    v_cross << 0, -v(2), v(1), v(2), 0, -v(0), -v(1), v(0), 0;
-
-    Eigen::Matrix3f rot = Eigen::Matrix3f::Identity() + v_cross + v_cross * v_cross * (1 - c) / s2;
-    Eigen::Affine3f arot(rot);
-
-    // Create a transform where the rotation component is given by the rotation axis as the normal vector (a, b, c)
-    // and some arbitrary angle about that axis and the translation component is -d in the z direction after
-    // that rotation (not the original z direction, which is how transforms are usually defined).
-    return arot * Eigen::Translation3f(0, 0, -plane.values[3]);
-
-}
-
 //////////////////////////////////////////////////////////////////////////////////////////////
-void surface_filters::ExpandSurfaces::synchronized_input_callback(const PointCloudIn::ConstPtr &cloud,
-                                                                  const pcl_msgs::PointIndices::ConstPtr &indices) {
+void surface_filters::ExpandSurfaces::synchronized_input_callback(const PointCloudIn::ConstPtr &cloud_in,
+                                                                  const pcl_msgs::PointIndices::ConstPtr &indices_in) {
     // No subscribers, no work
 //    if (pub_replace_surface_.getNumSubscribers() <= 0) {
 //        NODELET_DEBUG("[%s::synchronized_input_callback] Input received but there are no subscribers; returning.",
@@ -86,7 +66,7 @@ void surface_filters::ExpandSurfaces::synchronized_input_callback(const PointClo
 
     // TODO: If cloud is given, check if it's valid
 
-    if (cloud->width * cloud->height == 0 || indices->indices.size() == 0) {
+    if (cloud_in->width * cloud_in->height == 0 || indices_in->indices.size() == 0) {
         return;
     }
 
@@ -105,10 +85,21 @@ void surface_filters::ExpandSurfaces::synchronized_input_callback(const PointClo
 
     Surfaces::ConstPtr surfaces = surfaces_cache_->getElemBeforeTime(ros::Time::now());
 
-    if (surfaces == NULL) {
-//        NODELET_DEBUG("[%s::input_callback] No surfaces yet... returning.", getName().c_str());
+
+    std::unique_lock<std::mutex> pending_points_lock(pending_points_mutex_);
+    if (surfaces == NULL) { // If no surfaces yet, add this to the set of pending points and return
+        if (!pending_points_) {
+            pending_points_ = boost::make_shared<PointCloudIn>(*cloud_in, indices_in->indices);
+        } else {
+            *pending_points_ += PointCloudIn(*cloud_in, indices_in->indices);
+        }
         return;
+    } else if (pending_points_) { // If there are pending points to process, add the new points to them
+        *pending_points_ += PointCloudIn(*cloud_in, indices_in->indices);
     }
+    const PointCloudIn::ConstPtr cloud = std::move(pending_points_ ? pending_points_ : cloud_in);
+    const pcl_msgs::PointIndices::ConstPtr indices = std::move(pending_points_ ? surfaces::all_indices<PointIn>(pending_points_) : indices_in);
+    pending_points_lock.unlock();
 
     crop_.setInputCloud(cloud);
     // Bounds are infinite in X and Y and finite in Z
@@ -120,8 +111,8 @@ void surface_filters::ExpandSurfaces::synchronized_input_callback(const PointClo
                                  -perpendicular_dist_threshold_, 0));
 
 
-    // Create a mutex wrapper but don't immediately lock
-    std::unique_lock<std::mutex> hull_lock(hull_mutex_, std::defer_lock);
+    // Next segment is lazy-initialized
+    Segment::Ptr next_segment = boost::make_shared<Segment>();
 
     boost::shared_ptr<std::vector<int> > unprocessed_point_indices = boost::make_shared<std::vector<int> >(indices->indices);
     // unprocessed_point_indices must be sorted to work with the set_difference function at the bottom of the while
@@ -131,16 +122,9 @@ void surface_filters::ExpandSurfaces::synchronized_input_callback(const PointClo
     boost::shared_ptr<std::vector<int> > tmp_indices = boost::make_shared<std::vector<int> >();
     boost::shared_ptr<std::vector<std::vector<int> > > tmp_multi_indices = boost::make_shared<std::vector<std::vector<int> > >();
     boost::shared_ptr<std::vector<std::vector<float> > > tmp_sqrdistances = boost::make_shared<std::vector<std::vector<float>>>();
-    for (Surface old_surface : surfaces->surfaces) {
-        // Make a PCL copy of the important data in the Surface
-        pcl::PolygonMesh::Ptr concave_hull = boost::make_shared<pcl::PolygonMesh>();
-        pcl_conversions::toPCL(old_surface.concave_hull, *concave_hull);
-
+    for (const Surface &old_surface : surfaces->surfaces) {
         PointCloudIn::Ptr edge_points = boost::make_shared<PointCloudIn>();
-        pcl::fromPCLPointCloud2(concave_hull->cloud, *edge_points);
-
-        PointCloudIn::Ptr inliers = boost::make_shared<PointCloudIn>();
-        pcl::fromROSMsg(old_surface.inliers, *inliers);
+        pcl::fromPCLPointCloud2(old_surface.concave_hull.cloud, *edge_points);
 
         bool surface_changed = false;
         while (unprocessed_point_indices->size() > 0) { // Breaks inside
@@ -160,7 +144,7 @@ void surface_filters::ExpandSurfaces::synchronized_input_callback(const PointClo
             //              [out] vector[vector[int]] indices, [out] vector[vector[float]] sqrdistances)
             search_.radiusSearch(*edge_points, *tmp_indices, parallel_dist_threshold_, *tmp_multi_indices,
                                  *tmp_sqrdistances);
-            for(std::vector<int>& ind : *tmp_multi_indices) {
+            for(const std::vector<int>& ind : *tmp_multi_indices) {
                 within_radius_indices->insert(ind.begin(), ind.end());
             }
 
@@ -172,7 +156,7 @@ void surface_filters::ExpandSurfaces::synchronized_input_callback(const PointClo
             crop_.setIndices(boost::make_shared<std::vector<int> > (within_radius_indices->begin(),
                                                                     within_radius_indices->end()));
 
-            Eigen::Affine3f plane_tf = tf_from_plane_model(old_surface.model);
+            Eigen::Affine3f plane_tf = surfaces::tf_from_plane_model(old_surface.model);
             const Eigen::Transform<float, 3, 2, 0>::TranslationPart &trans = plane_tf.translation();
             crop_.setTranslation(Eigen::Vector3f(trans.x(), trans.y(), trans.z()));
             Eigen::Vector3f rotation;
@@ -187,11 +171,13 @@ void surface_filters::ExpandSurfaces::synchronized_input_callback(const PointClo
             //
             // ADD NEW POINTS TO SURFACE
             //
-            auto prev_size = inliers->size();
-
             surface_changed = true;
+
+            // If this is 0, then it wasn't initialized yet
+            if (next_segment->inliers.size() == 0) next_segment->inliers = old_surface.inliers;
+
             auto new_points_cloud = PointCloudIn(*cloud, *within_radius_inplane_indices);
-            *inliers += new_points_cloud;
+            next_segment->inliers += new_points_cloud;
             *edge_points += new_points_cloud;
 
 //            NODELET_INFO_STREAM("Surface expanded from " << prev_size << " points to " << inliers->size() << " points");
@@ -212,22 +198,12 @@ void surface_filters::ExpandSurfaces::synchronized_input_callback(const PointClo
         }
 
         if (surface_changed) {
-            // Concave hull is not thread save
-            hull_lock.lock();
-            hull_.setAlpha(concave_hull_alpha_);
-            hull_.setInputCloud(inliers);
-            hull_.reconstruct(*concave_hull);
-            hull_lock.unlock();
+            next_segment->header = cloud->header;
+            next_segment->surface_id = old_surface.id;
+            next_segment->model = old_surface.model;
+            pub_replace_surface_.publish(next_segment);
 
-            SurfaceStamped new_surface;
-            new_surface.header = indices->header;
-            new_surface.surface.id = old_surface.id;
-            new_surface.surface.color = old_surface.color;
-            new_surface.surface.model = old_surface.model;
-            pcl_conversions::fromPCL(*concave_hull, new_surface.surface.concave_hull);
-            pcl::toROSMsg(*inliers, new_surface.surface.inliers);
-
-            pub_replace_surface_.publish(new_surface);
+            next_segment = boost::make_shared<Segment>();
 
 //            NODELET_DEBUG("[%s::input_callback] ExpandSurface expanded surface %u from %z to %z points.",
 //                          getName().c_str(), new_surface.surface.id, old_surface.inliers.height * old_surface.inliers.height,

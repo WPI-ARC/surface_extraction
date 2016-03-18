@@ -19,8 +19,12 @@ void surface_filters::SACSegmentAndFit::onInit() {
         return;
     }
     model_type_ = surfaces::sacModelFromConfigInt(model_type_int);
-    impl_.setModelType(model_type_);
-    project_.setModelType(model_type_);
+    sac_.setModelType(model_type_);
+
+    // Set defaults
+    euclidean_.setClusterTolerance(cluster_tolerance_);
+    euclidean_.setMinClusterSize(min_points_);
+    euclidean_.setMaxClusterSize(max_points_);
 
     // Enable the dynamic reconfigure service
     srv_ = boost::make_shared<dynamic_reconfigure::Server<SACConfig> >(*pnh_);
@@ -123,8 +127,8 @@ void surface_filters::SACSegmentAndFit::synchronized_input_callback(const PointC
     // Output points have the same type as the input (enforced by the pcl_nodelet class)
     PointCloudOut::Ptr output = boost::make_shared<PointCloudOut>();
 
-    impl_.setInputCloud(cloud);
-    project_.setInputCloud(cloud);
+    sac_.setInputCloud(cloud);
+    euclidean_.setInputCloud(cloud);
 
     ros::WallTime start = ros::WallTime::now();
 
@@ -137,33 +141,53 @@ void surface_filters::SACSegmentAndFit::synchronized_input_callback(const PointC
         bool first_run = true;
         do {
             PointIndices::Ptr indices = boost::make_shared<PointIndices>();
-            Segment::Ptr segment = boost::make_shared<Segment>();
+            pcl::ModelCoefficients model;
 
             // Limit SAC to only the points in this cluster
-            impl_.setIndices(remaining_cluster);
+            sac_.setIndices(remaining_cluster);
 
-            // Do the segmentation
-            impl_.segment(*indices, segment->model);
+            // Do the SAC segmentation
+            sac_.segment(*indices, model);
 
             if (indices->indices.size() < min_points_) break;
 
-            segment->inliers = PointCloudIn(*cloud, indices->indices);
+            // Do the Euclidean segmentation
+            euclidean_.setIndices(indices);
 
-            if (should_populate_output_cloud) {
-                uint8_t r = (uint8_t) (rand() % 256), g = (uint8_t) (rand() % 256), b = (uint8_t) (rand() % 256);
+            std::vector<PointIndices> clusters;
+            euclidean_.extract(clusters);
 
-                size_t outputPointsSize = output->points.size();
-                size_t projectedPointsSize = segment->inliers.points.size();
-                output->points.resize(outputPointsSize + projectedPointsSize);
+            NODELET_INFO_STREAM("Extracted " << clusters.size() << " clusters from " << indices->indices.size() << " indices");
 
-                for (size_t i = 0; i < projectedPointsSize; i++) {
-                    output->points[outputPointsSize + i].x = segment->inliers.points[i].x;
-                    output->points[outputPointsSize + i].y = segment->inliers.points[i].y;
-                    output->points[outputPointsSize + i].z = segment->inliers.points[i].z;
-                    output->points[outputPointsSize + i].r = r;
-                    output->points[outputPointsSize + i].g = g;
-                    output->points[outputPointsSize + i].b = b;
+            for (PointIndices cluster : clusters) {
+                Segment::Ptr segment = boost::make_shared<Segment>();
+                segment->header = cloud->header;
+                segment->surface_id = Segment::NEW_SURFACE;
+                segment->model = model;
+                segment->inliers = PointCloudIn(*cloud, cluster.indices);
+
+                if (should_populate_output_cloud) {
+                    uint8_t r = (uint8_t) (rand() % 256), g = (uint8_t) (rand() % 256), b = (uint8_t) (rand() % 256);
+
+                    size_t outputPointsSize = output->points.size();
+                    size_t projectedPointsSize = segment->inliers.points.size();
+                    output->points.resize(outputPointsSize + projectedPointsSize);
+
+                    for (size_t i = 0; i < projectedPointsSize; i++) {
+                        output->points[outputPointsSize + i].x = segment->inliers.points[i].x;
+                        output->points[outputPointsSize + i].y = segment->inliers.points[i].y;
+                        output->points[outputPointsSize + i].z = segment->inliers.points[i].z;
+                        output->points[outputPointsSize + i].r = r;
+                        output->points[outputPointsSize + i].g = g;
+                        output->points[outputPointsSize + i].b = b;
+                    }
                 }
+
+                pub_segments_.publish(segment);
+
+                NODELET_DEBUG("[%s] Published segment with %zu points at time %"
+                                      PRIu64,
+                              getName().c_str(), segment->inliers.size(), segment->header.stamp);
             }
 
             // Only sort & make a copy if necessary
@@ -186,14 +210,6 @@ void surface_filters::SACSegmentAndFit::synchronized_input_callback(const PointC
                                 std::back_inserter(remaining_temp->indices));
 
             remaining_cluster.swap(remaining_temp);
-
-            segment->header = cloud->header;
-            segment->surface_id = Segment::NEW_SURFACE;
-            pub_segments_.publish(segment);
-
-            NODELET_DEBUG("[%s] Published segment with %zu points at time %" PRIu64,
-                          getName().c_str(), segment->inliers.size(), segment->header.stamp);
-
         } while (remaining_cluster->indices.size() >= min_points_);
     }
 
@@ -216,62 +232,74 @@ void surface_filters::SACSegmentAndFit::config_callback(SACConfig &config, uint3
 
     if (model_type_ != surfaces::sacModelFromConfigInt(config.model_type)) {
         model_type_ = surfaces::sacModelFromConfigInt(config.model_type);
-        impl_.setModelType(model_type_);
-        project_.setModelType(model_type_);
+        sac_.setModelType(model_type_);
         NODELET_DEBUG ("[config_callback] Setting the model type to: %d.", model_type_);
     }
 
     if (method_type_ != config.method_type) {
-        impl_.setMethodType(config.method_type);
+        sac_.setMethodType(config.method_type);
         method_type_ = config.method_type;
         NODELET_DEBUG ("[config_callback] Setting the method type to: %d.", method_type_);
     }
 
     if (dist_threshold_ != config.distance_threshold) {
-        impl_.setDistanceThreshold(config.distance_threshold);
+        sac_.setDistanceThreshold(config.distance_threshold);
         dist_threshold_ = config.distance_threshold;
         NODELET_DEBUG ("[config_callback] Setting distance threshold to: %f.", dist_threshold_);
     }
 
     if (max_iterations_ != config.max_iterations) {
-        impl_.setMaxIterations(config.max_iterations);
+        sac_.setMaxIterations(config.max_iterations);
         max_iterations_ = config.max_iterations;
         NODELET_DEBUG ("[config_callback] Setting the max iterations to: %d.", max_iterations_);
     }
 
     if (probability_ != config.probability) {
-        impl_.setProbability(config.probability);
+        sac_.setProbability(config.probability);
         probability_ = config.probability;
         NODELET_DEBUG ("[config_callback] Setting the probability to: %f.", probability_);
     }
 
     if (optimize_coefficients_ != config.optimize_coefficients) {
-        impl_.setOptimizeCoefficients(config.optimize_coefficients);
+        sac_.setOptimizeCoefficients(config.optimize_coefficients);
         optimize_coefficients_ = config.optimize_coefficients;
         NODELET_DEBUG ("[config_callback] Setting optimize coefficients to: %d.", optimize_coefficients_);
     }
 
     if (radius_min_ != config.radius_min) {
-        impl_.setRadiusLimits(config.radius_min, radius_max_);
+        sac_.setRadiusLimits(config.radius_min, radius_max_);
         radius_min_ = config.radius_min;
         NODELET_DEBUG ("[config_callback] Setting the min radius to: %f.", radius_min_);
     }
 
     if (radius_max_ != config.radius_max) {
-        impl_.setRadiusLimits(config.radius_max, radius_max_);
+        sac_.setRadiusLimits(config.radius_max, radius_max_);
         radius_max_ = config.radius_max;
         NODELET_DEBUG ("[config_callback] Setting the max radius to: %f.", radius_max_);
     }
 
     if (epsilon_angle_ != config.epsilon_angle) {
-        impl_.setEpsAngle(config.epsilon_angle);
+        sac_.setEpsAngle(config.epsilon_angle);
         epsilon_angle_ = config.epsilon_angle;
         NODELET_DEBUG ("[config_callback] Setting the epsilon angle to: %f.", epsilon_angle_);
     }
 
     if (min_points_ != (unsigned int) config.min_points) {
         min_points_ = (unsigned int) config.min_points;
+        euclidean_.setMinClusterSize(min_points_);
         NODELET_DEBUG ("[config_callback] Setting the min points to: %ud.", min_points_);
+    }
+
+    if (max_points_ != (unsigned int) config.max_points) {
+        max_points_ = (unsigned int) config.max_points;
+        euclidean_.setMaxClusterSize(max_points_);
+        NODELET_DEBUG ("[config_callback] Setting the max points to: %ud.", max_points_);
+    }
+
+    if (cluster_tolerance_ != config.cluster_tolerance) {
+        euclidean_.setClusterTolerance(config.cluster_tolerance);
+        cluster_tolerance_ = config.cluster_tolerance;
+        NODELET_DEBUG ("[config_callback] Setting cluster tolerance to: %f.", cluster_tolerance_);
     }
 }
 

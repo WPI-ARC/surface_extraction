@@ -1,18 +1,35 @@
 <launch>
     <arg name="topic_name" default="/onboard_worldmodel/pointcloud_vis" />
 
+    <arg name="gdb" default="false" />
+    <arg name="valgrind" default="false" />
+    <arg name="cachegrind" default="false" />
+
     <group ns="surface_extraction">
         <env name="ROSCONSOLE_CONFIG_FILE" value="$(find surface_extraction_launch)/custom_rosconsole.conf"/>
 
         <!-- Load parameters -->
         <rosparam command="load" file="$(find surface_extraction_launch)/params.yaml" />
 
-         <!--Nodelet manager -->
-        <!--<node pkg="nodelet" type="nodelet" name="nodelet_manager" args="manager" required="true" output="screen" />-->
+        <!-- Nodelet manager -->
+        <node if="$(arg gdb)" pkg="nodelet" type="nodelet" name="nodelet_manager" args="manager" required="true"
+              output="screen" launch-prefix="xterm -fs 18 -e gdb --args" />
+
+        <!--Nodelet manager -->
+        <node if="$(arg valgrind)" pkg="nodelet" type="nodelet" name="nodelet_manager" args="manager" required="true"
+              output="screen" launch-prefix="valgrind" />
 
         <!-- Nodelet manager -->
-        <node pkg="nodelet" type="nodelet" name="nodelet_manager" args="manager" required="true" output="screen"
-              launch-prefix="xterm -e gdb -s /home/will/arc_ws/devel/lib/libsurface_manager.so --args" />
+        <node if="$(arg cachegrind)" pkg="nodelet" type="nodelet" name="nodelet_manager" args="manager" required="true"
+              output="screen" launch-prefix="valgrind --tool=callgrind" />
+
+        <!-- Nodelet manager -->
+        <group unless="$(arg gdb)">
+            <group unless="$(arg valgrind)">
+                <node unless="$(arg cachegrind)" pkg="nodelet" type="nodelet" name="nodelet_manager" args="manager"
+                      required="true" output="screen" />
+            </group>
+        </group>
 
         <!-- SurfaceManager -->
         <node pkg="nodelet" type="nodelet" name="surface_manager" args="load surface_manager/SurfaceManager nodelet_manager">
@@ -55,26 +72,27 @@
             <remap from="~max_x" to="crop_box_max/x" />
             <remap from="~max_y" to="crop_box_max/y" />
             <remap from="~max_z" to="crop_box_max/z" />
-            <!-- input_frame transforms the cloud into the frame before the crop -->
-            <remap from="~input_frame" to="target_frame" />
-            <!-- output_frame tells the nodelet to not re-transform the cloud into the original frame -->
-            <remap from="~output_frame" to="target_frame" />
         </node>
 
         <!-- Downsample -->
         <node pkg="nodelet" type="nodelet" name="downsample" args="load pcl/VoxelGrid nodelet_manager">
             <!-- Topics -->
-            <remap from="~input" to="downsample/output" />
+            <remap from="~input" to="crop/output" />
 
             <!-- Params -->
             <remap from="~leaf_size" to="downsample_resolution" />
             <param name="filter_field_name" value="" />
+
+            <!-- input_frame transforms the cloud into the frame before the filter -->
+            <remap from="~input_frame" to="target_frame" />
+            <!-- output_frame tells the nodelet to not re-transform the cloud into the original frame -->
+            <remap from="~output_frame" to="target_frame" />
         </node>
 
-        <!-- Change Detection -->
+        <!-- Change Detection (does NOT perform downsampling) -->
         <node pkg="nodelet" type="nodelet" name="change_detect" args="load surface_filters/ChangeDetection nodelet_manager">
             <!-- Topics -->
-            <remap from="~input" to="crop/output" />
+            <remap from="~input" to="downsample/output" />
 
             <!-- Params -->
             <remap from="~resolution" to="downsample_resolution" />

@@ -6,14 +6,17 @@
 #ifndef SURFACE_FILTERS_CONCAVE_HULL_H_
 #define SURFACE_FILTERS_CONCAVE_HULL_H_
 
-// System
+// System / Boost
 #include <mutex>
+#include <boost/range/adaptor/strided.hpp>
 
 // PCL
 #include <pcl_ros/pcl_nodelet.h>
 #include <pcl/surface/concave_hull.h>
+#include <pcl/segmentation/extract_polygonal_prism_data.h>
 #include <pcl/filters/project_inliers.h>
 #include <pcl/PolygonMesh.h>
+#include <pcl/common/distances.h>
 
 // Messages
 #include <shape_msgs/Mesh.h>
@@ -104,6 +107,11 @@ namespace surface_filters {
         void get_triangluation_trimesh(std::vector<double> &points_2d, std::vector<int> &segment_list,
                                        std::vector<double> &holes, const PolygonMesh &hull,
                                        shape_msgs::Mesh &output_trimesh) const;
+
+        bool verify_hull(const PolygonMesh &hull, const pcl::ModelCoefficients &model) const;
+        bool verify_hull_unique_vertices(const PolygonMesh &hull) const;
+        bool verify_hull_no_self_intersection(const PolygonMesh &hull, const pcl::ModelCoefficients &model) const;
+        bool verify_hull_perimeter_holes(const PolygonMesh &hull) const;
 
     private:
         /** \brief The PCL implementation used. */

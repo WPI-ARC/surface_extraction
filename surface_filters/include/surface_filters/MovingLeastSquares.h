@@ -101,6 +101,12 @@ namespace surface_filters {
         /** \brief The input PointCloud subscriber (used when 'input' is the only required topic) */
         ros::Subscriber sub_input_;
 
+        /** \brief The message filter subscriber for PointCloud2. */
+        // NOTE: These are shadowed because they must be destructed in the right order or a mutex error results
+        // (because of a bug in ros::Subscriber)
+        message_filters::Subscriber<PointCloud> sub_input_filter_shadow_;
+        message_filters::Subscriber<PointIndices> sub_indices_filter_shadow_;
+
         /** \brief Synchronized input and indices (used when 'input' is not the only required topic) */
         boost::shared_ptr<ExactTimeSynchronizer<PointCloudIn, PointIndices> > sync_input_indices_e_;
         boost::shared_ptr<ApproximateTimeSynchronizer<PointCloudIn, PointIndices> > sync_input_indices_a_;

@@ -190,7 +190,7 @@ void surface_manager::SurfaceManager::publish_perimeter_lines() const {
             perimeter.type = vis::Marker::LINE_LIST;
             perimeter.action = vis::Marker::MODIFY;
             // perimeter.pose not needed
-            perimeter.scale.x = 0.01; // scale.x controls the width of the line segments
+            perimeter.scale.x = 0.001; // scale.x controls the width of the line segments
             perimeter.color = surface.color;
 
             for (const pcl::Vertices &polygon : surface.concave_hull.polygons) {

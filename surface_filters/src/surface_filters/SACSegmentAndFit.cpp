@@ -157,7 +157,7 @@ void surface_filters::SACSegmentAndFit::synchronized_input_callback(const PointC
             std::vector<PointIndices> clusters;
             euclidean_.extract(clusters);
 
-            NODELET_INFO_STREAM("Extracted " << clusters.size() << " clusters from " << indices->indices.size() << " indices");
+//            NODELET_INFO_STREAM("Extracted " << clusters.size() << " clusters from " << indices->indices.size() << " indices");
 
             for (PointIndices cluster : clusters) {
                 Segment::Ptr segment = boost::make_shared<Segment>();
@@ -185,9 +185,9 @@ void surface_filters::SACSegmentAndFit::synchronized_input_callback(const PointC
 
                 pub_segments_.publish(segment);
 
-                NODELET_DEBUG("[%s] Published segment with %zu points at time %"
-                                      PRIu64,
-                              getName().c_str(), segment->inliers.size(), segment->header.stamp);
+//                NODELET_DEBUG("[%s] Published segment with %zu points at time %"
+//                                      PRIu64,
+//                              getName().c_str(), segment->inliers.size(), segment->header.stamp);
             }
 
             // Only sort & make a copy if necessary

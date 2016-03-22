@@ -53,17 +53,17 @@ void surface_filters::MovingLeastSquaresNodelet::onInit() {
 
     if (use_indices_) {
         // If using indices, subscribe to the input and indices using a filter
-        sub_input_filter_.subscribe(*pnh_, "input", max_queue_size_);
-        sub_indices_filter_.subscribe(*pnh_, "indices", max_queue_size_);
+        sub_input_filter_shadow_.subscribe(*pnh_, "input", max_queue_size_);
+        sub_indices_filter_shadow_.subscribe(*pnh_, "indices", max_queue_size_);
 
         if (approximate_sync_) {
             sync_input_indices_a_ = boost::make_shared<ApproximateTimeSynchronizer<PointCloudIn, PointIndices> >(max_queue_size_);
-            sync_input_indices_a_->connectInput(sub_input_filter_, sub_indices_filter_);
+            sync_input_indices_a_->connectInput(sub_input_filter_shadow_, sub_indices_filter_shadow_);
             sync_input_indices_a_->registerCallback(
                     bind(&MovingLeastSquaresNodelet::synchronized_input_callback, this, _1, _2));
         } else {
             sync_input_indices_e_ = boost::make_shared<ExactTimeSynchronizer<PointCloudIn, PointIndices> >(max_queue_size_);
-            sync_input_indices_e_->connectInput(sub_input_filter_, sub_indices_filter_);
+            sync_input_indices_e_->connectInput(sub_input_filter_shadow_, sub_indices_filter_shadow_);
             sync_input_indices_e_->registerCallback(
                     bind(&MovingLeastSquaresNodelet::synchronized_input_callback, this, _1, _2));
         }

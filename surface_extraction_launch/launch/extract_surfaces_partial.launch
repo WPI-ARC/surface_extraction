@@ -3,10 +3,8 @@
     <arg name="new_indices" />
     <arg name="surfaces_manager_node" />
 
-    <node pkg="nodelet" type="nodelet" name="nodelet_manager_for_debug" args="manager" required="true" output="screen" />
-
     <!--Expand Surfaces -->
-    <node pkg="nodelet" type="nodelet" name="expand_surfaces" args="load surface_filters/ExpandSurfaces nodelet_manager_for_debug">
+    <node pkg="nodelet" type="nodelet" name="expand_surfaces" args="load surface_filters/ExpandSurfaces nodelet_manager">
         <!-- Topics -->
         <remap from="~input" to="$(arg input_topic)" />
         <remap from="~indices" to="$(arg new_indices)" />

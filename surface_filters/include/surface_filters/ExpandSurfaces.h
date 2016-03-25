@@ -6,12 +6,14 @@
 #define SURFACE_FILTERS_EXPANDSURFACES_H
 #include <pcl_ros/pcl_nodelet.h>
 
+#include <limits>
 #include <mutex>
 
 // PCL includes
 #include <pcl/conversions.h>
 #include <pcl/search/search.h>
-#include <pcl/filters/crop_box.h>
+#include <pcl/sample_consensus/sac_model_plane.h>
+#include <pcl/filters/crop_hull.h>
 #include <pcl/surface/concave_hull.h>
 #include <pcl/common/transforms.h>
 
@@ -48,8 +50,10 @@ namespace surface_filters {
 
         typedef surfaces::Segment<PointIn> Segment;
 
-        typedef message_filters::sync_policies::ExactTime<PointCloud, pcl_msgs::PointIndices> ExactPolicy;
-        typedef message_filters::sync_policies::ApproximateTime<PointCloud, pcl_msgs::PointIndices> ApproxPolicy;
+        typedef std::map<unsigned int, PointCloudIn::Ptr> HullCloudsMap;
+
+        typedef message_filters::sync_policies::ExactTime<PointCloud, PointIndices> ExactPolicy;
+        typedef message_filters::sync_policies::ApproximateTime<PointCloud, PointIndices> ApproxPolicy;
         typedef message_filters::Synchronizer<ExactPolicy> ExactTimeSynchronizer;
         typedef message_filters::Synchronizer<ApproxPolicy> ApproxTimeSynchronizer;
 
@@ -76,13 +80,30 @@ namespace surface_filters {
         /** \brief Callback that does all the work.
           * \param cloud the pointer to the input point cloud
           */
-        void synchronized_input_callback(const PointCloudIn::ConstPtr &cloud, const pcl_msgs::PointIndices::ConstPtr &indices);
+        void synchronized_input_callback(const PointCloudIn::ConstPtr &cloud, const PointIndices::ConstPtr &indices);
 
+        void process(const Surfaces::ConstPtr &surfaces, const PointCloudIn::ConstPtr &cloud, const PointIndices::ConstPtr &indices);
+
+        HullCloudsMap getHullCloudsMap(const Surfaces::ConstPtr &surfaces) const;
+
+        pcl::IndicesPtr getFilteredIndices(const Surfaces::ConstPtr &surfaces, const PointCloudIn::ConstPtr &cloud_in,
+                                           const PointIndices::ConstPtr &indices, const HullCloudsMap &hull_clouds);
+
+        pcl::IndicesPtr filterWithinModelDistance(const PointCloudIn::ConstPtr &input,
+                                                  const pcl::IndicesConstPtr &indices,
+                                                  const pcl::ModelCoefficients &coeff);
+
+        pcl::IndicesPtr filterWithinRadiusConnected(const pcl::search::Search<PointIn> &search,
+                                                    const PointCloudIn::Ptr &edge_points,
+                                                    const pcl::IndicesPtr &removed_indices) const;
+
+        pcl::IndicesPtr filterWithinHull(const PointCloudIn::ConstPtr &input,
+                                         const pcl::IndicesConstPtr &indices,
+                                         const PointCloudIn::Ptr &hull_cloud,
+                                         const std::vector<pcl::Vertices> &hull_polygons);
 
     private:
-        pcl::search::KdTree<PointIn> search_;
-
-        pcl::CropBox<PointIn> crop_;
+        pcl::CropHull<PointIn> crophull_;
 
         /** \brief The input PointCloud subscriber */
         ros::Subscriber sub_input_;
@@ -92,6 +113,7 @@ namespace surface_filters {
         boost::shared_ptr<ApproxTimeSynchronizer> sync_input_indices_a_;
 
         message_filters::Subscriber<Surfaces> sub_surfaces_;
+        message_filters::Subscriber<PointIndices> sub_pcl_indices_filter_;
         boost::shared_ptr<message_filters::Cache<Surfaces> > surfaces_cache_;
 
         /** \brief The output publisher. */
@@ -99,6 +121,8 @@ namespace surface_filters {
 
         /** \brief The output publisher. */
         ros::Publisher pub_remaining_indices_;
+        ros::Publisher pub_filtered_indices_;
+        ros::Publisher pub_removed_indices_;
 
         std::mutex hull_mutex_;
 

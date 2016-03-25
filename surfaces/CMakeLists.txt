@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(surfaces)
 
+set(PCL_DIR "~/Desktop/pcl-1.8/install/usr/local/share/pcl-1.8")
+set(BOOST_ROOT "~/Desktop/boost_1_60_0")
+
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
@@ -13,8 +16,8 @@ find_package(catkin REQUIRED COMPONENTS
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
-find_package(Boost REQUIRED COMPONENTS system)
-find_package(PCL REQUIRED)
+find_package(Boost 1.6 REQUIRED COMPONENTS system)
+find_package(PCL 1.8 REQUIRED)
 
 
 ## Uncomment this if the package has a setup.py. This macro ensures
@@ -112,22 +115,20 @@ catkin_package(
 ###########
 ## Build ##
 ###########
-set(CMAKE_CXX_COMPILER "clang++")
-set(CMAKE_C_COMPILER "clang")
 set(CMAKE_BUILD_TYPE Debug)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O3 -std=c++11 -Wall -Wextra -Wno-unused-parameter")
 # Flags to make Clang ignore directories that Catkin should have marked as system imports
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Xclang -isystem-prefix -Xclang pcl/")
-
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Xclang -isystem-prefix -Xclang pcl/")
 
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 # include_directories(include)
-# TODO: Check names of system library include directories (PCL, boost)
 include_directories(
     include
-  ${catkin_INCLUDE_DIRS}
+    ${catkin_INCLUDE_DIRS}
+)
+include_directories(SYSTEM
   ${Boost_INCLUDE_DIRS}
   ${PCL_INCLUDE_DIRS}
     ${Eigen3_INCLUDE_DIRS}

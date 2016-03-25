@@ -19,6 +19,10 @@ namespace surfaces {
         Segment() : header(), surface_id(Segment::NEW_SURFACE), model(), inliers()
         {}
 
+        Segment(::pcl::PCLHeader header, int surface_id, pcl::ModelCoefficients model, pcl::PointCloud<PointType> inliers) :
+                header(header), surface_id(surface_id), model(model), inliers(inliers)
+        {}
+
         ::pcl::PCLHeader header;
 
         int surface_id;

@@ -41,6 +41,8 @@ void surface_filters::ChangeDetection::synchronized_input_callback(const PointCl
         return;
     }
 
+    NODELET_INFO_ONCE("ChangeDetection recieved the first point cloud");
+
     // TODO: If cloud is given, check if it's valid
 
     /// DEBUG

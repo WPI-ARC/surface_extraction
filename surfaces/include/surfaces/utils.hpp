@@ -6,11 +6,14 @@
 #define SURFACES_UTILS_HPP
 
 #include <boost/lexical_cast.hpp>
+#include <boost/iterator/zip_iterator.hpp>
+#include <boost/range/join.hpp>
 #include <pcl/sample_consensus/model_types.h>
 #include <pcl/exceptions.h>
 #include <Eigen/Geometry>
 #include <pcl_msgs/ModelCoefficients.h>
 #include <pcl/ModelCoefficients.h>
+#include <pcl/PolygonMesh.h>
 #include <pcl/point_cloud.h>
 #include <pcl_msgs/PointIndices.h>
 
@@ -94,14 +97,40 @@ namespace surfaces {
     }
 
     template <typename T>
-    inline pcl_msgs::PointIndices::ConstPtr all_indices(typename pcl::PointCloud<T>::ConstPtr cloud) {
-        pcl_msgs::PointIndices::Ptr indices = boost::make_shared<pcl_msgs::PointIndices>();
-        pcl_conversions::fromPCL(cloud->header, indices->header);
-        indices->indices.resize(cloud->size());
-        std::iota(indices->indices.begin(), indices->indices.end(), 0);
+    inline pcl::IndicesPtr all_indices(typename pcl::PointCloud<T>::ConstPtr cloud) {
+        pcl::IndicesPtr indices = boost::make_shared<std::vector<int> >();
+        indices->resize(cloud->size());
+        std::iota(indices->begin(), indices->end(), 0);
         return indices;
     }
 
+    inline void for_each_segment(const std::vector<uint32_t> &vertices, std::function<void(boost::tuple<const uint32_t, const uint32_t>)> func) {
+        const bool explicitly_closed = (vertices.front() == vertices.back());
+
+        // Iterate over every element, except the duplicate at the end if it exists
+        const auto first_range = boost::make_iterator_range(vertices.begin(),
+                                                            vertices.end() - (explicitly_closed ? 1 : 0));
+
+        // Iterate over every element except the first and the duplicate at the end, then iterate over the first
+        const auto second_range = boost::range::join(boost::make_iterator_range(first_range.begin() + 1,
+                                                                                first_range.end()),
+                                                     boost::make_iterator_range(first_range.begin(),
+                                                                                first_range.begin() + 1));
+
+
+        const auto zip_range = boost::make_iterator_range(
+                boost::make_zip_iterator(boost::make_tuple(first_range.begin(), second_range.begin())),
+                boost::make_zip_iterator(boost::make_tuple(first_range.end(), second_range.end()))
+        );
+
+        std::for_each(zip_range.begin(), zip_range.end(), func);
+    }
+
+    inline void for_each_segment(const pcl::PolygonMesh &hull, std::function<void(boost::tuple<const uint32_t, const uint32_t>)> func) {
+        for (const pcl::Vertices &polygon : hull.polygons) {
+            for_each_segment(polygon.vertices, func);
+        }
+    }
 }
 
 #endif //SURFACES_UTILS_HPP

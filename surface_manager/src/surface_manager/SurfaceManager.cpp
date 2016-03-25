@@ -4,7 +4,6 @@
 
 #include <pluginlib/class_list_macros.h>
 #include <surface_manager/SurfaceManager.h>
-
 void surface_manager::SurfaceManager::onInit() {
     ros::NodeHandle &private_nh = getPrivateNodeHandle();
 
@@ -47,6 +46,11 @@ void surface_manager::SurfaceManager::onInit() {
 
 void surface_manager::SurfaceManager::add_surface(const SurfaceStamped::ConstPtr surface,
                                                   const SurfaceMeshStamped::ConstPtr mesh) {
+    std::unique_lock<std::mutex> scope_lock(currently_executing_, std::try_to_lock);
+    // Theoretically this program is never executed concurrently, so we should always get the lock on the first try
+    assert(scope_lock.owns_lock());
+
+
     auto hull_size = surface->surface.concave_hull.cloud.width * surface->surface.concave_hull.cloud.height;
     NODELET_DEBUG_STREAM("New Surface received with " << surface->surface.inliers.size() << " points, " << hull_size <<
                          " vertices, " << mesh->surface_mesh.surface_mesh.triangles.size() << " triangles");
@@ -66,17 +70,59 @@ void surface_manager::SurfaceManager::add_surface(const SurfaceStamped::ConstPtr
         return;
     }
 
+    if (surface->surface.id != mesh->surface_mesh.id) {
+        NODELET_ERROR_STREAM(
+                "[" << getName().c_str() << "::add_surface] Cannot add surface because the associated mesh has a " <<
+                        "different id (expected " << surface->surface.id << ", got " << mesh->surface_mesh.id << ")");
+        return;
+    }
+
+    std::set<unsigned int> all_ids_before;
+    for (const auto &pair : surfaces_) {
+        NODELET_DEBUG_STREAM("Existing surface id " << pair.first.id << " size " <<
+                                     (pair.first.concave_hull.cloud.height * pair.first.concave_hull.cloud.width));
+        assert(pair.first.id == pair.second.id);
+        assert(pair.first.id > 0);
+        auto insert_result = all_ids_before.insert(pair.first.id);
+        assert(insert_result.second); // Assert that the element didn't already exist
+    }
+
+
     auto pos = std::lower_bound(surfaces_.begin(), surfaces_.end(), surface->surface, surface_lower_bound_comparator());
-    auto &new_surface = surfaces_.insert(pos, {surface->surface, mesh->surface_mesh})->first;
-    new_surface.id = next_surface_id_++;
-    new_surface.color.r = static_cast <float> (rand()) / static_cast <float> (RAND_MAX);
-    new_surface.color.g = static_cast <float> (rand()) / static_cast <float> (RAND_MAX);
-    new_surface.color.b = static_cast <float> (rand()) / static_cast <float> (RAND_MAX);
-    new_surface.color.a = 1;
+    const auto new_surface_pair = surfaces_.insert(pos, {surface->surface, mesh->surface_mesh});
+    new_surface_pair->first.id = ++next_surface_id_;
+    new_surface_pair->first.color.r = static_cast <float> (rand()) / static_cast <float> (RAND_MAX);
+    new_surface_pair->first.color.g = static_cast <float> (rand()) / static_cast <float> (RAND_MAX);
+    new_surface_pair->first.color.b = static_cast <float> (rand()) / static_cast <float> (RAND_MAX);
+    new_surface_pair->first.color.a = 1;
+    new_surface_pair->second.id = new_surface_pair->first.id;
+
+    assert(std::is_sorted(surfaces_.begin(), surfaces_.end(), surface_pair_lower_bound_comparator()));
+
+    NODELET_DEBUG_STREAM("Next surface id " << next_surface_id_ << " size " <<
+                         (surface->surface.concave_hull.cloud.height * surface->surface.concave_hull.cloud.width));
+    assert(new_surface_pair->first.id > 0);
+    NODELET_DEBUG_STREAM("set size " << all_ids_before.size());
+
+    auto new_insert_result = all_ids_before.insert(new_surface_pair->first.id);
+    assert(new_insert_result.second); // Assert that the element didn't already exist
+
+
+    std::set<unsigned int> all_ids_after;
+    for (const auto &pair : surfaces_) {
+        assert(pair.first.id == pair.second.id);
+        assert(pair.first.id > 0);
+        auto insert_result = all_ids_after.insert(pair.first.id);
+        assert(insert_result.second); // Assert that the element didn't already exist
+    }
+
 }
 
 void surface_manager::SurfaceManager::replace_surface(const SurfaceStamped::ConstPtr surface,
                                                       const SurfaceMeshStamped::ConstPtr mesh) {
+    std::unique_lock<std::mutex> scope_lock(currently_executing_, std::try_to_lock);
+    // Theoretically this program is never executed concurrently, so we should always get the lock on the first try
+    assert(scope_lock.owns_lock());
     NODELET_DEBUG("Replacement for surface %u received", surface->surface.id);
 
     if (surface->header.frame_id != target_frame_) {
@@ -95,9 +141,28 @@ void surface_manager::SurfaceManager::replace_surface(const SurfaceStamped::Cons
         return;
     }
 
+    if (surface->surface.id != mesh->surface_mesh.id) {
+        NODELET_ERROR_STREAM(
+                "[" << getName().c_str() << "::replace_surface] Cannot replace surface " << surface->surface.id <<
+                " because the associated mesh has a different id " << mesh->surface_mesh.id);
+        return;
+    }
+
+    std::set<unsigned int> all_ids_before;
+    for (const auto &pair : surfaces_) {
+        NODELET_DEBUG_STREAM("Existing surface id before " << pair.first.id << " size " <<
+                             (pair.first.concave_hull.cloud.height * pair.first.concave_hull.cloud.width));
+        assert(pair.first.id == pair.second.id);
+        auto insert_result = all_ids_before.insert(pair.first.id);
+        assert(insert_result.second); // Assert that the element didn't already exist
+    }
+
     auto prev_pos = std::find_if(surfaces_.begin(), surfaces_.end(), [&surface](SurfaceMeshPair &test_surface) {
         return test_surface.first.id == surface->surface.id;
     });
+
+    assert(prev_pos->first.id == surface->surface.id);
+    assert(prev_pos->second.id == surface->surface.id);
 
     if (prev_pos == surfaces_.end()) {
         NODELET_ERROR_STREAM(
@@ -120,12 +185,31 @@ void surface_manager::SurfaceManager::replace_surface(const SurfaceStamped::Cons
         std::rotate(reverse(prev_pos) - 1, reverse(prev_pos), reverse(pos));
     }
 
+    std::set<unsigned int> all_ids_after;
+    for (const auto &pair : surfaces_) {
+        NODELET_DEBUG_STREAM("Existing surface id after  " << pair.first.id << " size " <<
+                             (pair.first.concave_hull.cloud.height * pair.first.concave_hull.cloud.width));
+        assert(pair.first.id == pair.second.id);
+        auto insert_result = all_ids_after.insert(pair.first.id);
+        assert(insert_result.second); // Assert that the element didn't already exist
+    }
+
+    assert(all_ids_after == all_ids_before);
+
     NODELET_DEBUG_STREAM("Old version of surface found at " << std::distance(surfaces_.begin(), prev_pos) <<
                          " and moved to " << std::distance(surfaces_.begin(), pos) <<
                          " (length of array is " << surfaces_.size() << ")");
+
+    NODELET_INFO_STREAM_THROTTLE(5 /*seconds*/, "Current lag in entire pipeline is "
+                                                << (ros::Time::now() - pcl_conversions::fromPCL(surface->header.stamp))
+                                                << " seconds");
 }
 
 void surface_manager::SurfaceManager::publish(const ros::TimerEvent &event) const {
+    std::unique_lock<std::mutex> scope_lock(currently_executing_, std::try_to_lock);
+    // Theoretically this program is never executed concurrently, so we should always get the lock on the first try
+    assert(scope_lock.owns_lock());
+
     if (surfaces_.size() < 1) return;
 
     this->publish_surfaces_mesh_pairs();
@@ -134,7 +218,7 @@ void surface_manager::SurfaceManager::publish(const ros::TimerEvent &event) cons
     this->publish_perimeter_lines();
     this->publish_mesh_triangles();
 
-    NODELET_DEBUG("SurfaceManager published surfaces, meshes, and visualizations");
+//    NODELET_DEBUG("SurfaceManager published surfaces, meshes, and visualizations");
 }
 
 void surface_manager::SurfaceManager::publish_mesh_triangles() const {
@@ -190,7 +274,7 @@ void surface_manager::SurfaceManager::publish_perimeter_lines() const {
             perimeter.type = vis::Marker::LINE_LIST;
             perimeter.action = vis::Marker::MODIFY;
             // perimeter.pose not needed
-            perimeter.scale.x = 0.001; // scale.x controls the width of the line segments
+            perimeter.scale.x = 0.01; // scale.x controls the width of the line segments
             perimeter.color = surface.color;
 
             for (const pcl::Vertices &polygon : surface.concave_hull.polygons) {
@@ -311,6 +395,10 @@ void surface_manager::SurfaceManager::publish_surfaces_mesh_pairs() const {
 
 void surface_manager::SurfaceManager::config_callback(SurfaceManagerConfig &config,
                                                       uint32_t level __attribute((unused))) {
+    std::unique_lock<std::mutex> scope_lock(currently_executing_, std::try_to_lock);
+    // Theoretically this program is never executed concurrently, so we should always get the lock on the first try
+    assert(scope_lock.owns_lock());
+    
     if (publish_interval_ != config.publish_interval) {
         publish_interval_ = static_cast<float>(config.publish_interval);
         publish_timer_.setPeriod(ros::Duration(publish_interval_));

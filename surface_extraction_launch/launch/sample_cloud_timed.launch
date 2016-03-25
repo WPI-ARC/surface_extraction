@@ -1,4 +1,8 @@
 <launch>
+    <arg name="gdb" default="false" />
+    <arg name="valgrind" default="false" />
+    <arg name="cachegrind" default="false" />
+
     <!-- Static transform from world frame to point cloud frame -->
     <node pkg="tf" type="static_transform_publisher" name="tf_broadcaster" args="0 0 1.1  0 -0.05 1.6 /world /base_link 100">
         <remap from="cloud_pcd" to="input_cloud" />
@@ -12,6 +16,10 @@
 
     <include file="$(find surface_extraction_launch)/launch/surface_extraction.launch">
         <arg name="topic_name" value="/filter/output" />
+
+        <arg name="gdb" value="$(arg gdb)" />
+        <arg name="valgrind" value="$(arg valgrind)" />
+        <arg name="cachegrind" value="$(arg cachegrind)" />
     </include>
 
     <node pkg="nodelet" type="nodelet" name="filter" args="load pcl/PassThrough /surface_extraction/nodelet_manager">

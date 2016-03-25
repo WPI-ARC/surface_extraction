@@ -53,6 +53,7 @@
 
             <!-- Params -->
             <param name="dimension" value="2" />
+            <!--<param name="alpha" value="0.25" />-->
             <remap from="~alpha" to="parallel_distance_threshold" />
             <remap from="~target_frame" to="target_frame" />
 
@@ -103,16 +104,6 @@
             <arg name="input_topic" value="change_detect/new_scene" />
             <arg name="surfaces_manager_node" value="surface_manager" />
         </include>
-
-        <!-- Extract new points for input to partial-scene pipeline -->
-        <!--<node pkg="nodelet" type="nodelet" name="publish_new" args="load pcl/ExtractIndices nodelet_manager">-->
-            <!--&lt;!&ndash; Topics &ndash;&gt;-->
-            <!--<remap from="~input" to="change_detect/output" />-->
-            <!--<remap from="~indices" to="change_detect/new_indices" />-->
-
-            <!--&lt;!&ndash; Params &ndash;&gt;-->
-            <!--<param name="use_indices" value="true" />-->
-        <!--</node>-->
 
         <!-- Partial-Scene Pipeline -->
         <include file="$(find surface_extraction_launch)/launch/extract_surfaces_partial.launch">

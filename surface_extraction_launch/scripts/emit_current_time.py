@@ -10,7 +10,7 @@ if __name__ == "__main__":
 
     client = dynamic_reconfigure.client.Client('filter')
 
-    secs_to_skip = 10
+    secs_to_skip = 5
     speedup_factor = 1
 
     start = rospy.get_time() - secs_to_skip

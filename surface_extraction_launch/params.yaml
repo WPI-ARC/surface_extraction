@@ -2,16 +2,20 @@ downsample_resolution: 0.02 # Meters
 
 target_frame: "/world"
 
-parallel_distance_threshold: 0.07 # Meters (I think)
-perpendicular_distance_threshold: 0.03 # Meters (I think)
+parallel_distance_threshold: 0.15 # Meters (I think)
+perpendicular_distance_threshold: 0.5 # Meters (I think)
 
 # These settings are for the static sample point cloud (which is misaligned)
 #crop_box_min: {x: -2, y: -2, z: -2} # Meters
 #crop_box_max: {x: 2, y: 1, z: 2} # Meters
 
+# These settings are for the timed point cloud
+crop_box_min: {x: -10, y: -2, z: -10} # Meters
+crop_box_max: {x: 10, y: 1, z: 10} # Meters
+
 # These settings are for Gazebo
-crop_box_min: {x: -3, y: -3, z: -3} # Meters
-crop_box_max: {x: 3, y: 3, z: 3} # Meters
+#crop_box_min: {x: -3, y: -3, z: -3} # Meters
+#crop_box_max: {x: 3, y: 3, z: 3} # Meters
 
 outlier_removal: {
   mean_k: 50,

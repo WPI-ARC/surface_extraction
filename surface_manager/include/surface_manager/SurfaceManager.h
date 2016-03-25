@@ -35,6 +35,8 @@
 #include <dynamic_reconfigure/server.h>
 #include <surface_manager/SurfaceManagerConfig.h>
 #include <pcl/common/time.h>
+//! For debugging
+#include <mutex>
 
 namespace vis = visualization_msgs;
 
@@ -89,10 +91,19 @@ namespace surface_manager {
 
         struct surface_lower_bound_comparator {
             bool operator()(const SurfaceMeshPair& a, const Surface& b) const {
-                return (a.first.concave_hull.cloud.height * a.first.concave_hull.cloud.width) <
-                        (b.concave_hull.cloud.height * b.concave_hull.cloud.width);
+                return (a.first.concave_hull.cloud.height * a.first.concave_hull.cloud.width) >
+                       (b.concave_hull.cloud.height * b.concave_hull.cloud.width);
             }
         };
+
+        struct surface_pair_lower_bound_comparator {
+            bool operator()(const SurfaceMeshPair& a, const SurfaceMeshPair& b) const {
+                return (a.first.concave_hull.cloud.height * a.first.concave_hull.cloud.width) >
+                       (b.first.concave_hull.cloud.height * b.first.concave_hull.cloud.width);
+            }
+        };
+
+        mutable std::mutex currently_executing_;
 
         std::vector<SurfaceMeshPair> surfaces_;
 
@@ -102,7 +113,7 @@ namespace surface_manager {
 
         std::string target_frame_;
 
-        unsigned int next_surface_id_ = 0;
+        unsigned int next_surface_id_ = 1;
 
         void add_surface(const SurfaceStamped::ConstPtr surface, const SurfaceMeshStamped::ConstPtr mesh);
 

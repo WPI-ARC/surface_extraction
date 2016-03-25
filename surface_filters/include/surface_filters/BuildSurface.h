@@ -109,6 +109,7 @@ namespace surface_filters {
                                        shape_msgs::Mesh &output_trimesh) const;
 
         bool verify_hull(const PolygonMesh &hull, const pcl::ModelCoefficients &model) const;
+        bool verify_hull_segment_lengths(const PolygonMesh &hull) const;
         bool verify_hull_unique_vertices(const PolygonMesh &hull) const;
         bool verify_hull_no_self_intersection(const PolygonMesh &hull, const pcl::ModelCoefficients &model) const;
         bool verify_hull_perimeter_holes(const PolygonMesh &hull) const;

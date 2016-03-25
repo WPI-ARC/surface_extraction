@@ -28,8 +28,14 @@ void surface_filters::BuildSurface::onInit() {
         NODELET_ERROR ("[%s::onInit] Need a 'model_type' parameter to be set before continuing!", getName().c_str());
         return;
     }
+
+    pnh_->getParam("dimension", dimension_);
+    pnh_->getParam("alpha", alpha_);
+
     model_type_ = surfaces::sacModelFromConfigInt(model_type_int);
     proj_.setModelType(model_type_);
+    hull_.setDimension(dimension_);
+    hull_.setAlpha(alpha_);
 
     sub_create_surface_ = pnh_->subscribe<Segment>("create_surface", max_queue_size_,
                                                    bind(&BuildSurface::synchronized_input_callback, this, _1, true));
@@ -59,8 +65,7 @@ void surface_filters::BuildSurface::synchronized_input_callback(const Segment::C
     if (surface) this->publish_surface_mesh(surface, is_new);
 }
 
-surface_filters::BuildSurface::Surface::Ptr surface_filters::BuildSurface::publish_surface(
-        const Segment::ConstPtr &segment, bool is_new) {
+auto surface_filters::BuildSurface::publish_surface(const Segment::ConstPtr &segment, bool is_new) -> Surface::Ptr {
     ros::WallTime start = ros::WallTime::now();
 
     // Create output objects
@@ -69,10 +74,25 @@ surface_filters::BuildSurface::Surface::Ptr surface_filters::BuildSurface::publi
     if (!is_new) surface->surface.id = segment->surface_id;
     surface->surface.model = segment->model;
     this->get_projected_cloud(segment, surface->surface.inliers);
-    this->get_concave_hull({surface, &surface->surface.inliers}, surface->surface.concave_hull);
+//    // Aliasing Constructor: makes a shared_ptr that shares ownership with segment and stores surface->surface.inliers
+//    PointCloudIn::Ptr inliers_cloud_ptr(segment, &surface->surface.inliers);
+//
+//    // For debugging: some sanity checks to check that this works the way I think it does
+//    assert(inliers_cloud_ptr->size() == surface->surface.inliers.size());
+//    assert(inliers_cloud_ptr->header.stamp == surface->surface.inliers.header.stamp);
+//    assert(inliers_cloud_ptr->header.frame_id == surface->surface.inliers.header.frame_id);
+
+    // Make a copy
+    PointCloudIn::Ptr inliers_cloud_ptr = boost::make_shared<PointCloudIn>(surface->surface.inliers);
+
+    this->get_concave_hull(inliers_cloud_ptr, surface->surface.concave_hull);
 
     if (!this->verify_hull(surface->surface.concave_hull, surface->surface.model)) {
-        NODELET_ERROR("Could not build surface because the concave hull is invalid");
+        if (is_new) {
+            NODELET_ERROR_STREAM("Could not build new surface because the concave hull is invalid");
+        } else {
+            NODELET_ERROR_STREAM("Could not build surface " << surface->surface.id << " because the concave hull is invalid");
+        }
         return Surface::Ptr();
     }
 
@@ -96,6 +116,7 @@ surface_filters::BuildSurface::SurfaceMesh::Ptr surface_filters::BuildSurface::p
     // Create output objects
     SurfaceMesh::Ptr surface_mesh = boost::make_shared<SurfaceMesh>();
     surface_mesh->header = surface->header;
+    surface_mesh->surface_mesh.id = surface->surface.id;
     this->get_3d_mesh(surface, surface_mesh->surface_mesh.surface_mesh);
 
     (is_new ? this->pub_new_surface_mesh : this->pub_updated_surface_mesh).publish(surface_mesh);
@@ -133,8 +154,13 @@ void surface_filters::BuildSurface::get_concave_hull(const PointCloudIn::ConstPt
     // Annoyingly, concave hull is not thread-safe.
     std::unique_lock<std::mutex> hull_lock(hull_mutex_);
 
+    hull_.setDimension(dimension_);
+    hull_.setAlpha(alpha_);
+
     // Pass inputs to PCL
     hull_.setInputCloud(projected_cloud);
+
+    assert(hull_.getDimension() == 2);
 
     // Do the reconstruction
     hull_.reconstruct(chull_output);
@@ -142,7 +168,7 @@ void surface_filters::BuildSurface::get_concave_hull(const PointCloudIn::ConstPt
 
 void surface_filters::BuildSurface::get_projected_cloud(const Segment::ConstPtr &segment,
                                                         PointCloudIn &proj_output) {
-    // Uses shared_ptrs' alaiasing constructor to get a shared pointer to the inliers cloud and to the model coeffs
+    // Uses shared_ptrs' alaiasing constructor to get shared pointers to the inliers cloud and to the model coefficients
     // that cooperate with the shared pointer to the segment
     proj_.setInputCloud(PointCloudIn::ConstPtr(segment, &segment->inliers));
     proj_.setModelCoefficients(pcl::ModelCoefficients::ConstPtr(segment, &segment->model));
@@ -362,17 +388,13 @@ void surface_filters::BuildSurface::get_triangluation_trimesh(std::vector<double
                     output_trimesh.triangles[i].vertex_indices[idx] = new_val;
                     output_trimesh.triangles[offset_i].vertex_indices[idx] = new_val + cloud_size;
 
-                    NODELET_DEBUG_STREAM("Triangle at index " << i << " coordinate " << idx << " was out of bounds (" <<
-                                         old_val << "), replaced with closest point: " << new_val);
+//                    NODELET_DEBUG_STREAM("Triangle at index " << i << " coordinate " << idx << " was out of bounds (" <<
+//                                         old_val << "), replaced with closest point: " << new_val);
                 }
             }
         }
 
         count += 2;
-    }
-
-    if (num_points_out > num_points_in) {
-        NODELET_INFO_STREAM("Num out " << num_points_out << " num in " << num_points_in << std::endl << output_trimesh);
     }
 
     int offset = tri_out.numberoftriangles * 2;
@@ -403,8 +425,8 @@ bool surface_filters::BuildSurface::verify_hull(const PolygonMesh &hull, const p
     // 2. None of the lines intersect (even across polygons)
     // 3. The first polygon is the outer perimeter and all the rest are holes
 
-    return /*verify_hull_unique_vertices(hull) && */ verify_hull_no_self_intersection(hull, model) /* &&
-           verify_hull_perimeter_holes(hull) */;
+    return /* verify_hull_unique_vertices(hull) && */ verify_hull_no_self_intersection(hull, model) &&
+           /* verify_hull_perimeter_holes(hull) && */ verify_hull_segment_lengths(hull);
 }
 
 bool surface_filters::BuildSurface::verify_hull_unique_vertices(const PolygonMesh &hull) const {
@@ -617,6 +639,39 @@ bool surface_filters::BuildSurface::verify_hull_perimeter_holes(const PolygonMes
         }
 
         hole_clouds.push_back(cloud);
+    }
+
+    return true;
+}
+
+bool surface_filters::BuildSurface::verify_hull_segment_lengths(const PolygonMesh &hull) const {
+    // Verifies that none of the segments have zero (or near-zero) length
+
+    PointCloudIn hull_cloud;
+    pcl::fromPCLPointCloud2(hull.cloud, hull_cloud);
+
+    for (const pcl::Vertices &vertices : hull.polygons) {
+        // It is acceptable, but not required, for the front to be equal to the back (explicitly closed polygon)
+        // If the last element is equal to the first, ignore it when iterating and treat polygon as implicitly closed
+        std::size_t last_index = vertices.vertices.size();
+        if (vertices.vertices.front() == vertices.vertices.back()) last_index -= 1;
+
+        // Iterate over all but the last element (or the last 2 if it was explicitly closed) to avoid considering
+        // the final line segment (it can never intersect unless at least one other does, and it's hard to handle)
+        for (std::size_t i = 0; i + 1 < last_index; i++) {
+            // i + 1 is safe because i never gets to the last item in the vector
+            auto segment_length = pcl::euclideanDistance(hull_cloud.at(vertices.vertices.at(i)),
+                                                         hull_cloud.at(vertices.vertices.at(i + 1)));
+            if (segment_length < 1e-10) {
+                NODELET_ERROR("Hull invalid -- there is a zero-length segment");
+                return false;
+            }
+
+            if (segment_length > alpha_ * 2) {
+                NODELET_ERROR_STREAM("Hull invalid -- there is a segment with length greater than 2 * " << alpha_ << " (length is " << segment_length << ")");
+                return false;
+            }
+        }
     }
 
     return true;

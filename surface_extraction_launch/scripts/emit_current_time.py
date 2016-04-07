@@ -12,6 +12,7 @@ if __name__ == "__main__":
 
     secs_to_skip = 5
     speedup_factor = 1
+    window_size = 5 # seconds
 
     start = rospy.get_time() - secs_to_skip
 
@@ -22,7 +23,8 @@ if __name__ == "__main__":
 
     while not rospy.is_shutdown():
         try:
-            config = client.update_configuration({'filter_limit_max': (rospy.get_time() - start) * speedup_factor})
+            config = client.update_configuration({'filter_limit_max': (rospy.get_time() - start) * speedup_factor,
+                                                  'filter_limit_min': (rospy.get_time() - start - window_size) * speedup_factor})
         except rospy.service.ServiceException:
             pass
 

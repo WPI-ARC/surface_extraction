@@ -52,8 +52,8 @@ void surface_manager::SurfaceManager::add_surface(const SurfaceStamped::ConstPtr
 
 
     auto hull_size = surface->surface.concave_hull.cloud.width * surface->surface.concave_hull.cloud.height;
-    NODELET_DEBUG_STREAM("New Surface received with " << surface->surface.inliers.size() << " points, " << hull_size <<
-                         " vertices, " << mesh->surface_mesh.surface_mesh.triangles.size() << " triangles");
+//    NODELET_DEBUG_STREAM("New Surface received with " << surface->surface.inliers.size() << " points, " << hull_size <<
+//                         " vertices, " << mesh->surface_mesh.surface_mesh.triangles.size() << " triangles");
 
     if (surface->header.frame_id != target_frame_) {
         NODELET_ERROR_STREAM("[" << getName().c_str() <<
@@ -79,8 +79,8 @@ void surface_manager::SurfaceManager::add_surface(const SurfaceStamped::ConstPtr
 
     std::set<unsigned int> all_ids_before;
     for (const auto &pair : surfaces_) {
-        NODELET_DEBUG_STREAM("Existing surface id " << pair.first.id << " size " <<
-                                     (pair.first.concave_hull.cloud.height * pair.first.concave_hull.cloud.width));
+//        NODELET_DEBUG_STREAM("Existing surface id " << pair.first.id << " size " <<
+//                                     (pair.first.concave_hull.cloud.height * pair.first.concave_hull.cloud.width));
         assert(pair.first.id == pair.second.id);
         assert(pair.first.id > 0);
         auto insert_result = all_ids_before.insert(pair.first.id);
@@ -99,10 +99,10 @@ void surface_manager::SurfaceManager::add_surface(const SurfaceStamped::ConstPtr
 
     assert(std::is_sorted(surfaces_.begin(), surfaces_.end(), surface_pair_lower_bound_comparator()));
 
-    NODELET_DEBUG_STREAM("Next surface id " << next_surface_id_ << " size " <<
-                         (surface->surface.concave_hull.cloud.height * surface->surface.concave_hull.cloud.width));
+//    NODELET_DEBUG_STREAM("Next surface id " << next_surface_id_ << " size " <<
+//                         (surface->surface.concave_hull.cloud.height * surface->surface.concave_hull.cloud.width));
     assert(new_surface_pair->first.id > 0);
-    NODELET_DEBUG_STREAM("set size " << all_ids_before.size());
+//    NODELET_DEBUG_STREAM("set size " << all_ids_before.size());
 
     auto new_insert_result = all_ids_before.insert(new_surface_pair->first.id);
     assert(new_insert_result.second); // Assert that the element didn't already exist
@@ -116,6 +116,7 @@ void surface_manager::SurfaceManager::add_surface(const SurfaceStamped::ConstPtr
         assert(insert_result.second); // Assert that the element didn't already exist
     }
 
+    latest_update_ = surface->header.stamp;
 }
 
 void surface_manager::SurfaceManager::replace_surface(const SurfaceStamped::ConstPtr surface,
@@ -123,7 +124,7 @@ void surface_manager::SurfaceManager::replace_surface(const SurfaceStamped::Cons
     std::unique_lock<std::mutex> scope_lock(currently_executing_, std::try_to_lock);
     // Theoretically this program is never executed concurrently, so we should always get the lock on the first try
     assert(scope_lock.owns_lock());
-    NODELET_DEBUG("Replacement for surface %u received", surface->surface.id);
+//    NODELET_DEBUG("Replacement for surface %u received", surface->surface.id);
 
     if (surface->header.frame_id != target_frame_) {
         NODELET_ERROR_STREAM(
@@ -150,8 +151,8 @@ void surface_manager::SurfaceManager::replace_surface(const SurfaceStamped::Cons
 
     std::set<unsigned int> all_ids_before;
     for (const auto &pair : surfaces_) {
-        NODELET_DEBUG_STREAM("Existing surface id before " << pair.first.id << " size " <<
-                             (pair.first.concave_hull.cloud.height * pair.first.concave_hull.cloud.width));
+//        NODELET_DEBUG_STREAM("Existing surface id before " << pair.first.id << " size " <<
+//                             (pair.first.concave_hull.cloud.height * pair.first.concave_hull.cloud.width));
         assert(pair.first.id == pair.second.id);
         auto insert_result = all_ids_before.insert(pair.first.id);
         assert(insert_result.second); // Assert that the element didn't already exist
@@ -187,8 +188,8 @@ void surface_manager::SurfaceManager::replace_surface(const SurfaceStamped::Cons
 
     std::set<unsigned int> all_ids_after;
     for (const auto &pair : surfaces_) {
-        NODELET_DEBUG_STREAM("Existing surface id after  " << pair.first.id << " size " <<
-                             (pair.first.concave_hull.cloud.height * pair.first.concave_hull.cloud.width));
+//        NODELET_DEBUG_STREAM("Existing surface id after  " << pair.first.id << " size " <<
+//                             (pair.first.concave_hull.cloud.height * pair.first.concave_hull.cloud.width));
         assert(pair.first.id == pair.second.id);
         auto insert_result = all_ids_after.insert(pair.first.id);
         assert(insert_result.second); // Assert that the element didn't already exist
@@ -196,13 +197,15 @@ void surface_manager::SurfaceManager::replace_surface(const SurfaceStamped::Cons
 
     assert(all_ids_after == all_ids_before);
 
-    NODELET_DEBUG_STREAM("Old version of surface found at " << std::distance(surfaces_.begin(), prev_pos) <<
-                         " and moved to " << std::distance(surfaces_.begin(), pos) <<
-                         " (length of array is " << surfaces_.size() << ")");
+//    NODELET_DEBUG_STREAM("Old version of surface found at " << std::distance(surfaces_.begin(), prev_pos) <<
+//                         " and moved to " << std::distance(surfaces_.begin(), pos) <<
+//                         " (length of array is " << surfaces_.size() << ")");
 
     NODELET_INFO_STREAM_THROTTLE(5 /*seconds*/, "Current lag in entire pipeline is "
                                                 << (ros::Time::now() - pcl_conversions::fromPCL(surface->header.stamp))
                                                 << " seconds");
+
+    latest_update_ = surface->header.stamp;
 }
 
 void surface_manager::SurfaceManager::publish(const ros::TimerEvent &event) const {
@@ -366,6 +369,7 @@ void surface_manager::SurfaceManager::publish_surfaces_mesh_pairs() const {
         surfaces_msg = boost::make_shared<Surfaces>();
         surfaces_msg->header.stamp = pcl_conversions::toPCL(ros::Time::now());
         surfaces_msg->header.frame_id = this->target_frame_;
+        surfaces_msg->latest_update = this->latest_update_;
         surfaces_msg->surfaces.reserve(this->surfaces_.size());
     }
 
@@ -374,6 +378,7 @@ void surface_manager::SurfaceManager::publish_surfaces_mesh_pairs() const {
         surface_meshes_msg = boost::make_shared<SurfaceMeshes>();
         surface_meshes_msg->header.stamp = pcl_conversions::toPCL(ros::Time::now());
         surface_meshes_msg->header.frame_id = this->target_frame_;
+        surfaces_msg->latest_update = this->latest_update_;
         surface_meshes_msg->surface_meshes.reserve(this->surfaces_.size());
     }
 

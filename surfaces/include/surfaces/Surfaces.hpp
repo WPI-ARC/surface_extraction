@@ -12,10 +12,12 @@ namespace surfaces {
     template <typename PointType>
     struct Surfaces
     {
-        Surfaces() : header(), surfaces()
+        Surfaces() : header(), latest_update(), surfaces()
         {}
 
         pcl::PCLHeader header;
+        pcl::uint64_t latest_update;
+
         std::vector<Surface<PointType> > surfaces;
 
 
@@ -29,6 +31,8 @@ namespace surfaces {
     {
         s << "header: " << std::endl;
         s << "  " << v.header;
+        s << "latest_update: " << std::endl;
+        s << "  " << v.latest_update;
         s << "surfaces[]" << std::endl;
         for (size_t i = 0; i < v.surfaces.size(); ++i)
         {
@@ -122,6 +126,7 @@ namespace ros
             inline static void write(Stream& stream, const surfaces::Surfaces<T>& item)
             {
                 stream.next(item.header);
+                stream.next(item.latest_update);
                 stream.next(item.surfaces);
             }
 
@@ -132,6 +137,7 @@ namespace ros
                 std_msgs::Header ros_header;
                 stream.next(ros_header);
                 pcl_conversions::toPCL(ros_header, item.header);
+                stream.next(item.latest_update);
                 stream.next(item.surfaces);
             }
 
@@ -140,6 +146,7 @@ namespace ros
                 uint32_t size = 0;
                 size += serializationLength(item.header);
                 size += serializationLength(item.surfaces);
+                size += serializationLength(item.latest_update);
                 return size;
             }
 

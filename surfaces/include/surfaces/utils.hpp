@@ -5,23 +5,39 @@
 #ifndef SURFACES_UTILS_HPP
 #define SURFACES_UTILS_HPP
 
+#include <boost/smart_ptr.hpp>
 #include <boost/lexical_cast.hpp>
 #include <boost/iterator/zip_iterator.hpp>
 #include <boost/range/join.hpp>
-#include <pcl/sample_consensus/model_types.h>
-#include <pcl/exceptions.h>
+
 #include <Eigen/Geometry>
+
+#include <pcl/pcl_base.h>
+#include <pcl/point_cloud.h>
+#include <pcl/exceptions.h>
 #include <pcl_msgs/ModelCoefficients.h>
 #include <pcl/ModelCoefficients.h>
 #include <pcl/PolygonMesh.h>
-#include <pcl/point_cloud.h>
+#include <pcl/sample_consensus/model_types.h>
 #include <pcl_msgs/PointIndices.h>
 
+// Get x and y out of .pointlist
 #define tri_x(points, i) (points[i * 2])
 #define tri_y(points, i) (points[i * 2 + 1])
+
+// Get endpoints out of .segmentlist or .edgelist
+#define tri_e1(segments, i) (segments[i * 2])
+#define tri_e2(segments, i) (segments[i * 2 + 1])
+
+// Get vertices out of .trianglelist
 #define tri_v1(triangles, i) (static_cast<uint32_t>(triangles[i * 3]))
 #define tri_v2(triangles, i) (static_cast<uint32_t>(triangles[i * 3 + 1]))
 #define tri_v3(triangles, i) (static_cast<uint32_t>(triangles[i * 3 + 2]))
+
+// Get triangle indices out of .neighborlist
+#define tri_n1(neighbors, i) (neighbors[i * 3])
+#define tri_n2(neighbors, i) (neighbors[i * 3 + 1])
+#define tri_n3(neighbors, i) (neighbors[i * 3 + 2])
 
 
 namespace surfaces {
@@ -80,12 +96,15 @@ namespace surfaces {
         v_cross << 0, -v(2), v(1), v(2), 0, -v(0), -v(1), v(0), 0;
 
         Eigen::Matrix3f rot = Eigen::Matrix3f::Identity() + v_cross + v_cross * v_cross * (1 - cc) / s2;
+
         Eigen::Affine3f arot(rot);
 
         // Create a transform where the rotation component is given by the rotation axis as the normal vector (a, b, c)
         // and some arbitrary angle about that axis and the translation component is -d in the z direction after
         // that rotation (not the original z direction, which is how transforms are usually defined).
-        return arot * Eigen::Translation3f(0, 0, -d);
+        auto result = Eigen::Translation3f(0, 0, d) * arot.inverse();
+
+        return result;
     }
 
     inline Eigen::Affine3f tf_from_plane_model(const pcl_msgs::ModelCoefficients &plane) {
@@ -104,32 +123,9 @@ namespace surfaces {
         return indices;
     }
 
-    inline void for_each_segment(const std::vector<uint32_t> &vertices, std::function<void(boost::tuple<const uint32_t, const uint32_t>)> func) {
-        const bool explicitly_closed = (vertices.front() == vertices.back());
-
-        // Iterate over every element, except the duplicate at the end if it exists
-        const auto first_range = boost::make_iterator_range(vertices.begin(),
-                                                            vertices.end() - (explicitly_closed ? 1 : 0));
-
-        // Iterate over every element except the first and the duplicate at the end, then iterate over the first
-        const auto second_range = boost::range::join(boost::make_iterator_range(first_range.begin() + 1,
-                                                                                first_range.end()),
-                                                     boost::make_iterator_range(first_range.begin(),
-                                                                                first_range.begin() + 1));
-
-
-        const auto zip_range = boost::make_iterator_range(
-                boost::make_zip_iterator(boost::make_tuple(first_range.begin(), second_range.begin())),
-                boost::make_zip_iterator(boost::make_tuple(first_range.end(), second_range.end()))
-        );
-
-        std::for_each(zip_range.begin(), zip_range.end(), func);
-    }
-
-    inline void for_each_segment(const pcl::PolygonMesh &hull, std::function<void(boost::tuple<const uint32_t, const uint32_t>)> func) {
-        for (const pcl::Vertices &polygon : hull.polygons) {
-            for_each_segment(polygon.vertices, func);
-        }
+    inline std::size_t count_vertices(const std::vector<pcl::Vertices> &polygons) {
+        return std::accumulate(polygons.begin(), polygons.end(), 0,
+                               [](const std::size_t sum, const pcl::Vertices &v){ return sum + v.vertices.size(); });
     }
 }
 

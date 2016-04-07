@@ -70,6 +70,12 @@ namespace surface_manager {
 
         virtual void onInit();
 
+    public:
+        virtual ~SurfaceManager() {
+            new_surface_synchronizer_.reset();
+            updated_surface_synchronizer_.reset();
+        }
+
     private:
         ros::Publisher surfaces_pub_;
         ros::Publisher surface_meshes_pub_;
@@ -105,6 +111,8 @@ namespace surface_manager {
 
         mutable std::mutex currently_executing_;
 
+        decltype(pcl::PCLHeader().stamp) latest_update_;
+
         std::vector<SurfaceMeshPair> surfaces_;
 
         int max_queue_size_;
@@ -126,6 +134,7 @@ namespace surface_manager {
         void publish_perimeter_points() const;
         void publish_perimeter_lines() const;
         void publish_mesh_triangles() const;
+        
 
         void config_callback(SurfaceManagerConfig &config, uint32_t level);
 

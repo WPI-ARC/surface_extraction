@@ -5,19 +5,21 @@
 
 #include <pluginlib/class_list_macros.h>
 #include <surface_filters/BuildSurface.h>
+#include <pcl/common/time.h>
 
-extern "C" {
-#include <triangle.h>
-}
+using libtriangle::Triangulate;
+using libtriangle::AdjacencyList;
 
 void surface_filters::BuildSurface::onInit() {
     pcl_ros::PCLNodelet::onInit();
 
     // Advertise output nodes
-    pub_new_surface = pnh_->advertise<Surface>("new_surface", max_queue_size_);
-    pub_updated_surface = pnh_->advertise<Surface>("updated_surface", max_queue_size_);
-    pub_new_surface_mesh = pnh_->advertise<SurfaceMesh>("new_surface_mesh", max_queue_size_);
-    pub_updated_surface_mesh = pnh_->advertise<SurfaceMesh>("updated_surface_mesh", max_queue_size_);
+    pub_new_surface = pnh_->advertise<SurfaceStamped>("new_surface", max_queue_size_);
+    pub_updated_surface = pnh_->advertise<SurfaceStamped>("updated_surface", max_queue_size_);
+    pub_new_surface_mesh = pnh_->advertise<SurfaceMeshStamped>("new_surface_mesh", max_queue_size_);
+    pub_updated_surface_mesh = pnh_->advertise<SurfaceMeshStamped>("updated_surface_mesh", max_queue_size_);
+
+    pub_markers = pnh_->advertise<visualization_msgs::MarkerArray>("makers", max_queue_size_);
 
     // Enable the dynamic reconfigure service
     srv_ = boost::make_shared<dynamic_reconfigure::Server<BuildSurfaceConfig> >(*pnh_);
@@ -61,15 +63,15 @@ void surface_filters::BuildSurface::synchronized_input_callback(const Segment::C
 //            getMTPrivateNodeHandle().resolveName(is_new ? "create_surface" : "update_surface").c_str());
 
 
-    Surface::Ptr surface = this->publish_surface(segment, is_new);
+    SurfaceStamped::Ptr surface = this->publish_surface(segment, is_new);
     if (surface) this->publish_surface_mesh(surface, is_new);
 }
 
-auto surface_filters::BuildSurface::publish_surface(const Segment::ConstPtr &segment, bool is_new) -> Surface::Ptr {
+auto surface_filters::BuildSurface::publish_surface(const Segment::ConstPtr &segment, bool is_new) -> SurfaceStamped::Ptr {
     ros::WallTime start = ros::WallTime::now();
 
     // Create output objects
-    Surface::Ptr surface = boost::make_shared<Surface>();
+    SurfaceStamped::Ptr surface = boost::make_shared<SurfaceStamped>();
     surface->header = segment->header;
     if (!is_new) surface->surface.id = segment->surface_id;
     surface->surface.model = segment->model;
@@ -85,36 +87,29 @@ auto surface_filters::BuildSurface::publish_surface(const Segment::ConstPtr &seg
     // Make a copy
     PointCloudIn::Ptr inliers_cloud_ptr = boost::make_shared<PointCloudIn>(surface->surface.inliers);
 
-    this->get_concave_hull(inliers_cloud_ptr, surface->surface.concave_hull);
+    surface->surface.concave_hull = this->get_concave_hull(surface->surface.model, *inliers_cloud_ptr, surface->surface.id);
 
     if (!this->verify_hull(surface->surface.concave_hull, surface->surface.model)) {
         if (is_new) {
             NODELET_ERROR_STREAM("Could not build new surface because the concave hull is invalid");
         } else {
-            NODELET_ERROR_STREAM("Could not build surface " << surface->surface.id << " because the concave hull is invalid");
+            NODELET_ERROR_STREAM("Could not build surface " << surface->surface.id
+                                 << " because the concave hull is invalid");
         }
-        return Surface::Ptr();
+//        return SurfaceStamped::Ptr();
     }
 
     (is_new ? this->pub_new_surface : this->pub_updated_surface).publish(surface);
 
-    auto num_pts = surface->surface.inliers.size();
-    auto num_vertices = surface->surface.concave_hull.cloud.height * surface->surface.concave_hull.cloud.width;
-//    NODELET_INFO_STREAM("[" << getName().c_str() << "::synchronized_input_callback] " << std::setprecision(3) <<
-//                        "(" << (ros::WallTime::now() - start) << " sec" <<
-//                        ", " << num_pts << " points" <<
-//                        ", " << num_vertices << " vertices" <<
-//                        ") Published " << (is_new ? "new" : "updated") << " surface");
-
     return surface;
 }
 
-surface_filters::BuildSurface::SurfaceMesh::Ptr surface_filters::BuildSurface::publish_surface_mesh(
-        const Surface::ConstPtr &surface, bool is_new) {
+surface_filters::BuildSurface::SurfaceMeshStamped::Ptr surface_filters::BuildSurface::publish_surface_mesh(
+        const SurfaceStamped::ConstPtr &surface, bool is_new) {
     ros::WallTime start = ros::WallTime::now();
 
     // Create output objects
-    SurfaceMesh::Ptr surface_mesh = boost::make_shared<SurfaceMesh>();
+    SurfaceMeshStamped::Ptr surface_mesh = boost::make_shared<SurfaceMeshStamped>();
     surface_mesh->header = surface->header;
     surface_mesh->surface_mesh.id = surface->surface.id;
     this->get_3d_mesh(surface, surface_mesh->surface_mesh.surface_mesh);
@@ -149,21 +144,335 @@ void surface_filters::BuildSurface::config_callback(BuildSurfaceConfig &config,
     }
 }
 
-void surface_filters::BuildSurface::get_concave_hull(const PointCloudIn::ConstPtr &projected_cloud,
-                                                     PolygonMesh &chull_output) {
-    // Annoyingly, concave hull is not thread-safe.
-    std::unique_lock<std::mutex> hull_lock(hull_mutex_);
+using color_tup = std::array<float, 4>;
 
-    hull_.setDimension(dimension_);
-    hull_.setAlpha(alpha_);
+template <typename Iterator, typename PointT>
+// Takes a container of pcl::Vertices
+vis::Marker marker_from_vertices(const pcl::PointCloud<PointT> &cloud, const Iterator begin, const Iterator end,
+                                 const int id, const std::string &name, const color_tup &color,
+                                 const double width = 0.0025) {
+    vis::Marker marker;
+    marker.header.stamp = ros::Time::now();
+    marker.header.frame_id = cloud.header.frame_id;
+    marker.ns = name;
+    marker.id = id;
+    marker.type = vis::Marker::LINE_LIST;
+    marker.action = vis::Marker::MODIFY;
+    // marker.pose not needed
+    marker.scale.x = width; // scale.x controls the width of the line segments
+    marker.color.r = color[0];
+    marker.color.g = color[1];
+    marker.color.b = color[2];
+    marker.color.a = color[3];
 
-    // Pass inputs to PCL
-    hull_.setInputCloud(projected_cloud);
+    for (auto it = begin; it < end; ++it) {
+        marker.points.reserve(it->vertices.size());
+        for (auto index = it->vertices.begin(); std::next(index) < it->vertices.end(); ++index) {
+            const auto &point1 = cloud.at(*index);
+            const auto &point2 = cloud.at(*(index + 1));
+            geometry_msgs::Point pt1, pt2;
+            std::tie(pt1.x, pt1.y, pt1.z) = std::tie(point1.x , point1.y, point1.z);
+            std::tie(pt2.x, pt2.y, pt2.z) = std::tie(point2.x , point2.y, point2.z);
+            marker.points.push_back(pt1);
+            marker.points.push_back(pt2);
+        }
+    }
 
-    assert(hull_.getDimension() == 2);
+    return marker;
+}
 
-    // Do the reconstruction
-    hull_.reconstruct(chull_output);
+template <typename Iterator, typename PointT>
+// Takes a container of point indices which are explicitly connected
+vis::Marker marker_from_points(const pcl::PointCloud<PointT> &cloud, const Iterator begin, const Iterator end,
+                                 const int id, const std::string &name, const color_tup &color,
+                                 const double width = 0.025) {
+    vis::Marker marker;
+    marker.header.stamp = ros::Time::now();
+    marker.header.frame_id = cloud.header.frame_id;
+    marker.ns = name;
+    marker.id = id;
+    marker.type = vis::Marker::LINE_LIST;
+    marker.action = vis::Marker::MODIFY;
+    // marker.pose not needed
+    marker.scale.x = width; // scale.x controls the width of the line segments
+    marker.color.r = color[0];
+    marker.color.g = color[1];
+    marker.color.b = color[2];
+    marker.color.a = color[3];
+
+    const auto dist = std::distance(begin, end);
+    std::cout << "Reserving " << dist << " elements" << std::endl;
+    assert(dist <= marker.points.max_size());
+    marker.points.reserve(dist);
+    for (auto it = begin; it < end; ++it) {
+        const auto &point1 = cloud.at(*it);
+        geometry_msgs::Point pt1;
+        std::tie(pt1.x, pt1.y, pt1.z) = std::tie(point1.x , point1.y, point1.z);
+        marker.points.push_back(pt1);
+    }
+
+    return marker;
+}
+
+auto surface_filters::BuildSurface::get_concave_hull(const pcl::ModelCoefficients &model, const PointCloudIn &cloud,
+                                                     const int surface_id) -> PolygonMesh {
+    std::lock_guard<std::mutex>  lock(hull_mutex_); //! For debugging, to stop output from being interleaved
+    // Guaranteed properties of the meshes that come out of this function:
+    // 1. The first polygon is the outer perimeter and the rest describe holes -- none are outside the outer perimeter
+    // 2. All boundary points are included in the hull cloud, even if they aren't used by any polygon
+    // 3. Points which are not on the boundary are not in the hull cloud (the hull cloud is near minimal size)
+    // 4. Every segment, including the one that implicitly closes a polygon, has length less than alpha
+    // 5. Every polygon has at least three points
+
+    // TODO: Verify if these properties are true:
+    // 6. There are no areas that are only connected by line segments (but there may be ones connected only by points)
+    //    (note I've seen outcroppings that are only line segments
+
+    // Not guaranteed properties
+    // 1. Clockwise vs counterclockwise is not guaranteed
+    // 2. Explicitly vs implicitly closed is not guaranteed (this could be changed easily)
+    // 3. There is no minimum thickness for any part of the hull
+
+    pcl::ScopeTime scopetime("Compute concave hull");
+    PolygonMesh hull;
+    hull.header = cloud.header;
+
+    vis::MarkerArray markers;
+
+    Triangulate tri(cloud, surfaces::tf_from_plane_model(model));
+
+    // Triangulate from the triangle library, switches are:
+    // z: makes indices start counting from zero, same convention as PCL
+    // e: makes it output edges
+    // D: tells it to do a Delauney triangulation
+    // Q: (not used while debugging) don't print output
+    {
+        pcl::ScopeTime inscopetime("Triangulating");
+        tri.triangulate("zeDQ");
+    }
+//    assert(tri.numberofinputpoints() == cloud.size());
+//    assert(tri.numberofpoints() >= cloud.size());
+
+    const double alpha_squared = alpha_ * alpha_;
+    auto edge_too_long_fn = [&](const Triangulate::Edge &edge) { return tri.edge_length_sqr(edge) > alpha_squared; };
+
+    struct EdgeAccum {
+        int operator()(const int &so_far, const std::pair<const Triangulate::Edge, int> &pair) const {
+            return so_far + pair.second;
+        }
+    };
+
+    struct EdgeCountEq {
+        const int target_;
+        EdgeCountEq(const int target) : target_(target) {}
+        int operator()(const std::pair<const Triangulate::Edge, int> &pair) const {
+            return pair.second == target_;
+        }
+    };
+
+    struct EdgeCountGt {
+        const int target_;
+        EdgeCountGt(const int target) : target_(target) {}
+        int operator()(const std::pair<const Triangulate::Edge, int> &pair) const {
+            return pair.second > target_;
+        }
+    };
+
+    // ALPHA SHAPE: Build queriable map of non-removed triangles
+    std::unordered_map<Triangulate::Edge, int, Triangulate::EdgeHash> num_adjacent_triangles;
+//    std::size_t n_used_triangles = 0;
+//    std::size_t n_unused_triangles = 0;
+    std::vector<Triangulate::point_id> triangles, unused_triangles;
+
+    {
+        pcl::ScopeTime inscopetime("Filtering triangles + counting edge adjacencies");
+
+        for (const Triangulate::Triangle &triangle : tri.triangles()) {
+            const auto &edges = tri.triangle_edges(triangle);
+
+    //        NODELET_DEBUG_STREAM("Triangle edges: ("
+    //                             << edges[0][0] << ", " << edges[0][1] << "), ("
+    //                             << edges[1][0] << ", " << edges[1][1] << "), ("
+    //                             << edges[2][0] << ", " << edges[2][1] << ")");
+            if (std::none_of(edges.begin(), edges.end(), edge_too_long_fn)) {
+//                auto prev_acc = std::accumulate(num_adjacent_triangles.begin(), num_adjacent_triangles.end(), 0, EdgeAccum());
+                for (const Triangulate::Edge &edge : edges) {
+                    num_adjacent_triangles[edge] += 1;
+                }
+//                assert(prev_acc + 3 == std::accumulate(num_adjacent_triangles.begin(), num_adjacent_triangles.end(), 0, EdgeAccum()));
+
+//                n_used_triangles += 1;
+                for (const Triangulate::Edge &edge : edges) for (const Triangulate::point_id &pid : edge) triangles.push_back(pid);
+            } else {
+//                n_unused_triangles += 1;
+                for (const Triangulate::Edge &edge : tri.triangle_edges(triangle)) for (const Triangulate::point_id &pid : edge) unused_triangles.push_back(pid);
+            }
+
+    //        NODELET_DEBUG_STREAM_THROTTLE(2, "Counting adjacent triangles (" << num_adjacent_triangles.size() << " so far)");
+        }
+    }
+
+//    NODELET_DEBUG_STREAM("Found " << tri.numberoftriangles() << " triangles, " << n_unused_triangles
+//                         << " of which are too big");
+
+    PointCloudIn triangles_cld = tri.cloud_from_point_ids<PointIn>(triangles);
+    PointCloudIn unused_triangles_cld = tri.cloud_from_point_ids<PointIn>(unused_triangles);
+    triangles_cld.header.frame_id = unused_triangles_cld.header.frame_id = cloud.header.frame_id;
+    markers.markers.push_back(marker_from_points(triangles_cld, triangles.begin(), triangles.end(), surface_id, "delauney_used", {1, 1, 1, 0.3}));
+    markers.markers.push_back(marker_from_points(unused_triangles_cld, unused_triangles.begin(), unused_triangles.end(), surface_id, "delauney_unused", {1, 0, 0, 0.3}));
+
+//    assert(n_used_triangles + n_unused_triangles == tri.numberoftriangles());
+//    assert(std::accumulate(num_adjacent_triangles.begin(), num_adjacent_triangles.end(), 0, EdgeAccum()) == 3 * n_used_triangles);
+
+/*    NODELET_DEBUG_STREAM("Found " << num_adjacent_triangles.size() << " non-deleted edges: "
+                         << std::count_if(num_adjacent_triangles.begin(), num_adjacent_triangles.end(), EdgeCountEq(1))
+                         << " with one adjacent triangle, "
+                         << std::count_if(num_adjacent_triangles.begin(), num_adjacent_triangles.end(), EdgeCountEq(2))
+                         << " with two, "
+                         << std::count_if(num_adjacent_triangles.begin(), num_adjacent_triangles.end(), EdgeCountEq(0))
+                         << " with none, "
+                         << std::count_if(num_adjacent_triangles.begin(), num_adjacent_triangles.end(), EdgeCountGt(2))
+                         << " with more");
+*/
+
+    // ALPHA SHAPE: Build adjacency list of all boundary edges (edges that belong to exactly one non-deleted triangle)
+    AdjacencyList point_adjacency;
+    {
+        pcl::ScopeTime inscopetime("Building adjacency list");
+        for (const Triangulate::Edge &edge : tri.edges()) {
+            if (num_adjacent_triangles[edge] == 1) point_adjacency.add(edge);
+        }
+    }
+
+//    NODELET_DEBUG_STREAM("Point adjacency list has " << point_adjacency.size() << " elements");
+
+    // Function that takes the current point and its edge and returns the next point and its edge
+    auto next_point = [&point_adjacency, &tri](AdjacencyList::iterator it) {
+        auto this_point_i = it->first;
+        auto next_point_i = it->second;
+
+        bool both_removed = point_adjacency.remove(it);
+
+//        assert(both_removed);
+
+        // Recompute neighbors
+        auto neighbors = point_adjacency.neighbors(next_point_i);
+
+        // Equal range returns iterators to the same element if there aren't matches, but not guaranteed to be the end
+        // iterator. If not for this line then min_element would return neighbors.second when the caller expected .end()
+        if (neighbors.first == neighbors.second) neighbors.first = neighbors.second = point_adjacency.end();
+
+        const auto &origin = tri.get_point_eigen(next_point_i);
+        const auto &ref_vector = tri.get_point_eigen(this_point_i) - origin;
+
+        // Choose the rightmost element as the element with the largest dot product
+        return std::min_element(neighbors.first, neighbors.second,
+            [&tri, &origin, &ref_vector](const AdjacencyList::value_type &a, const AdjacencyList::value_type &b) {
+                const auto &a_vector = tri.get_point_eigen(a.second) - origin;
+                const auto &b_vector = tri.get_point_eigen(b.second) - origin;
+
+                return ref_vector.dot(a_vector) < ref_vector.dot(b_vector);
+            });
+    };
+
+    // ALPHA SHAPE: Make polygons out of edges
+    {
+        pcl::ScopeTime inscopetime("Making polygons");
+        while (!point_adjacency.empty()) {
+            // Start from the lowest point (most negative y) going right as horizontally as possible (most positive x)
+            auto edge_it = std::min_element(point_adjacency.begin(), point_adjacency.end(),
+                [&tri](const AdjacencyList::value_type &a, const AdjacencyList::value_type &b) {
+                    // If the points aren't the same, choose the one with the lowest y
+                    // If the points are the same, choose the neighbor with the largest x
+                    return (a.first != b.first) ? tri.get_y(a.first) < tri.get_y(b.first)
+                                                : tri.get_x(a.second) > tri.get_x(b.second);
+                });
+
+//            assert(edge_it != point_adjacency.end());
+
+//            NODELET_DEBUG_STREAM("New polygon starting at  " << *edge_it);
+
+            // Make a new polygon
+            hull.polygons.emplace_back();
+
+            do { // For every connected point
+
+//                NODELET_DEBUG_STREAM("Next edge is  " << *edge_it);
+                // Add the point (iterator->first) to the polygon
+                hull.polygons.back().vertices.push_back(edge_it->first);
+                // Get the next point (also deletes the current point from the edge map)
+                edge_it = next_point(edge_it);
+            } while (edge_it != point_adjacency.end());
+
+            // Assert that polygon is either implicitly connected or explicitly connected
+//            const auto front = hull.polygons.back().vertices.front();
+//            const auto back = hull.polygons.back().vertices.back();
+//            assert((front == back) || tri.edge_length_sqr({static_cast<Triangulate::point_id>(back),
+//                                                           static_cast<Triangulate::point_id>(front)}) <= alpha_squared);
+        }
+    }
+
+//    NODELET_DEBUG_STREAM("Produced " << hull.polygons.size() << " polygons with "
+//                         << surfaces::count_vertices(hull.polygons) << " vertices");
+
+    // ALPHA SHAPE: Find the largest polygon (by number of vertices) and move it to the front
+    auto perimeter_it = std::min_element(hull.polygons.begin(), hull.polygons.end(),
+                                         [](const pcl::Vertices &a, const pcl::Vertices &b) {
+                                             return a.vertices.size() > b.vertices.size();
+                                         });
+//    assert(perimeter_it != hull.polygons.end());
+    std::iter_swap(perimeter_it, hull.polygons.begin());
+
+    // Remove polygons outside the outer perimeter
+    {
+        pcl::ScopeTime inscopetime("Removing islands");
+        const auto& perimeter_v = hull.polygons[0].vertices;
+        const auto remove_outside = [&tri, &perimeter_v](const pcl::Vertices &v) {
+            return !tri.point_in_polygon(v.vertices[0], perimeter_v.begin(), perimeter_v.end());
+        };
+        const auto remove_start = std::remove_if(hull.polygons.begin() + 1, hull.polygons.end(),
+                                                 remove_outside);
+        {//! For debugging
+    //        NODELET_DEBUG_STREAM("Removing " << std::distance(remove_start, hull.polygons.end())
+    //                             << " polygons for being outside");
+    //        auto new_hull_cloud = triangle_cloud_from_polygons<PointIn>(surfaces::tf_from_plane_model(model), tri,
+    //                                                                          hull.polygons);
+    //        new_hull_cloud.header.frame_id = cloud.header.frame_id;
+    //        markers.markers.push_back(marker_from_vertices(new_hull_cloud, remove_start, hull.polygons.end(),
+    //                                                       surface_id, "removed_polygons", {0, 1, 1, 1}));
+        }
+        hull.polygons.erase(remove_start, hull.polygons.end());
+    }
+
+//    for (const pcl::Vertices &vertices : hull.polygons) {
+//        NODELET_DEBUG_STREAM("Polygon Before (" << vertices.vertices.size() << " vertices)");
+//        std::copy(vertices.vertices.begin(), vertices.vertices.end(), std::ostream_iterator<int>(std::cout, ", "));
+//        std::cout << std::endl;
+//    }
+
+    // Final steps: Reindex and copy the cloud into hull as a pcl::PCLPointCloud2 and set the header
+    {
+        pcl::ScopeTime inscopetime("Reindexing");
+        const auto new_hull_cloud = tri.cloud_from_polygons<PointIn>(hull.polygons);
+
+//        for (const pcl::Vertices &vertices : hull.polygons) {
+//            NODELET_DEBUG_STREAM("Polygon After (" << vertices.vertices.size() << " vertices)");
+//            std::copy(vertices.vertices.begin(), vertices.vertices.end(), std::ostream_iterator<int>(std::cout, ", "));
+//            std::cout << std::endl;
+//        }
+
+        pcl::toPCLPointCloud2(new_hull_cloud, hull.cloud);
+    }
+
+//    NODELET_DEBUG_STREAM("Output PolygonMesh has " << hull.polygons.size() << " polygons with "
+//                         << surfaces::count_vertices(hull.polygons) << " vertices and "
+//                         << (hull.cloud.width * hull.cloud.height) << " points");
+
+    pub_markers.publish(markers);
+
+    std::cout << std::endl;
+
+    return hull;
 }
 
 void surface_filters::BuildSurface::get_projected_cloud(const Segment::ConstPtr &segment,
@@ -175,7 +484,7 @@ void surface_filters::BuildSurface::get_projected_cloud(const Segment::ConstPtr 
     proj_.filter(proj_output);
 }
 
-void surface_filters::BuildSurface::get_3d_mesh(const Surface::ConstPtr &surface, shape_msgs::Mesh &output_trimesh) {
+void surface_filters::BuildSurface::get_3d_mesh(const SurfaceStamped::ConstPtr &surface, shape_msgs::Mesh &output_trimesh) {
     PointCloudIn hull_cloud;
     pcl::fromPCLPointCloud2(surface->surface.concave_hull.cloud, hull_cloud);
     assert(hull_cloud.size() == surface->surface.concave_hull.cloud.width * surface->surface.concave_hull.cloud.height);
@@ -298,8 +607,8 @@ void surface_filters::BuildSurface::get_triangluation_trimesh(std::vector<double
 #pragma clang diagnostic pop
 
     // Initialize tri_out according to triangle.h:206
-    tri_out.pointlist = NULL; // NULL tells Triangle to allocate the memory for it
-    tri_out.trianglelist = NULL; // NULL tells Triangle to allocate the memory for it
+    tri_out.pointlist = NULL; // NULL tells Triangulate to allocate the memory for it
+    tri_out.trianglelist = NULL; // NULL tells Triangulate to allocate the memory for it
 
     // Triangulate from the triangle library, switches are:
     // z: makes indices start counting from zero, same convention as PCL
@@ -388,7 +697,7 @@ void surface_filters::BuildSurface::get_triangluation_trimesh(std::vector<double
                     output_trimesh.triangles[i].vertex_indices[idx] = new_val;
                     output_trimesh.triangles[offset_i].vertex_indices[idx] = new_val + cloud_size;
 
-//                    NODELET_DEBUG_STREAM("Triangle at index " << i << " coordinate " << idx << " was out of bounds (" <<
+//                    NODELET_DEBUG_STREAM("Triangulate at index " << i << " coordinate " << idx << " was out of bounds (" <<
 //                                         old_val << "), replaced with closest point: " << new_val);
                 }
             }
@@ -426,7 +735,7 @@ bool surface_filters::BuildSurface::verify_hull(const PolygonMesh &hull, const p
     // 3. The first polygon is the outer perimeter and all the rest are holes
 
     return /* verify_hull_unique_vertices(hull) && */ verify_hull_no_self_intersection(hull, model) &&
-           /* verify_hull_perimeter_holes(hull) && */ verify_hull_segment_lengths(hull);
+           verify_hull_perimeter_holes(hull) && verify_hull_segment_lengths(hull);
 }
 
 bool surface_filters::BuildSurface::verify_hull_unique_vertices(const PolygonMesh &hull) const {
@@ -486,74 +795,6 @@ bool surface_filters::BuildSurface::verify_hull_unique_vertices(const PolygonMes
     return true;
 }
 
-// All code within the geeksforgeeks namespace is sourced from
-// http://www.geeksforgeeks.org/check-if-two-given-line-segments-intersect/
-// with no modifications other than removing "using namespace std;" and adding the "std::" prefix where appropriate,
-// and changing the type of the coordinates from int to double
-namespace geeksforgeeks {
-    struct Point {
-        double x;
-        double y;
-    };
-
-// Given three colinear points p, q, r, the function checks if
-// point q lies on line segment 'pr'
-    bool onSegment(Point p, Point q, Point r) {
-        if (q.x <= std::max(p.x, r.x) && q.x >= std::max(p.x, r.x) &&
-            q.y <= std::max(p.y, r.y) && q.y >= std::max(p.y, r.y))
-            return true;
-
-        return false;
-    }
-
-// To find orientation of ordered triplet (p, q, r).
-// The function returns following values
-// 0 --> p, q and r are colinear
-// 1 --> Clockwise
-// 2 --> Counterclockwise
-    int orientation(Point p, Point q, Point r) {
-        // See http://www.geeksforgeeks.org/orientation-3-ordered-points/
-        // for details of below formula.
-        int val = (q.y - p.y) * (r.x - q.x) -
-                  (q.x - p.x) * (r.y - q.y);
-
-        if (val == 0) return 0;  // colinear
-
-        return (val > 0) ? 1 : 2; // clock or counterclock wise
-    }
-
-// The main function that returns true if line segment 'p1q1'
-// and 'p2q2' intersect.
-    bool doIntersect(Point p1, Point q1, Point p2, Point q2) {
-        // Find the four orientations needed for general and
-        // special cases
-        int o1 = orientation(p1, q1, p2);
-        int o2 = orientation(p1, q1, q2);
-        int o3 = orientation(p2, q2, p1);
-        int o4 = orientation(p2, q2, q1);
-
-        // General case
-        if (o1 != o2 && o3 != o4)
-            return true;
-
-        // Special Cases
-        // p1, q1 and p2 are colinear and p2 lies on segment p1q1
-        if (o1 == 0 && onSegment(p1, p2, q1)) return true;
-
-        // p1, q1 and p2 are colinear and q2 lies on segment p1q1
-        if (o2 == 0 && onSegment(p1, q2, q1)) return true;
-
-        // p2, q2 and p1 are colinear and p1 lies on segment p2q2
-        if (o3 == 0 && onSegment(p2, p1, q2)) return true;
-
-        // p2, q2 and q1 are colinear and q1 lies on segment p2q2
-        if (o4 == 0 && onSegment(p2, q1, q2)) return true;
-
-        return false; // Doesn't fall in any of the above cases
-    }
-}
-
-
 bool surface_filters::BuildSurface::verify_hull_no_self_intersection(const PolygonMesh &hull,
                                                                      const pcl::ModelCoefficients &model) const {
     // Verifies none of the lines intersect (even across polygons)
@@ -566,36 +807,42 @@ bool surface_filters::BuildSurface::verify_hull_no_self_intersection(const Polyg
     shape_msgs::Mesh dummy;
     this->get_triangulation_vertices(model, hull_cloud, dummy, points_2d);
 
-    std::vector<std::pair<geeksforgeeks::Point, geeksforgeeks::Point>> segments;
-
-    for (const pcl::Vertices &vertices : hull.polygons) {
-        segments.reserve(segments.size() + vertices.vertices.size());
-
-        // It is acceptable, but not required, for the front to be equal to the back (explicitly closed polygon)
-        // If the last element is equal to the first, ignore it when iterating and treat polygon as implicitly closed
-        std::size_t last_index = vertices.vertices.size();
-        if (vertices.vertices.front() == vertices.vertices.back()) last_index -= 1;
-
-        // Iterate over all but the last element (or the last 2 if it was explicitly closed) to avoid considering
-        // the final line segment (it can never intersect unless at least one other does, and it's hard to handle)
-        for (std::size_t i = 0; i + 1 < last_index; i++) {
-            // i + 1 is safe because i never gets to the last item in the vector
-            decltype(segments)::value_type next_seg({tri_x(points_2d, vertices.vertices[i]),
-                                                     tri_y(points_2d, vertices.vertices[i])},
-                                                    {tri_x(points_2d, vertices.vertices[i + 1]),
-                                                     tri_y(points_2d, vertices.vertices[i + 1])});
-
-            // Make a range that skips the previous segment unless this is the first segment of the current polygon
-            for (const auto &segment : boost::make_iterator_range(segments, 0, (i == 0) ? 0 : -1)) {
-                if (geeksforgeeks::doIntersect(segment.first, segment.second, next_seg.first, next_seg.second)) {
-                    NODELET_ERROR("Hull invalid -- self-intersection");
-                    return false;
-                }
-            }
-
-            segments.push_back(std::move(next_seg));
-        }
-    }
+//    std::vector<std::pair<geeksforgeeks::Point, geeksforgeeks::Point>> segments;
+//
+//    for (const pcl::Vertices &vertices : hull.polygons) {
+//        segments.reserve(segments.size() + vertices.vertices.size());
+//
+//        // It is acceptable, but not required, for the front to be equal to the back (explicitly closed polygon)
+//        // If the last element is equal to the first, ignore it when iterating and treat polygon as implicitly closed
+//        std::size_t last_index = vertices.vertices.size();
+//        if (vertices.vertices.front() == vertices.vertices.back()) last_index -= 1;
+//
+//        // Iterate over all but the last element (or the last 2 if it was explicitly closed) to avoid considering
+//        // the final line segment (it can never intersect unless at least one other does, and it's hard to handle)
+//        for (std::size_t i = 0; i + 1 < last_index; i++) {
+//            // i + 1 is safe because i never gets to the last item in the vector
+//            decltype(segments)::value_type next_seg({tri_x(points_2d, vertices.vertices[i]),
+//                                                     tri_y(points_2d, vertices.vertices[i])},
+//                                                    {tri_x(points_2d, vertices.vertices[i + 1]),
+//                                                     tri_y(points_2d, vertices.vertices[i + 1])});
+//
+//            // Make a range that skips the previous segment unless this is the first segment of the current polygon
+//            for (const auto &segment : boost::make_iterator_range(segments, 0, (i == 0) ? 0 : -1)) {
+//                if ((segment.first == next_seg.first || segment.first == next_seg.second) ||
+//                        (segment.second == next_seg.first || segment.second == next_seg.second) ) {
+//                    // In this case they share an endpoint and another self-intersection test must be used.
+//                    // I don't know how to write that test
+////                    NODELET_WARN_STREAM("Segments share an endpoint and won't be checked for self-intersection");
+//                } else if (geeksforgeeks::doIntersect(segment.first, segment.second, next_seg.first, next_seg.second)) {
+//                    NODELET_ERROR_STREAM("Hull invalid -- self-intersection (points " << segment.first << ", "
+//                                         << segment.second << ", " << next_seg.first << ", " << next_seg.second);
+//                    return false;
+//                }
+//            }
+//
+//            segments.push_back(std::move(next_seg));
+//        }
+//    }
 
     return true;
 }

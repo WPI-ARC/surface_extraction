@@ -13,21 +13,26 @@
 
         <!-- Nodelet manager -->
         <node if="$(arg gdb)" pkg="nodelet" type="nodelet" name="nodelet_manager" args="manager" required="true"
-              output="screen" launch-prefix="xterm -fs 18 -e gdb --args" />
+              output="screen" launch-prefix="xterm -e gdb --args" />
 
         <!--Nodelet manager -->
         <node if="$(arg valgrind)" pkg="nodelet" type="nodelet" name="nodelet_manager" args="manager" required="true"
-              output="screen" launch-prefix="valgrind" />
+              output="screen" launch-prefix="valgrind --track-origins=yes" />
 
         <!-- Nodelet manager -->
         <node if="$(arg cachegrind)" pkg="nodelet" type="nodelet" name="nodelet_manager" args="manager" required="true"
-              output="screen" launch-prefix="valgrind --tool=callgrind" />
+              output="screen" launch-prefix="operf " />
 
         <!-- Nodelet manager -->
         <group unless="$(arg gdb)">
             <group unless="$(arg valgrind)">
-                <node unless="$(arg cachegrind)" pkg="nodelet" type="nodelet" name="nodelet_manager" args="manager"
-                      required="true" output="screen" />
+                <group unless="$(arg cachegrind)">
+                    <node pkg="nodelet" type="nodelet" name="nodelet_manager" args="manager"
+                          required="true" output="screen" />
+                    <!--<node pkg="nodelet" type="nodelet" name="nodelet_manager_valgrind" args="manager" required="true"-->
+                          <!--output="screen" launch-prefix="valgrind &#45;&#45;track-origins=yes" />-->
+
+                </group>
             </group>
         </group>
 

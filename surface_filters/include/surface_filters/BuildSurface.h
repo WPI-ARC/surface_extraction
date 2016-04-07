@@ -8,7 +8,8 @@
 
 // System / Boost
 #include <mutex>
-#include <boost/range/adaptor/strided.hpp>
+#include <unordered_map>
+#include <boost/range/adaptors.hpp>
 
 // PCL
 #include <pcl_ros/pcl_nodelet.h>
@@ -22,6 +23,8 @@
 #include <shape_msgs/Mesh.h>
 #include <shape_msgs/MeshTriangle.h>
 #include <sensor_msgs/point_cloud2_iterator.h>
+#include <visualization_msgs/MarkerArray.h>
+#include <visualization_msgs/Marker.h>
 
 // Dynamic reconfigure
 #include <dynamic_reconfigure/server.h>
@@ -32,6 +35,9 @@
 #include <surfaces/Segment.hpp>
 #include <surfaces/SurfaceStamped.hpp>
 #include <surfaces/SurfaceMeshStamped.hpp>
+#include "surface_filters/Triangulate.h"
+
+namespace vis = visualization_msgs;
 
 namespace surface_filters {
     namespace sync_policies = message_filters::sync_policies;
@@ -51,8 +57,8 @@ namespace surface_filters {
         typedef pcl::PolygonMesh PolygonMesh;
 
         typedef surfaces::Segment<PointIn> Segment;
-        typedef surfaces::SurfaceStamped<PointIn> Surface;
-        typedef surfaces::SurfaceMeshStamped SurfaceMesh;
+        typedef surfaces::SurfaceStamped<PointIn> SurfaceStamped;
+        typedef surfaces::SurfaceMeshStamped SurfaceMeshStamped;
 
         // Message synchronizer types
         template<typename ...SubscribedTypes>
@@ -61,7 +67,7 @@ namespace surface_filters {
         using ApproximateTimeSynchronizer = message_filters::Synchronizer<sync_policies::ApproximateTime<SubscribedTypes...> >;
 
     protected:
-        pcl::SacModel model_type_;
+        pcl::SacModel model_type_ = pcl::SACMODEL_PLANE;
 
         /** \brief positive, non-zero value, defining the maximum length from a vertex to the facet center. */
         double alpha_ = 0.025;
@@ -88,15 +94,16 @@ namespace surface_filters {
           */
         void synchronized_input_callback(const Segment::ConstPtr &segment, bool is_new);
 
-        Surface::Ptr publish_surface(const Segment::ConstPtr &segment, bool is_new);
+        SurfaceStamped::Ptr publish_surface(const Segment::ConstPtr &segment, bool is_new);
 
-        SurfaceMesh::Ptr publish_surface_mesh(const Surface::ConstPtr &surface, bool is_new);
+        SurfaceMeshStamped::Ptr publish_surface_mesh(const SurfaceStamped::ConstPtr &surface, bool is_new);
 
-        void get_concave_hull(const PointCloudIn::ConstPtr &projected_cloud, PolygonMesh &chull_output);
+        PolygonMesh get_concave_hull(const pcl::ModelCoefficients &model, const PointCloudIn &cloud,
+                                     const int surface_id);
 
         void get_projected_cloud(const Segment::ConstPtr &segment, PointCloudIn &proj_output);
 
-        void get_3d_mesh(const Surface::ConstPtr &surface, shape_msgs::Mesh &output_trimesh);
+        void get_3d_mesh(const SurfaceStamped::ConstPtr &surface, shape_msgs::Mesh &output_trimesh);
 
         void get_triangulation_vertices(const pcl::ModelCoefficients &model, const PointCloudIn &hull_cloud,
                                         shape_msgs::Mesh &output_trimesh, std::vector<double> &points_2d) const;
@@ -124,6 +131,8 @@ namespace surface_filters {
         ros::Publisher pub_new_surface_mesh;
         ros::Publisher pub_updated_surface;
         ros::Publisher pub_updated_surface_mesh;
+
+        ros::Publisher pub_markers;
 
         /** \brief The input PointCloud subscriber (used when 'input' is the only required topic) */
         ros::Subscriber sub_create_surface_;

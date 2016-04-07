@@ -139,7 +139,7 @@ void surface_filters::MovingLeastSquaresNodelet::synchronized_input_callback(con
     impl_.setSearchMethod(tree_);
 
     NODELET_DEBUG(
-            "[%s::synchronized_input_callback] Running MLS with search radius %f, polynomial fit %d, polynomial order %d, sqr gauss param %f, compute normals %d",
+            "[%s::synchronized_input_callback] Running MLS with search radius %f, polynomial fit %d, polynomial order %d, sqr gauss param %f, triangulate normals %d",
             getName().c_str(), impl_.getSearchRadius(), impl_.getPolynomialFit(), impl_.getPolynomialOrder(),
             impl_.getSqrGaussParam(), compute_normals_);
 
@@ -198,7 +198,7 @@ void surface_filters::MovingLeastSquaresNodelet::config_callback(MLSConfig &conf
     }
     if (compute_normals_ != config.compute_normals) {
         compute_normals_ = config.compute_normals;
-        NODELET_DEBUG ("[config_callback] Setting the compute normals flag to: %d.", compute_normals_);
+        NODELET_DEBUG ("[config_callback] Setting the triangulate normals flag to: %d.", compute_normals_);
         impl_.setComputeNormals(compute_normals_);
     }
 }

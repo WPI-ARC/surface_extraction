@@ -1,5 +1,5 @@
 
-<!-- PCL Surface reconstruction library component -->
+<!-- PCL SurfaceStamped reconstruction library component -->
 <library path="lib/libsurface_filters">
   <class name="surface_filters/MovingLeastSquaresNodelet" type="surface_filters::MovingLeastSquaresNodelet" base_class_type="nodelet::Nodelet">
     <description>

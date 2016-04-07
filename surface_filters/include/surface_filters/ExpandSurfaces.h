@@ -6,6 +6,7 @@
 #define SURFACE_FILTERS_EXPANDSURFACES_H
 #include <pcl_ros/pcl_nodelet.h>
 
+#include <atomic>
 #include <limits>
 #include <mutex>
 
@@ -56,6 +57,12 @@ namespace surface_filters {
         typedef message_filters::sync_policies::ApproximateTime<PointCloud, PointIndices> ApproxPolicy;
         typedef message_filters::Synchronizer<ExactPolicy> ExactTimeSynchronizer;
         typedef message_filters::Synchronizer<ApproxPolicy> ApproxTimeSynchronizer;
+
+    public:
+        virtual ~ExpandSurfaces() {
+            sync_input_indices_e_.reset();
+            sync_input_indices_a_.reset();
+        }
 
 
     protected:
@@ -129,6 +136,8 @@ namespace surface_filters {
         PointCloudIn::Ptr pending_points_;
 
         std::mutex pending_points_mutex_;
+
+        std::atomic<decltype(pcl::PCLHeader().stamp)> latest_update_;
 
     public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW

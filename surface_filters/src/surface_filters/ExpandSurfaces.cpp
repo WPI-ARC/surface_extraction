@@ -63,9 +63,11 @@ void surface_filters::ExpandSurfaces::synchronized_input_callback(const PointClo
                                                                   const PointIndices::ConstPtr &indices_in) {
     //pcl::ScopeTime scopetime("Expand Surfaces");
 
-    if (cloud_in->width * cloud_in->height == 0 || indices_in->indices.size() == 0) {
+    if (cloud_in->size() == 0 || indices_in->indices.size() == 0) {
         return;
     }
+
+    std::lock_guard<std::mutex> processing_lock_(pending_points_mutex_);
 
     /// DEBUG
 //    NODELET_DEBUG("[%s::synchronized_input_callback]\n"
@@ -80,23 +82,21 @@ void surface_filters::ExpandSurfaces::synchronized_input_callback(const PointClo
 
     Surfaces::ConstPtr surfaces = surfaces_cache_->getElemBeforeTime(ros::Time::now());
 
+    // TODO: Add callback to surfaces_cache_ that runs this
+    bool wait_for_next = !surfaces || surfaces->latest_update < latest_update_;
+
     PointCloudIn::Ptr cloud;
 
-    pcl::StopWatch lock_timer;
-    std::unique_lock<std::mutex> pending_points_lock(pending_points_mutex_);
-    auto lock_time = lock_timer.getTime();
-
-    if (!surfaces) { // If no surfaces yet, add this to the set of pending points and return
-        std::size_t prev_num_pending_points = pending_points_ ? pending_points_->size() : 0;
+    if (wait_for_next) { // If no surfaces yet, add this to the set of pending points and return
+//        std::size_t prev_num_pending_points = pending_points_ ? pending_points_->size() : 0;
         if (!pending_points_) { // If no pending points yet, make one
             pending_points_ = indices_in.get() != nullptr ? boost::make_shared<PointCloudIn>(*cloud_in, indices_in->indices) :
                                            boost::make_shared<PointCloudIn>(*cloud_in);
         } else { // If there is an existing pending points cloud,
             *pending_points_ += indices_in.get() != nullptr ? PointCloudIn(*cloud_in, indices_in->indices) : PointCloudIn(*cloud_in);
         }
-        NODELET_DEBUG_STREAM("ExpandSurfaces waiting for surfaces list (" << pending_points_->size() <<
-                             " pending points, " << (pending_points_->size() - prev_num_pending_points) <<
-                             " new) (locked for " << lock_time << "ms)");
+//        NODELET_DEBUG_STREAM("ExpandSurfaces waiting for new surfaces list (" << pending_points_->size() <<
+//                             " pending points, " << (pending_points_->size() - prev_num_pending_points) << " new)");
         return;
     } else if (pending_points_) { // If there are pending points to process, add the new points to them
         *pending_points_ += indices_in.get() != nullptr ? PointCloudIn(*cloud_in, indices_in->indices) : PointCloudIn(*cloud_in);
@@ -104,11 +104,9 @@ void surface_filters::ExpandSurfaces::synchronized_input_callback(const PointClo
 
     if (pending_points_) {
         // If pending points exists, use std::swap to put the pending points into cloud and a null sharedptr into
-        // pending points so that as soon as pending_points_lock is released, another thread can use pending_points.
+        // pending points so that as soon as processing_lock_ is released, another thread can use pending_points.
         std::swap(pending_points_, cloud);
     }
-
-    pending_points_lock.unlock();
 
     if (cloud) {
         this->process(surfaces, cloud, PointIndices::Ptr());
@@ -158,14 +156,14 @@ void surface_filters::ExpandSurfaces::process(const Surfaces::ConstPtr &surfaces
         pcl::IndicesPtr radius_filtered = filterWithinRadiusConnected(search, hull_clouds[old_surface.id],
                                                                       removed_indices);
 
-        NODELET_DEBUG_STREAM("Found " << radius_filtered->size() << " indices near the edges of surface " << old_surface.id);
+//        NODELET_DEBUG_STREAM("Found " << radius_filtered->size() << " indices near the edges of surface " << old_surface.id);
         if (radius_filtered->size() == 0) continue;
 
         //
         // FILTER TO POINTS ON THE SURFACE
         //
         pcl::IndicesPtr distance_filtered = filterWithinModelDistance(cloud, radius_filtered, old_surface.model);
-        NODELET_DEBUG_STREAM("Found " << distance_filtered->size() << " indices within the plane of surface " << old_surface.id);
+//        NODELET_DEBUG_STREAM("Found " << distance_filtered->size() << " indices within the plane of surface " << old_surface.id);
         if (distance_filtered->size() == 0) continue;
 
         //
@@ -175,12 +173,13 @@ void surface_filters::ExpandSurfaces::process(const Surfaces::ConstPtr &surfaces
         new_points_cloud += old_surface.inliers;
         const Segment::Ptr new_segment = boost::make_shared<Segment>(cloud->header, old_surface.id,
                                                                      old_surface.model, new_points_cloud);
+        this->latest_update_ = new_segment->header.stamp = pcl_conversions::toPCL(ros::Time::now());
         this->pub_replace_surface_.publish(new_segment);
 
-        NODELET_DEBUG_STREAM("[" << getName().c_str() << "::input_callback] ExpandSurface expanded surface "
-                             << new_segment->surface_id << " from " << old_surface.inliers.size() << " to "
-                             << new_segment->inliers.size() << " points ("
-                             << (new_segment->inliers.size() - old_surface.inliers.size()) << " new points)");
+//        NODELET_DEBUG_STREAM("[" << getName().c_str() << "::input_callback] ExpandSurface expanded surface "
+//                             << new_segment->surface_id << " from " << old_surface.inliers.size() << " to "
+//                             << new_segment->inliers.size() << " points ("
+//                             << (new_segment->inliers.size() - old_surface.inliers.size()) << " new points)");
 
         //
         // REMOVE THOSE POINTS FROM THE INPUT
@@ -257,6 +256,9 @@ pcl::IndicesPtr surface_filters::ExpandSurfaces::filterWithinRadiusConnected(con
         std::vector<float> tmp_sqrdistances; // Only needed to fill a parameter
 
         search.radiusSearch(point, this->parallel_dist_threshold_, tmp_indices, tmp_sqrdistances);
+
+        // TODO: Unify this with filterWithinHull by filtering tmp_indices here instead of later
+        // Should speed this up because it won't explore too far from the surface in the perpendicular direction
 
         for (const auto &nearby_index : tmp_indices) {
             const auto insert_result = within_radius_indices.insert(nearby_index);

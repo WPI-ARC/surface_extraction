@@ -122,8 +122,7 @@ catkin_package(
 ###########
 set(CMAKE_BUILD_TYPE Debug)
 
-# Removed O3 for debugging
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O1 -std=c++11 -Wall -Wextra -Wno-unused-parameter")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O3 -std=c++11 -Wall -Wextra -Wno-unused-parameter")
 # Flags to make Clang ignore directories that Catkin should have marked as system imports
 #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Xclang -isystem-prefix -Xclang pcl/")
 
@@ -169,7 +168,8 @@ add_library(surface_filters
     src/surface_filters/SACSegmentAndFit.cpp
     src/surface_filters/ChangeDetection.cpp
     src/surface_filters/BuildSurface.cpp
-    src/surface_filters/ExpandSurfaces.cpp)
+    src/surface_filters/ExpandSurfaces.cpp
+    src/surface_filters/Triangulate.cpp)
 
 add_dependencies(surface_filters ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencfg surface_msgs surfaces)
 

@@ -51,6 +51,14 @@ namespace surface_filters {
         template<typename ...SubscribedTypes>
         using ApproximateTimeSynchronizer = message_filters::Synchronizer<sync_policies::ApproximateTime<SubscribedTypes...> >;
 
+    public:
+        virtual ~SACSegmentAndFit() {
+            sync_input_normals_clusters_a_.reset();
+            sync_input_normals_clusters_e_.reset();
+            sync_input_clusters_a_.reset();
+            sync_input_clusters_e_.reset();
+        }
+
 
     protected:
         /** \brief Set the model type */

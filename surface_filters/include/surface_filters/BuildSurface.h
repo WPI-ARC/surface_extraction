@@ -98,8 +98,7 @@ namespace surface_filters {
 
         SurfaceMeshStamped::Ptr publish_surface_mesh(const SurfaceStamped::ConstPtr &surface, bool is_new);
 
-        PolygonMesh get_concave_hull(const pcl::ModelCoefficients &model, const PointCloudIn &cloud,
-                                     const int surface_id);
+        PolygonMesh get_concave_hull(const pcl::ModelCoefficients &model, const PointCloudIn &cloud);
 
         void get_projected_cloud(const Segment::ConstPtr &segment, PointCloudIn &proj_output);
 

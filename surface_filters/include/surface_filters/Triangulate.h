@@ -241,15 +241,15 @@ pcl::PointCloud<PointT> libtriangle::Triangulate::cloud_from_polygons(std::vecto
     }
 
     // Then add any remaining boundary points in the triangulation
-//    for (const auto &point_i : tri.boundary_point_ids()) {
-//        if (points_reindex_map.at(point_i) == -1) {
-//            points_reindex_map.at(point_i) = new_points.size();
-//
-//            Eigen::Vector4f point_2d(tri.get_x(point_i), tri.get_y(point_i), 0, 1);
-//            Eigen::Vector4f point_3d = t_inv * point_2d;
-//            new_points.push_back({point_3d[0], point_3d[1], point_3d[2]});
-//        }
-//    }
+    for (const auto &point_i : boundary_point_ids()) {
+        if (points_reindex_map.at(point_i) == -1) {
+            points_reindex_map.at(point_i) = new_points.size();
+
+            Eigen::Vector3d point_2d(get_x(point_i), get_y(point_i), 0);
+            Eigen::Vector3d point_3d = t_inv * point_2d;
+            new_points.push_back({point_3d[0], point_3d[1], point_3d[2]});
+        }
+    }
 
     return std::move(new_points);
 }

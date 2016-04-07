@@ -15,10 +15,6 @@ libtriangle::Triangulate::Triangulate(pcl::PointCloud<pcl::PointXYZ> cloud, Eige
 
         pointlist_vector_.push_back(flat_pt[0]);
         pointlist_vector_.push_back(flat_pt[1]);
-
-        Eigen::Vector3d proj_pt(flat_pt[0], flat_pt[1], 0);
-        Eigen::Vector3d reconstructed = plane_tf_.inverse() * proj_pt;
-//        assert((reconstructed - eigenpt).squaredNorm() < 0.5 * 0.5 * 1.1);
     }
 }
 
@@ -184,7 +180,7 @@ auto libtriangle::Triangulate::edges() const -> decltype(transform(boost::irange
 }
 
 auto libtriangle::Triangulate::boundary_point_ids() const -> decltype(filter(boost::irange(0, 0), std::bind(&Triangulate::is_boundary_point, (const Triangulate*) 0, place::_1))) {
-    return filter(boost::irange(0, tri_out_.numberofedges), std::bind(&Triangulate::is_boundary_point, this, place::_1));
+    return filter(boost::irange(0, tri_out_.numberofpoints), std::bind(&Triangulate::is_boundary_point, this, place::_1));
 }
 
 auto libtriangle::Triangulate::edge_ids() const -> decltype(boost::irange(0, 0)) {

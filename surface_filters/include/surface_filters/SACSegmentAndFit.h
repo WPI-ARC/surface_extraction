@@ -6,22 +6,25 @@
 #ifndef SAC_SEGMENT_AND_FIT_H
 #define SAC_SEGMENT_AND_FIT_H
 
+// System and Boost includes
 #include <limits.h>
+#include <mutex>
+
+// ROS includes
 #include <pcl_ros/pcl_nodelet.h>
+#include <dynamic_reconfigure/server.h>
 
 // PCL includes
 #include <pcl/segmentation/sac_segmentation.h>
 #include <pcl/segmentation/extract_clusters.h>
-#include <pcl/search/pcl_search.h>
 #include <pcl/filters/project_inliers.h>
 
-// Dynamic reconfigure
-#include <dynamic_reconfigure/server.h>
+// Surfaces and Local includes
 #include <surface_filters/SACConfig.h>
-
 #include <surfaces/utils.hpp>
 #include <surfaces/PointClusters.hpp>
 #include <surfaces/Segment.hpp>
+#include <surfaces/pcl_shim/PointIndices_Serialization.hpp>
 
 namespace surface_filters {
     namespace sync_policies = message_filters::sync_policies;
@@ -40,7 +43,10 @@ namespace surface_filters {
         typedef pcl::PointCloud<NormalIn> NormalCloudIn;
         typedef pcl::PointCloud<PointOut> PointCloudOut;
 
+        // Shadow the parent class' version of these, which is the 'wrong' type
         typedef pcl::PointIndices PointIndices;
+        typedef PointIndices::Ptr PointIndicesPtr;
+        typedef PointIndices::ConstPtr PointIndicesConstPtr;
 
         typedef surfaces::PointClusters PointClusters;
         typedef surfaces::Segment<PointIn> Segment;
@@ -120,20 +126,27 @@ namespace surface_filters {
         void synchronized_input_callback(const PointCloudIn::ConstPtr &cloud, const NormalCloudIn::ConstPtr &normals,
                                          const PointClusters::ConstPtr &input_clusters);
 
+        pcl::SACSegmentation<PointIn> getLocalRANSACObject();
+        pcl::EuclideanClusterExtraction<PointIn> getLocalExtractionObject();
+
 
     private:
         /** \brief The PCL implementation used. */
         pcl::SACSegmentation<PointIn> sac_;
 
+        std::mutex setup_mutex_;
+
         pcl::EuclideanClusterExtraction<PointIn> euclidean_;
 
         /** \brief The clusters PointCloud publisher. */
         ros::Publisher pub_segments_;
+        ros::Publisher pub_used_indices_;
 
         /** \brief The message filter subscriber for PointCloud2. */
-        // NOTE these have to come before the synchronizer members or you get a mutex lock error on destruction
         message_filters::Subscriber<NormalCloudIn> sub_normals_filter_;
         message_filters::Subscriber<PointClusters> sub_clusters_filter_;
+
+        message_filters::Subscriber<PointIndices> sub_indices_filter_; // Shadow the parent's
 
         /** \brief Synchronized input, and indices.*/
         boost::shared_ptr<ExactTimeSynchronizer<PointCloudIn, NormalCloudIn, PointClusters> > sync_input_normals_clusters_e_;

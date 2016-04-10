@@ -5,6 +5,7 @@
     <arg name="gdb" default="false" />
     <arg name="valgrind" default="false" />
     <arg name="cachegrind" default="false" />
+    <arg name="no_manager" default="false" />
 
 
     <!-- Static transform from world frame to point cloud frame -->
@@ -20,5 +21,6 @@
         <arg name="gdb" value="$(arg gdb)" />
         <arg name="valgrind" value="$(arg valgrind)" />
         <arg name="cachegrind" value="$(arg cachegrind)" />
+        <arg name="no_manager" value="$(arg no_manager)" />
     </include>
 </launch>

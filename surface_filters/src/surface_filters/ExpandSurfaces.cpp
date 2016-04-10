@@ -11,9 +11,10 @@ void surface_filters::ExpandSurfaces::onInit() {
     pcl_ros::PCLNodelet::onInit();
 
     pub_replace_surface_ = pnh_->advertise<Segment>("expanded_segments", max_queue_size_);
-    pub_remaining_indices_ = pnh_->advertise<PointIndices>("removed_indices", max_queue_size_);
+    pub_remaining_indices_ = pnh_->advertise<PointIndices>("remaining_indices", max_queue_size_);
     pub_filtered_indices_ = pnh_->advertise<PointIndices>("filtered_indices", max_queue_size_);
     pub_removed_indices_ = pnh_->advertise<PointIndices>("removed_indices", max_queue_size_);
+    pub_existing_inliers_ = pnh_->advertise<PointCloudIn>("existing_inliers", max_queue_size_);
 
 //    if (!pnh_->getParam("resolution", resolution_)) {
 //        NODELET_ERROR("[%s::onInit] Need a 'resolution' parameter to be set before continuing!",
@@ -47,14 +48,26 @@ void surface_filters::ExpandSurfaces::onInit() {
     crophull_.setDim(2);
     crophull_.setCropOutside(true); // True returns only points inside the hull
 
-    NODELET_DEBUG ("[%s::onInit] Nodelet successfully created with the following subscriptions:\n"
-                           " - input    : %s\n"
-                           " - indices    : %s\n"
-                           " - surfaces    : %s\n",
+    latest_update_ = 0;
+
+    NODELET_DEBUG ("[%s::onInit] ExpandSurfaces Nodelet successfully created with connections:\n"
+                           " - [subscriber] input             : %s\n"
+                           " - [subscriber] indices           : %s\n"
+                           " - [subscriber] surfaces          : %s\n"
+                           " - [publisher]  expanded_segments : %s\n"
+                           " - [publisher]  remaining_indices : %s\n"
+                           " - [publisher]  filtered_indices  : %s\n"
+                           " - [publisher]  removed_indices  : %s\n"
+                           " - [publisher]  existing_inliers   : %s\n",
                    getName().c_str(),
                    getMTPrivateNodeHandle().resolveName("input").c_str(),
                    getMTPrivateNodeHandle().resolveName("indices").c_str(),
-                   getMTPrivateNodeHandle().resolveName("surfaces").c_str());
+                   getMTPrivateNodeHandle().resolveName("surfaces").c_str(),
+                   getMTPrivateNodeHandle().resolveName("expanded_segments").c_str(),
+                   getMTPrivateNodeHandle().resolveName("remaining_indices").c_str(),
+                   getMTPrivateNodeHandle().resolveName("filtered_indices").c_str(),
+                   getMTPrivateNodeHandle().resolveName("removed_indices").c_str(),
+                   getMTPrivateNodeHandle().resolveName("existing_inliers").c_str());
 }
 
 
@@ -88,15 +101,22 @@ void surface_filters::ExpandSurfaces::synchronized_input_callback(const PointClo
     PointCloudIn::Ptr cloud;
 
     if (wait_for_next) { // If no surfaces yet, add this to the set of pending points and return
-//        std::size_t prev_num_pending_points = pending_points_ ? pending_points_->size() : 0;
+        std::size_t prev_num_pending_points = pending_points_ ? pending_points_->size() : 0;
         if (!pending_points_) { // If no pending points yet, make one
             pending_points_ = indices_in.get() != nullptr ? boost::make_shared<PointCloudIn>(*cloud_in, indices_in->indices) :
                                            boost::make_shared<PointCloudIn>(*cloud_in);
         } else { // If there is an existing pending points cloud,
             *pending_points_ += indices_in.get() != nullptr ? PointCloudIn(*cloud_in, indices_in->indices) : PointCloudIn(*cloud_in);
         }
-//        NODELET_DEBUG_STREAM("ExpandSurfaces waiting for new surfaces list (" << pending_points_->size() <<
-//                             " pending points, " << (pending_points_->size() - prev_num_pending_points) << " new)");
+        if (!surfaces) {
+            NODELET_DEBUG_STREAM_THROTTLE(5, "ExpandSurfaces waiting for first surfaces list ("
+                                             << pending_points_->size() << " pending points, "
+                                             << (pending_points_->size() - prev_num_pending_points) << " new)");
+        } else {
+            NODELET_DEBUG_STREAM_THROTTLE(5, "ExpandSurfaces waiting for new surfaces list (waiting for "
+                                             << latest_update_ << ", " << pending_points_->size() << " pending points, "
+                                             << (pending_points_->size() - prev_num_pending_points) << " new)");
+        }
         return;
     } else if (pending_points_) { // If there are pending points to process, add the new points to them
         *pending_points_ += indices_in.get() != nullptr ? PointCloudIn(*cloud_in, indices_in->indices) : PointCloudIn(*cloud_in);
@@ -140,6 +160,16 @@ void surface_filters::ExpandSurfaces::process(const Surfaces::ConstPtr &surfaces
         pub_filtered_indices_.publish(filtered_indices_msg);
     }
 
+    { // Publish the points that were removed because they were already inside a plane
+        pcl::ExtractIndices<pcl::PointXYZ> extract;
+        PointCloudIn::Ptr cld = boost::make_shared<PointCloudIn>();
+        extract.setInputCloud(cloud);
+        extract.setIndices(filtered_indices);
+        extract.setNegative(true);
+        extract.filter(*cld);
+        pub_existing_inliers_.publish(cld);
+    }
+
     if (filtered_indices->size() == 0) {
         return;
     }
@@ -174,6 +204,8 @@ void surface_filters::ExpandSurfaces::process(const Surfaces::ConstPtr &surfaces
         const Segment::Ptr new_segment = boost::make_shared<Segment>(cloud->header, old_surface.id,
                                                                      old_surface.model, new_points_cloud);
         this->latest_update_ = new_segment->header.stamp = pcl_conversions::toPCL(ros::Time::now());
+        NODELET_DEBUG_STREAM("[" << getName().c_str() << "::input_callback] ExpandSurface will wait for surface "
+                             << new_segment->surface_id << " at time " << this->latest_update_);
         this->pub_replace_surface_.publish(new_segment);
 
 //        NODELET_DEBUG_STREAM("[" << getName().c_str() << "::input_callback] ExpandSurface expanded surface "

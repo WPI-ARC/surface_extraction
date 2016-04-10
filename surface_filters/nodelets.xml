@@ -31,4 +31,9 @@
       BuildSurface takes a segment (cloud and shape model) as input and outputs a surface containing inliers, model, concave hull, and trimesh.
     </description>
   </class>
+  <class name="surface_filters/FreePointAccumulation" type="surface_filters::FreePointAccumulation" base_class_type="nodelet::Nodelet">
+    <description>
+      FreePointAccumulation accumulates all the points that aren't known to be part of a surface and runs them through the pipeline to try to discover one.
+    </description>
+  </class>
 </library>

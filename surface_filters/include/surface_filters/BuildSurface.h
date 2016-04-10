@@ -137,8 +137,8 @@ namespace surface_filters {
         ros::Subscriber sub_create_surface_;
         ros::Subscriber sub_update_surface_;
 
-        /** \brief Mutex for use with dynamic reconfigure */
         std::mutex hull_mutex_;
+        std::mutex project_mutex_;
 
     public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW

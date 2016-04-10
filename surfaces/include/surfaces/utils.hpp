@@ -41,6 +41,15 @@
 
 
 namespace surfaces {
+    struct PCLHeaderHashNoSeq {
+        std::size_t operator()(const pcl::PCLHeader &h) const {
+            std::size_t seed = 0;
+            boost::hash_combine(seed, h.frame_id);
+            boost::hash_combine(seed, h.stamp);
+            return seed;
+        };
+    };
+
     inline pcl::SacModel sacModelFromConfigInt(int config_model_type) {
         switch (config_model_type) {
             case 0:

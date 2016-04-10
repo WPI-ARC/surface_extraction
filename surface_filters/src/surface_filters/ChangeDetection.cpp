@@ -30,6 +30,17 @@ void surface_filters::ChangeDetection::onInit() {
 
     // Subscribe to the input directly b/c there is nothing to synchronize
     sub_input_ = pnh_->subscribe<PointCloudIn>("input", max_queue_size_, bind(&ChangeDetection::synchronized_input_callback, this, _1));
+
+    NODELET_DEBUG ("[%s::onInit] ChangeDetection Nodelet successfully created with connections:\n"
+                           " - [subscriber] input       : %s\n"
+                           " - [publisher]  output      : %s\n"
+                           " - [publisher]  new_scene   : %s\n"
+                           " - [publisher]  new_indices : %s\n",
+                   getName().c_str(),
+                   getMTPrivateNodeHandle().resolveName("input").c_str(),
+                   getMTPrivateNodeHandle().resolveName("output").c_str(),
+                   getMTPrivateNodeHandle().resolveName("new_scene").c_str(),
+                   getMTPrivateNodeHandle().resolveName("new_indices").c_str());
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////

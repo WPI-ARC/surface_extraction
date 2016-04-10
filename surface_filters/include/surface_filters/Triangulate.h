@@ -219,39 +219,29 @@ pcl::PointCloud<PointT> libtriangle::Triangulate::cloud_from_polygons(std::vecto
     std::vector<long int> points_reindex_map(numberoftriangles(), -1); // -1 indicates no reindexing yet
     pcl::PointCloud<PointT> new_points;
 
-    const auto t_inv = plane_tf_.inverse();
+    const auto t_inv = plane_tf_.inverse().cast<float>();
+
+    const auto add_point = [&](const point_id &p_id) {
+        if (points_reindex_map.at(p_id) == -1) {
+            points_reindex_map.at(p_id) = new_points.size();
+
+            new_points.resize(new_points.size() + 1);
+            new_points.back().getArray3fMap() = t_inv * Eigen::Vector3f(get_x(p_id), get_y(p_id), 0);
+        }
+        return points_reindex_map.at(p_id);
+    };
 
     // First, add every point in a polygon in order. This maximises cache-friendliness when iterating over polygons
-    // (a common operation)
     for (auto &polygon : polygons) {
-        // Might reserve too much (when some of the vertices in polygon have already been added), but this object
-        // doesn't live very long so it doesn't affect much
+        // Might reserve a few to many points (when some of the vertices in polygon have already been added)
         new_points.reserve(new_points.size() + polygon.vertices.size());
-        for (auto &point_i : polygon.vertices) {
-            if (points_reindex_map.at(point_i) == -1) {
-                points_reindex_map.at(point_i) = new_points.size();
-
-                Eigen::Vector3d point_2d(get_x(point_i), get_y(point_i), 0);
-                Eigen::Vector3d point_3d = t_inv * point_2d;
-                new_points.push_back({point_3d[0], point_3d[1], point_3d[2]});
-            }
-            point_i = static_cast<uint32_t>(points_reindex_map.at(point_i));
-        }
-
+        for (auto &point_i : polygon.vertices) point_i = static_cast<uint32_t>(add_point(point_i));
     }
 
     // Then add any remaining boundary points in the triangulation
-    for (const auto &point_i : boundary_point_ids()) {
-        if (points_reindex_map.at(point_i) == -1) {
-            points_reindex_map.at(point_i) = new_points.size();
+    for (const auto &point_i : boundary_point_ids()) add_point(point_i);
 
-            Eigen::Vector3d point_2d(get_x(point_i), get_y(point_i), 0);
-            Eigen::Vector3d point_3d = t_inv * point_2d;
-            new_points.push_back({point_3d[0], point_3d[1], point_3d[2]});
-        }
-    }
-
-    return std::move(new_points);
+    return new_points;
 }
 
 

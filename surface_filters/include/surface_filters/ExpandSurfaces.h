@@ -17,6 +17,7 @@
 #include <pcl/filters/crop_hull.h>
 #include <pcl/surface/concave_hull.h>
 #include <pcl/common/transforms.h>
+#include <pcl/filters/extract_indices.h>
 
 // Dynamic reconfigure
 #include <dynamic_reconfigure/server.h>
@@ -130,6 +131,7 @@ namespace surface_filters {
         ros::Publisher pub_remaining_indices_;
         ros::Publisher pub_filtered_indices_;
         ros::Publisher pub_removed_indices_;
+        ros::Publisher pub_existing_inliers_;
 
         std::mutex hull_mutex_;
 

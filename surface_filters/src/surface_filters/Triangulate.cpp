@@ -128,7 +128,7 @@ double libtriangle::Triangulate::edge_length_sqr(const Edge edge) const {
 }
 
 auto libtriangle::Triangulate::make_edge(const point_id id_a, const point_id id_b) const -> Edge {
-    return (id_a < id_b) ? Edge{id_a, id_b} : Edge{id_b, id_a};
+    return (id_a < id_b) ? Edge{{id_a, id_b}} : Edge{{id_b, id_a}};
 }
 
 double libtriangle::Triangulate::edge_length_sqr(const edge_id edge) const {
@@ -137,7 +137,7 @@ double libtriangle::Triangulate::edge_length_sqr(const edge_id edge) const {
 
 auto libtriangle::Triangulate::get_point(const point_id id) const -> Point {
     assert(tri_out_.pointlist != NULL && id < tri_out_.numberofpoints);
-    return {tri_out_.pointlist[id * 2], tri_out_.pointlist[id * 2 + 1]};
+    return {{tri_out_.pointlist[id * 2], tri_out_.pointlist[id * 2 + 1]}};
 }
 
 double libtriangle::Triangulate::get_x(const point_id id) const {
@@ -161,7 +161,7 @@ auto libtriangle::Triangulate::get_edge(const edge_id id) const -> Edge {
 
 auto libtriangle::Triangulate::get_triangle(const triangle_id id) const -> Triangle {
     assert(tri_out_.trianglelist != NULL && id < tri_out_.numberoftriangles);
-    return {tri_out_.trianglelist[id * 3], tri_out_.trianglelist[id * 3 + 1], tri_out_.trianglelist[id * 3 + 2]};
+    return {{tri_out_.trianglelist[id * 3], tri_out_.trianglelist[id * 3 + 1], tri_out_.trianglelist[id * 3 + 2]}};
 }
 
 auto libtriangle::Triangulate::triangle_edges(const Triangle &triangle) const -> std::array<Edge, 3> {

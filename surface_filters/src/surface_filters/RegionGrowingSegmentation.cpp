@@ -6,21 +6,6 @@
 #include <pluginlib/class_list_macros.h>
 #include <surface_filters/RegionGrowingSegmentation.h>
 
-void surface_filters::RegionGrowingSegmentation::setup_spatial_locator(int type) {
-    switch (type) {
-        // case 0: As far as I can tell, ANN is no longer available
-        case 1:
-            tree_ = SpatialSearch::Ptr(new pcl::search::KdTree<PointIn>());
-            break;
-        case 2:
-            tree_ = SpatialSearch::Ptr(new pcl::search::OrganizedNeighbor<PointIn>());
-            break;
-        default:
-            NODELET_ERROR("[%s::synchronized_input_callback] Invalid spatial locator type %d", getName().c_str(), type);
-            tree_ = SpatialSearch::Ptr();
-    }
-}
-
 void surface_filters::RegionGrowingSegmentation::onInit() {
     pcl_ros::PCLNodelet::onInit();
 
@@ -35,11 +20,8 @@ void surface_filters::RegionGrowingSegmentation::onInit() {
         return;
     }
 
-    // Required setup
-    setup_spatial_locator(spatial_locator_type_);
-
     // Enable the dynamic reconfigure service
-    srv_ = boost::shared_ptr<dynamic_reconfigure::Server<RGSConfig> >(new dynamic_reconfigure::Server<RGSConfig>(*pnh_));
+    srv_ = boost::shared_ptr<dynamic_reconfigure::Server<RGSConfig>>(new dynamic_reconfigure::Server<RGSConfig>(*pnh_));
     srv_->setCallback(boost::bind(&RegionGrowingSegmentation::config_callback, this, _1, _2));
 
     // Optional parameters
@@ -55,54 +37,56 @@ void surface_filters::RegionGrowingSegmentation::onInit() {
         sub_indices_filter_.subscribe(*pnh_, "indices", max_queue_size_);
 
         if (approximate_sync_) {
-            sync_input_normals_indices_a_ = boost::make_shared<ApproximateTimeSynchronizer<
-                    PointCloudIn, NormalCloudIn, PointIndices> >(max_queue_size_);
+            sync_input_normals_indices_a_ =
+                boost::make_shared<ApproximateTimeSynchronizer<PointCloudIn, NormalCloudIn, PointIndices>>(
+                    max_queue_size_);
             // surface not enabled, connect the input-indices duo and register
             sync_input_normals_indices_a_->connectInput(sub_input_filter_, sub_normals_filter_, sub_indices_filter_);
             sync_input_normals_indices_a_->registerCallback(
-                    bind(&RegionGrowingSegmentation::synchronized_input_callback, this, _1, _2, _3));
-        }
-        else {
-            sync_input_normals_indices_e_ = boost::make_shared<ExactTimeSynchronizer<
-                    PointCloudIn, NormalCloudIn, PointIndices> >(max_queue_size_);
+                bind(&RegionGrowingSegmentation::synchronized_input_callback, this, _1, _2, _3));
+        } else {
+            sync_input_normals_indices_e_ =
+                boost::make_shared<ExactTimeSynchronizer<PointCloudIn, NormalCloudIn, PointIndices>>(max_queue_size_);
             // surface not enabled, connect the input-indices duo and register
             sync_input_normals_indices_e_->connectInput(sub_input_filter_, sub_normals_filter_, sub_indices_filter_);
             sync_input_normals_indices_e_->registerCallback(
-                    bind(&RegionGrowingSegmentation::synchronized_input_callback, this, _1, _2, _3));
+                bind(&RegionGrowingSegmentation::synchronized_input_callback, this, _1, _2, _3));
         }
     } else {
         if (approximate_sync_) {
-            sync_input_normals_a_ = boost::make_shared<ApproximateTimeSynchronizer<PointCloudIn, NormalCloudIn> >
-                    (max_queue_size_);
+            sync_input_normals_a_ =
+                boost::make_shared<ApproximateTimeSynchronizer<PointCloudIn, NormalCloudIn>>(max_queue_size_);
             // surface not enabled, connect the input-indices duo and register
             sync_input_normals_a_->connectInput(sub_input_filter_, sub_normals_filter_);
             sync_input_normals_a_->registerCallback(
-                    bind(&RegionGrowingSegmentation::synchronized_input_callback, this, _1, _2,
-                         PointIndicesConstPtr()));
-        }
-        else {
-            sync_input_normals_e_ = boost::make_shared<ExactTimeSynchronizer<
-                    PointCloudIn, NormalCloudIn> >(max_queue_size_);
+                bind(&RegionGrowingSegmentation::synchronized_input_callback, this, _1, _2, PointIndicesConstPtr()));
+        } else {
+            sync_input_normals_e_ =
+                boost::make_shared<ExactTimeSynchronizer<PointCloudIn, NormalCloudIn>>(max_queue_size_);
             // surface not enabled, connect the input-indices duo and register
             sync_input_normals_e_->connectInput(sub_input_filter_, sub_normals_filter_);
             sync_input_normals_e_->registerCallback(
-                    bind(&RegionGrowingSegmentation::synchronized_input_callback, this, _1, _2,
-                         PointIndicesConstPtr()));
+                bind(&RegionGrowingSegmentation::synchronized_input_callback, this, _1, _2, PointIndicesConstPtr()));
         }
     }
 
-
-    NODELET_DEBUG("[%s::onInit] Nodelet successfully created with the following parameters:\n"
-                   " - use_indices    : %s",
-                   getName().c_str(),
-                  (use_indices_) ? "true" : "false");
+    NODELET_DEBUG("[%s::onInit] RegionGrowingSegmentation Nodelet successfully created with connections:\n"
+                  " - [subscriber] input   : %s\n"
+                  " - [subscriber] normals : %s\n"
+                  " - [subscriber] indices : %s\n"
+                  " - [publisher]  output  : %s\n"
+                  " - [publisher]  clusters : %s\n",
+                  getName().c_str(), getMTPrivateNodeHandle().resolveName("input").c_str(),
+                  getMTPrivateNodeHandle().resolveName("normals").c_str(),
+                  getMTPrivateNodeHandle().resolveName("indices").c_str(),
+                  getMTPrivateNodeHandle().resolveName("output").c_str(),
+                  getMTPrivateNodeHandle().resolveName("clusters").c_str());
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////
-void
-surface_filters::RegionGrowingSegmentation::synchronized_input_callback(const PointCloudIn::ConstPtr &cloud,
-                                                                        const NormalCloudIn::ConstPtr &normals,
-                                                                        const PointIndices::ConstPtr &indices) {
+void surface_filters::RegionGrowingSegmentation::synchronized_input_callback(const PointCloudIn::ConstPtr &cloud,
+                                                                             const NormalCloudIn::ConstPtr &normals,
+                                                                             const PointIndices::ConstPtr &indices) {
     // No subscribers, no work
     if (pub_output_.getNumSubscribers() <= 0 && pub_clusters_.getNumSubscribers() <= 0) {
         NODELET_DEBUG("[%s::input_callback] Input relieved but there are no subscribers; returning.",
@@ -123,20 +107,16 @@ surface_filters::RegionGrowingSegmentation::synchronized_input_callback(const Po
         pub_output_.publish(output);
         return;
     }
-    // If indices are given, check if they are valid
-    if (indices && !isValid(indices, "indices")) {
-        NODELET_ERROR("[%s::synchronized_input_callback] Invalid indices!", getName().c_str());
-        output->header = cloud->header;
-        pub_output_.publish(output);
-        return;
-    }
 
     /// DEBUG
     if (indices) {
         NODELET_DEBUG("[%s::input_indices_model_callback]\n"
-                              "                                 - PointCloud with %d data points(%s), stamp %f, and frame %s on topic %s received.\n"
-                              "                                 - Normals PointCloud with %d data points(%s), stamp %f, and frame %s on topic %s received.\n"
-                              "                                 - PointIndices with %zu values, stamp %f, and frame %s on topic %s received.",
+                      "                                 - PointCloud with %d data points(%s), stamp %f, and frame %s "
+                      "on topic %s received.\n"
+                      "                                 - Normals PointCloud with %d data points(%s), stamp %f, and "
+                      "frame %s on topic %s received.\n"
+                      "                                 - PointIndices with %zu values, stamp %f, and frame %s on "
+                      "topic %s received.",
                       getName().c_str(),
 
                       cloud->width * cloud->height, pcl::getFieldsList(*cloud).c_str(),
@@ -147,64 +127,43 @@ surface_filters::RegionGrowingSegmentation::synchronized_input_callback(const Po
                       fromPCL(normals->header).stamp.toSec(), normals->header.frame_id.c_str(),
                       getMTPrivateNodeHandle().resolveName("normals").c_str(),
 
-                      indices->indices.size(), indices->header.stamp.toSec(), indices->header.frame_id.c_str(),
-                      getMTPrivateNodeHandle().resolveName("indices").c_str());
+                      indices->indices.size(), pcl_conversions::fromPCL(indices->header.stamp).toSec(),
+                      indices->header.frame_id.c_str(), getMTPrivateNodeHandle().resolveName("indices").c_str());
     } else {
         NODELET_DEBUG(
-                "[%s::input_callback] PointCloud with %d data points, stamp %f, and frame %s on topic %s received.",
-                getName().c_str(), cloud->width * cloud->height, fromPCL(cloud->header).stamp.toSec(),
-                cloud->header.frame_id.c_str(), getMTPrivateNodeHandle().resolveName("input").c_str());
+            "[%s::input_callback] PointCloud with %d data points, stamp %f, and frame %s on topic %s received.",
+            getName().c_str(), cloud->width * cloud->height, fromPCL(cloud->header).stamp.toSec(),
+            cloud->header.frame_id.c_str(), getMTPrivateNodeHandle().resolveName("input").c_str());
     }
 
     ros::WallTime start = ros::WallTime::now();
+    auto rgs = getLocalRGSObject();
+    assert(&rgs != &impl_);
 
-    // Ensure a spatial locator object exists
-    if (!tree_) {
-        NODELET_ERROR("[%s::synchronized_input_callback] RegionGrowingSegmentation called without a valid spatial locator", getName().c_str());
-        output->header = cloud->header;
-        pub_output_.publish(output);
-        return;
-    }
-
+    rgs.setInputCloud(cloud);
     // Get a mutable version of Normals as demanded by RegionGrowingSegmentation
-    NormalCloudIn::Ptr normals_mutable = boost::make_shared<NormalCloudIn>(*normals);
-    impl_.setInputCloud(cloud);
-    impl_.setInputNormals(normals_mutable);
-
-    IndicesPtr indices_ptr;
-    if (indices) indices_ptr.reset(new std::vector<int>(indices->indices));
-
-    impl_.setIndices(indices_ptr);
-
-    tree_->setInputCloud(cloud);
-    impl_.setSearchMethod(tree_);
+    rgs.setInputNormals(boost::make_shared<NormalCloudIn>(*normals));
+    if (indices) rgs.setIndices(indices);
 
     NODELET_DEBUG("[%s::synchronized_input_callback] Running Region Growing Segmentation", getName().c_str());
 
     // Do the reconstruction
-    impl_.extract(clusters->clusters);
+    rgs.extract(clusters->clusters);
 
     if (clusters->clusters.size() > 0) {
         if (should_populate_output) {
-            output = impl_.getColoredCloud();
-
-            // TODO: This shouldn't happen
-            if (output->empty() || output->size() == 0) {
-                output = boost::make_shared<PointCloudOut>();
-                NODELET_WARN("[%s::synchronized_input_callback] Region Growing Segmentation extracted clusters but getColoredCloud() returned an empty cloud", getName().c_str());
-            }
+            output = rgs.getColoredCloud();
         }
 
-        NODELET_INFO_STREAM(std::setprecision(3) <<
-                            "(" << (ros::WallTime::now() - start) << " sec, " << output->size() << " points, " << clusters->clusters.size() << " clusters) "
-                            << "Region growing segmentation finished");
+        NODELET_INFO_STREAM(std::setprecision(3) << "(" << (ros::WallTime::now() - start) << " sec, " << output->size()
+                                                 << " points, " << clusters->clusters.size() << " clusters) "
+                                                 << "Region growing segmentation finished");
     } else {
-        NODELET_INFO_STREAM(std::setprecision(3) <<
-                            "(" << (ros::WallTime::now() - start) << " sec, " << cloud->size() << " points) "
-                            << "Region growing segmentation finished, no segments found");
+        NODELET_INFO_STREAM(std::setprecision(3) << "(" << (ros::WallTime::now() - start) << " sec, " << cloud->size()
+                                                 << " points) "
+                                                 << "Region growing segmentation finished, no segments found");
     }
 
-    // Publish a Boost shared ptr const data
     // Enforce that the TF frame and the timestamp are copied
     output->header = cloud->header;
     pub_output_.publish(output);
@@ -214,10 +173,10 @@ surface_filters::RegionGrowingSegmentation::synchronized_input_callback(const Po
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////
-void surface_filters::RegionGrowingSegmentation::config_callback(RGSConfig &config, uint32_t level __attribute((unused))) {
+void surface_filters::RegionGrowingSegmentation::config_callback(RGSConfig &config,
+                                                                 uint32_t level __attribute((unused))) {
     if (spatial_locator_type_ != config.spatial_locator) {
         spatial_locator_type_ = config.spatial_locator;
-        setup_spatial_locator(spatial_locator_type_);
         NODELET_DEBUG("[config_callback] Setting the spatial locator to type: %d.", spatial_locator_type_);
     }
 
@@ -252,28 +211,41 @@ void surface_filters::RegionGrowingSegmentation::config_callback(RGSConfig &conf
     }
 
     if (smoothness_threshold_ != config.smoothness_threshold) {
-        impl_.setSmoothnessThreshold((float) config.smoothness_threshold);
+        impl_.setSmoothnessThreshold((float)config.smoothness_threshold);
         smoothness_threshold_ = config.smoothness_threshold;
         NODELET_DEBUG("[config_callback] Setting the smoothness threshold to: %f.", smoothness_threshold_);
     }
 
     if (residual_threshold_ != config.residual_threshold) {
-        impl_.setResidualThreshold((float) config.residual_threshold);
+        impl_.setResidualThreshold((float)config.residual_threshold);
         residual_threshold_ = config.residual_threshold;
         NODELET_DEBUG("[config_callback] Setting the residual threshold to: %f.", residual_threshold_);
     }
 
     if (curvature_threshold_ != config.curvature_threshold) {
-        impl_.setCurvatureThreshold((float) config.curvature_threshold);
+        impl_.setCurvatureThreshold((float)config.curvature_threshold);
         curvature_threshold_ = config.curvature_threshold;
         NODELET_DEBUG("[config_callback] Setting the curvature threshold to: %f.", curvature_threshold_);
     }
 
     if (num_neighbors_ != config.number_of_neighbors) {
-        impl_.setNumberOfNeighbours((unsigned int) config.number_of_neighbors);
+        impl_.setNumberOfNeighbours((unsigned int)config.number_of_neighbors);
         num_neighbors_ = config.number_of_neighbors;
         NODELET_DEBUG("[config_callback] Setting the number of neighbors to: %d.", num_neighbors_);
     }
+}
+
+auto surface_filters::RegionGrowingSegmentation::getLocalRGSObject() -> pcl::RegionGrowing<PointIn, NormalIn> {
+    std::lock_guard<std::mutex> lock(setup_mutex_);
+
+    // Make a copy of the data member
+    auto rgs = impl_;
+
+    // C++ will happily copy the kdtree's shared_ptr and leave it pointing to the same tree, and then two concurrent
+    // copies of the class try to use it on different clouds at the same time, which causes :(.
+    rgs.setSearchMethod(nullptr);
+
+    return rgs;
 }
 
 PLUGINLIB_EXPORT_CLASS(surface_filters::RegionGrowingSegmentation, nodelet::Nodelet)

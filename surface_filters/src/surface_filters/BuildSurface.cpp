@@ -19,7 +19,7 @@ void surface_filters::BuildSurface::onInit() {
     pub_new_surface_mesh = pnh_->advertise<SurfaceMeshStamped>("new_surface_mesh", max_queue_size_);
     pub_updated_surface_mesh = pnh_->advertise<SurfaceMeshStamped>("updated_surface_mesh", max_queue_size_);
 
-    pub_markers = pnh_->advertise<visualization_msgs::MarkerArray>("makers", max_queue_size_);
+    pub_markers = pnh_->advertise<visualization_msgs::MarkerArray>("markers", max_queue_size_);
 
     // Enable the dynamic reconfigure service
     srv_ = boost::make_shared<dynamic_reconfigure::Server<BuildSurfaceConfig> >(*pnh_);
@@ -44,11 +44,22 @@ void surface_filters::BuildSurface::onInit() {
     sub_update_surface_ = pnh_->subscribe<Segment>("update_surface", max_queue_size_,
                                                    bind(&BuildSurface::synchronized_input_callback, this, _1, false));
 
-
-    NODELET_DEBUG ("[%s::onInit] Nodelet successfully created with the following parameters:\n"
-                           " - use_indices    : %s\n",
+    NODELET_DEBUG ("[%s::onInit] BuildSurface Nodelet successfully created with connections:\n"
+                           " - [subscriber] create_surface       : %s\n"
+                           " - [subscriber] update_surface       : %s\n"
+                           " - [publisher]  new_surface          : %s\n"
+                           " - [publisher]  updated_surface      : %s\n"
+                           " - [publisher]  new_surface_mesh     : %s\n"
+                           " - [publisher]  updated_surface_mesh : %s\n"
+                           " - [publisher]  markers              : %s\n",
                    getName().c_str(),
-                   (use_indices_) ? "true" : "false");
+                   getMTPrivateNodeHandle().resolveName("create_surface").c_str(),
+                   getMTPrivateNodeHandle().resolveName("update_surface").c_str(),
+                   getMTPrivateNodeHandle().resolveName("new_surface").c_str(),
+                   getMTPrivateNodeHandle().resolveName("updated_surface").c_str(),
+                   getMTPrivateNodeHandle().resolveName("new_surface_mesh").c_str(),
+                   getMTPrivateNodeHandle().resolveName("updated_surface_mesh").c_str(),
+                   getMTPrivateNodeHandle().resolveName("markers").c_str());
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////
@@ -62,6 +73,13 @@ void surface_filters::BuildSurface::synchronized_input_callback(const Segment::C
 //            segment->header.frame_id.c_str(),
 //            getMTPrivateNodeHandle().resolveName(is_new ? "create_surface" : "update_surface").c_str());
 
+    if (is_new) {
+        NODELET_DEBUG_STREAM_ONCE("Got the first new segment (" << segment->inliers.size() << " points, frame "
+                                  << segment->header.frame_id << ")");
+    } else {
+        NODELET_DEBUG_STREAM_ONCE("Got the first updated segment (" << segment->inliers.size() << " points, frame "
+                                  << segment->header.frame_id << ")");
+    }
 
     SurfaceStamped::Ptr surface = this->publish_surface(segment, is_new);
     if (surface) this->publish_surface_mesh(surface, is_new);
@@ -106,7 +124,7 @@ surface_filters::BuildSurface::SurfaceMeshStamped::Ptr surface_filters::BuildSur
 
     (is_new ? this->pub_new_surface_mesh : this->pub_updated_surface_mesh).publish(surface_mesh);
 
-    auto num_triangles = surface_mesh->surface_mesh.surface_mesh.triangles.size();
+//    auto num_triangles = surface_mesh->surface_mesh.surface_mesh.triangles.size();
 //    NODELET_INFO_STREAM("[" << getName().c_str() << "::synchronized_input_callback] " << std::setprecision(3) <<
 //                        "(" << (ros::WallTime::now() - start) << " sec, " << num_triangles << " triangles) " <<
 //                        ") Published " << (is_new ? "new" : "updated") << " surface mesh");
@@ -255,7 +273,7 @@ auto surface_filters::BuildSurface::get_concave_hull(const pcl::ModelCoefficient
         auto this_point_i = it->first;
         auto next_point_i = it->second;
 
-        bool both_removed = point_adjacency.remove(it);
+        point_adjacency.remove(it);
 
         // Recompute neighbors
         auto neighbors = point_adjacency.neighbors(next_point_i);
@@ -336,10 +354,11 @@ auto surface_filters::BuildSurface::get_concave_hull(const pcl::ModelCoefficient
 
 void surface_filters::BuildSurface::get_projected_cloud(const Segment::ConstPtr &segment,
                                                         PointCloudIn &proj_output) {
-    // Uses shared_ptrs' alaiasing constructor to get shared pointers to the inliers cloud and to the model coefficients
-    // that cooperate with the shared pointer to the segment
-    proj_.setInputCloud(PointCloudIn::ConstPtr(segment, &segment->inliers));
-    proj_.setModelCoefficients(pcl::ModelCoefficients::ConstPtr(segment, &segment->model));
+    // Projection is expected to be quick enough that the lack of extra effort to make a copy of proj_ while locked
+    // which can then be used concurrently doesn't matter that much
+    std::lock_guard<std::mutex> lock(project_mutex_);
+    proj_.setInputCloud(boost::make_shared<PointCloudIn>(segment->inliers));
+    proj_.setModelCoefficients(boost::make_shared<pcl::ModelCoefficients>(segment->model));
     proj_.filter(proj_output);
 }
 
@@ -449,8 +468,6 @@ void surface_filters::BuildSurface::get_triangluation_trimesh(std::vector<double
     struct triangulateio tri_in, tri_out;
 
     // Initialize tri_in according to triangle.h:175
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wreturn-stack-address"
     tri_in.pointlist = &points_2d[0];
     tri_in.numberofpoints = static_cast<int>(points_2d.size() / 2);
     tri_in.pointmarkerlist = NULL;
@@ -463,7 +480,6 @@ void surface_filters::BuildSurface::get_triangluation_trimesh(std::vector<double
     tri_in.holelist = &holes[0];
     tri_in.numberofregions = 0;
     tri_in.regionlist = NULL;
-#pragma clang diagnostic pop
 
     // Initialize tri_out according to triangle.h:206
     tri_out.pointlist = NULL; // NULL tells Triangulate to allocate the memory for it
@@ -476,7 +492,7 @@ void surface_filters::BuildSurface::get_triangluation_trimesh(std::vector<double
     // B: don't output the boundary markers to save memory (if this changes, initialize tri_out.segmentmarkerlist)
     // Q: (not used while debugging) don't print output
     // IMPORTANT: If the flags change, make sure to change tri_in and tri_out accordingly
-    triangulate("zpPBQ", &tri_in, &tri_out, NULL);
+    triangulate(const_cast<char *>("zpPBQ"), &tri_in, &tri_out, NULL);
     assert(tri_out.numberofcorners == 3);
     assert(tri_out.pointlist != NULL);
     assert(tri_out.trianglelist != NULL);

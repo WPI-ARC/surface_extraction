@@ -2,6 +2,13 @@
     <arg name="input_topic" />
     <arg name="new_indices" />
     <arg name="surfaces_manager_node" />
+    <arg name="point_accumulator_node" />
+
+    <!-- Remap outputs back to the main launch file (has to happen at the beginning) -->
+    <remap from="expand_surfaces/expanded_segments" to="$(arg surfaces_manager_node)/update_surface" />
+    <remap from="expand_surfaces/remaining_indices" to="$(arg point_accumulator_node)/indices" />
+    <remap from="$(arg input_topic)" to="$(arg point_accumulator_node)/indexed_input" />
+
 
     <!-- Extract new points for visualization only -->
     <node pkg="nodelet" type="nodelet" name="publish_new" args="load pcl/ExtractIndices nodelet_manager">
@@ -20,6 +27,9 @@
         <remap from="~input" to="$(arg input_topic)" />
         <remap from="~indices" to="$(arg new_indices)" />
         <remap from="~surfaces" to="$(arg surfaces_manager_node)/surfaces" />
+
+        <remap from="~expanded_segments" to="updated_surface_segment" />
+        <remap from="~remaining_indices" to="new_points_indices" />
     </node>
 
     <!-- Extract new points for visualization only -->
@@ -32,7 +42,7 @@
         <param name="use_indices" value="true" />
     </node>
 
-    <!-- Extract new points for visualization only -->
+    <!-- Extract removed points for visualization only -->
     <node pkg="nodelet" type="nodelet" name="publish_removed" args="load pcl/ExtractIndices nodelet_manager">
         <!-- Topics -->
         <remap from="~input" to="$(arg input_topic)" />
@@ -41,6 +51,4 @@
         <!-- Params -->
         <param name="use_indices" value="true" />
     </node>
-
-
 </launch>

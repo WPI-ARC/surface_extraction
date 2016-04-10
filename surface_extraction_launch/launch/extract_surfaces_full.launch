@@ -1,17 +1,18 @@
 <launch>
     <arg name="input_topic" />
     <arg name="surfaces_manager_node" />
+    <arg name="point_accumulator_node" />
 
     <!-- Remove outliers -->
-    <node pkg="nodelet" type="nodelet" name="outlier_removal" args="load pcl/StatisticalOutlierRemoval nodelet_manager">
-        <!-- Topics -->
-        <remap from="~input" to="$(arg input_topic)" />
-    </node>
+    <!--<node pkg="nodelet" type="nodelet" name="outlier_removal" args="load pcl/StatisticalOutlierRemoval nodelet_manager">-->
+        <!--&lt;!&ndash; Topics &ndash;&gt;-->
+        <!--<remap from="~input" to="$(arg input_topic)" />-->
+    <!--</node>-->
 
     <!-- Smoothing and Normals Estimation -->
     <node pkg="nodelet" type="nodelet" name="normals_estimation" args="load surface_filters/MovingLeastSquaresNodelet nodelet_manager">
         <!-- Topics -->
-        <remap from="~input" to="outlier_removal/output" />
+        <remap from="~input" to="$(arg input_topic)" />
 
         <!-- Params -->
         <param name="use_polynomial_fit" value="false" />
@@ -40,6 +41,11 @@
         <remap from="~normals" to="normals_estimation/normals" />
         <remap from="~clusters" to="region_segmentation/clusters" />
 
+        <!-- Remap outputs back to the main launch file -->
+        <remap from="~segments" to="new_surface_segment" />
+        <remap from="~used_indices" to="used_indices" />
+
+
         <!-- Params -->
         <!-- Sets the type of spatial locator. 1 is FLANN, which seems to be the best kd-tree implementation
             https://github.com/ros-perception/perception_pcl/blob/1.3.0/pcl_ros/include/pcl_ros/surface/moving_least_squares.h#L98 -->
@@ -51,4 +57,5 @@
         <!-- This nodelet publishes lots of near-simultaneous messages -->
         <param name="max_queue_size" value="1000" />
     </node>
+
 </launch>

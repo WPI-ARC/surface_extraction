@@ -1,2 +1,2 @@
 uint32 id
-pcl_msgs/PolygonMesh mesh
+shape_msgs/Mesh mesh

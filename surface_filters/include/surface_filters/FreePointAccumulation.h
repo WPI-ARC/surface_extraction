@@ -22,6 +22,7 @@
 #include <surfaces/utils.hpp>
 #include <surfaces/pcl_shim/PointIndices_Serialization.hpp>
 #include "ConcurrentPointGrouper.h"
+#include "FilterSurfaceInliers.h"
 #include "Throttle.h"
 
 namespace surface_filters {
@@ -54,7 +55,7 @@ public:
 
 protected:
     /** \brief Discretization resolution */
-    double perpendicular_dist_threshold_ = 0.01; // 0.025;
+    double perpendicular_dist_threshold_ = 0.10; // 0.025;
 
     double parallel_dist_threshold_ = 0.05; // 0.1;
 
@@ -76,11 +77,15 @@ private:
       */
     void synchronized_input_callback(const PointCloudIn::ConstPtr &cloud, const PointIndices::ConstPtr &indices);
 
-    void do_publish(const ros::TimerEvent &event);
+    void found_inliers_callback(const PointIndices::ConstPtr &indices);
+
     void do_publish();
+
 
 private:
     pcl::RadiusOutlierRemoval<PointIn> radius_outlier_;
+
+    FilterSurfaceInliers<PointIn> inliers_filter_;
 
     // NOTE this redefines sub_indices_filter_ to be a pcl::PointIndices instead of pcl_msgs::PointIndices
     // If this is removed then very frustrating compile errors will result
@@ -88,6 +93,7 @@ private:
 
     // Need another subscriber to handle non-indexed input
     ros::Subscriber sub_input_noindices_;
+    ros::Subscriber sub_found_inliers_;
 
     /** \brief Synchronized input and indices (used when 'input' is not the only required topic) */
     boost::shared_ptr<ExactTimeSynchronizer> sync_input_indices_e_;

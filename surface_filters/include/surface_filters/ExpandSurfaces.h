@@ -4,13 +4,13 @@
 
 #ifndef SURFACE_FILTERS_EXPANDSURFACES_H
 #define SURFACE_FILTERS_EXPANDSURFACES_H
-#include <pcl_ros/pcl_nodelet.h>
 
 #include <atomic>
 #include <limits>
 #include <mutex>
 
 // PCL includes
+#include <pcl_ros/pcl_nodelet.h>
 #include <pcl/conversions.h>
 #include <pcl/search/search.h>
 #include <pcl/sample_consensus/sac_model_plane.h>
@@ -30,6 +30,8 @@
 #include <surfaces/Surfaces.hpp>
 #include <surfaces/Segment.hpp>
 #include <surfaces/utils.hpp>
+#include "ConcurrentPointGrouper.h"
+#include "FilterSurfaceInliers.h"
 
 namespace surface_filters {
     namespace sync_policies = message_filters::sync_policies;
@@ -68,7 +70,7 @@ namespace surface_filters {
 
     protected:
         /** \brief Discretization resolution */
-        double perpendicular_dist_threshold_ = 0.01; //0.025;
+        double perpendicular_dist_threshold_ = 0.05; //0.025;
 
         double parallel_dist_threshold_ = 0.05; //0.1;
 
@@ -88,27 +90,17 @@ namespace surface_filters {
         /** \brief Callback that does all the work.
           * \param cloud the pointer to the input point cloud
           */
-        void synchronized_input_callback(const PointCloudIn::ConstPtr &cloud, const PointIndices::ConstPtr &indices);
+        void input_callback(const Surfaces::ConstPtr &surfaces_in,
+                            const PointCloudIn::ConstPtr &cloud,
+                            const PointIndices::ConstPtr &indices);
 
         void process(const Surfaces::ConstPtr &surfaces, const PointCloudIn::ConstPtr &cloud, const PointIndices::ConstPtr &indices);
 
         HullCloudsMap getHullCloudsMap(const Surfaces::ConstPtr &surfaces) const;
 
-        pcl::IndicesPtr getFilteredIndices(const Surfaces::ConstPtr &surfaces, const PointCloudIn::ConstPtr &cloud_in,
-                                           const PointIndices::ConstPtr &indices, const HullCloudsMap &hull_clouds);
-
-        pcl::IndicesPtr filterWithinModelDistance(const PointCloudIn::ConstPtr &input,
-                                                  const pcl::IndicesConstPtr &indices,
-                                                  const pcl::ModelCoefficients &coeff);
-
         pcl::IndicesPtr filterWithinRadiusConnected(const pcl::search::Search<PointIn> &search,
                                                     const PointCloudIn::Ptr &edge_points,
                                                     const pcl::IndicesPtr &removed_indices) const;
-
-        pcl::IndicesPtr filterWithinHull(const PointCloudIn::ConstPtr &input,
-                                         const pcl::IndicesConstPtr &indices,
-                                         const PointCloudIn::Ptr &hull_cloud,
-                                         const std::vector<pcl::Vertices> &hull_polygons);
 
     private:
         pcl::CropHull<PointIn> crophull_;
@@ -135,9 +127,8 @@ namespace surface_filters {
 
         std::mutex hull_mutex_;
 
-        PointCloudIn::Ptr pending_points_;
-
-        std::mutex pending_points_mutex_;
+        ConcurrentPointGrouper<PointIn> grouper_;
+        FilterSurfaceInliers<PointIn> filter_inliers_;
 
         std::atomic<decltype(pcl::PCLHeader().stamp)> latest_update_;
 

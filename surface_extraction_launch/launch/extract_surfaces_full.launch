@@ -43,7 +43,7 @@
 
         <!-- Remap outputs back to the main launch file -->
         <remap from="~segments" to="new_surface_segment" />
-        <remap from="~used_indices" to="used_indices" />
+        <remap from="~used_indices" to="found_inliers" />
 
 
         <!-- Params -->

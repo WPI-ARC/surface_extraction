@@ -99,21 +99,16 @@ public:
         }
     }
 
-    typename PointCloudType::ConstPtr finish_group_with(const typename PointCloudType::ConstPtr &new_cloud,
-                                                        const pcl::PointIndices::ConstPtr &new_indices = nullptr) {
+    typename std::pair<typename PointCloudType::ConstPtr, pcl::PointIndices::ConstPtr>
+    finish_group_with(const typename PointCloudType::ConstPtr &new_cloud,
+                      const pcl::PointIndices::ConstPtr &new_indices = nullptr) {
         std::lock_guard<std::recursive_mutex> lock(mutex_);
 
         if (cloud_ptr_) {
             add(new_cloud, new_indices);
-            return std::move(cloud_ptr_); // NOTE use of std::move leaves cloud_ptr_ set to nullptr
-        } else if (new_indices) {
-            // In this case, we can skip cloud_ptr_ entirely but still need to do work because the return value is
-            // required to restrict output to new_indices
-            return boost::make_shared<PointCloudType>(*new_cloud, new_indices->indices);
+            return {std::move(cloud_ptr_), nullptr}; // NOTE use of std::move leaves cloud_ptr_ set to nullptr
         } else {
-            // In this case, don't need to do any work
-            // Note that this is the case that restricts the return value to ConstPtr rather than Ptr
-            return new_cloud;
+            return {new_cloud, new_indices};
         }
     }
 

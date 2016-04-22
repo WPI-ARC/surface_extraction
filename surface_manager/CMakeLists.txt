@@ -122,7 +122,7 @@ set(CMAKE_BUILD_TYPE Debug)
 
 # Removed -O3 for debugging
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O3 -std=c++11 -Wall -Wextra -Werror")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-parameter -Wno-unknown-pragmas")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-parameter -Wno-unknown-pragmas -Wno-error=unused-variable")
 
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations

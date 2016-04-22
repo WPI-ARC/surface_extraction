@@ -47,7 +47,7 @@ void surface_filters::ChangeDetection::onInit() {
 void surface_filters::ChangeDetection::synchronized_input_callback(const PointCloudIn::ConstPtr &cloud) {
     // No subscribers, no work
     if (pub_indices_.getNumSubscribers() <= 0 && pub_output_.getNumSubscribers() <= 0 && pub_new_scene_.getNumSubscribers() <= 0) {
-        NODELET_DEBUG("[%s::synchronized_input_callback] Input received but there are no subscribers; returning.",
+        NODELET_DEBUG("[%s::input_callback] Input received but there are no subscribers; returning.",
                       getName().c_str());
         return;
     }

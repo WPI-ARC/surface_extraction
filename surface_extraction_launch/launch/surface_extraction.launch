@@ -117,7 +117,8 @@
             <remap from="~unindexed_input" to="new_points_unindexed" />
             <remap from="~indexed_input" to="new_points_indexed" />
             <remap from="~indices" to="new_points_indices" />
-            <remap from="~removed_indices" to="removed_indices" />
+            <remap from="~found_inliers" to="found_inliers" />
+            <remap from="~surfaces" to="surface_manager/surfaces" />
         </node>
 
         <!-- Full-Scene Pipeline -->

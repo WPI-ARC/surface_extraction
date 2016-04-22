@@ -70,9 +70,9 @@ void surface_manager::SurfaceManager::add_surface(const SurfaceStamped::ConstPtr
 //    assert(scope_lock.owns_lock());
 
 
-    auto hull_size = surface->surface.concave_hull.cloud.width * surface->surface.concave_hull.cloud.height;
-    NODELET_DEBUG_STREAM("New Surface received with " << surface->surface.inliers.size() << " points, " << hull_size <<
-                         " vertices, " << mesh->surface_mesh.surface_mesh.triangles.size() << " triangles");
+//    auto hull_size = surface->surface.concave_hull.cloud.width * surface->surface.concave_hull.cloud.height;
+//    NODELET_DEBUG_STREAM("New Surface received with " << surface->surface.inliers.size() << " points, " << hull_size <<
+//                         " vertices, " << mesh->surface_mesh.surface_mesh.triangles.size() << " triangles");
 
     if (surface->header.frame_id != target_frame_) {
         NODELET_ERROR_STREAM("[" << getName().c_str() <<
@@ -143,8 +143,8 @@ void surface_manager::SurfaceManager::replace_surface(const SurfaceStamped::Cons
 //    std::unique_lock<std::mutex> scope_lock(currently_executing_, std::try_to_lock);
 //    // Theoretically this program is never executed concurrently, so we should always get the lock on the first try
 //    assert(scope_lock.owns_lock());
-    NODELET_DEBUG_STREAM("Replacement for surface " << surface->surface.id << " received with time "
-                         << surface->header.stamp);
+//    NODELET_DEBUG_STREAM("Replacement for surface " << surface->surface.id << " received with time "
+//                         << surface->header.stamp);
 
     if (surface->header.frame_id != target_frame_) {
         NODELET_ERROR_STREAM(
@@ -226,8 +226,6 @@ void surface_manager::SurfaceManager::replace_surface(const SurfaceStamped::Cons
                                                 << " seconds");
 
     if (latest_update_ < surface->header.stamp) {
-        NODELET_DEBUG_STREAM("SurfaceManager changing latest_update from " << latest_update_ << " to "
-                             << surface->header.stamp);
         latest_update_ = surface->header.stamp;
     }
 }
@@ -244,8 +242,6 @@ void surface_manager::SurfaceManager::publish(const ros::TimerEvent &event) cons
     this->publish_perimeter_points();
     this->publish_perimeter_lines();
     this->publish_mesh_triangles();
-
-    NODELET_DEBUG_STREAM("SurfaceManager published with latest_update " << latest_update_);
 }
 
 void surface_manager::SurfaceManager::publish_mesh_triangles() const {

@@ -71,10 +71,10 @@ void surface_filters::RegionGrowingSegmentation::onInit() {
     }
 
     NODELET_DEBUG("[%s::onInit] RegionGrowingSegmentation Nodelet successfully created with connections:\n"
-                  " - [subscriber] input   : %s\n"
-                  " - [subscriber] normals : %s\n"
-                  " - [subscriber] indices : %s\n"
-                  " - [publisher]  output  : %s\n"
+                  " - [subscriber] input    : %s\n"
+                  " - [subscriber] normals  : %s\n"
+                  " - [subscriber] indices  : %s\n"
+                  " - [publisher]  output   : %s\n"
                   " - [publisher]  clusters : %s\n",
                   getName().c_str(), getMTPrivateNodeHandle().resolveName("input").c_str(),
                   getMTPrivateNodeHandle().resolveName("normals").c_str(),
@@ -102,7 +102,7 @@ void surface_filters::RegionGrowingSegmentation::synchronized_input_callback(con
 
     // If cloud is given, check if it's valid
     if (!isValid(cloud)) {
-        NODELET_ERROR("[%s::synchronized_input_callback] Invalid input!", getName().c_str());
+        NODELET_ERROR("[%s::input_callback] Invalid input!", getName().c_str());
         output->header = cloud->header;
         pub_output_.publish(output);
         return;
@@ -143,9 +143,10 @@ void surface_filters::RegionGrowingSegmentation::synchronized_input_callback(con
     rgs.setInputCloud(cloud);
     // Get a mutable version of Normals as demanded by RegionGrowingSegmentation
     rgs.setInputNormals(boost::make_shared<NormalCloudIn>(*normals));
-    if (indices) rgs.setIndices(indices);
+    // IndicesPtr is the only pointer type setIndices will take without trying to dereference it
+    if (indices) { rgs.setIndices(indices); } else { rgs.setIndices(pcl::IndicesPtr()); }
 
-    NODELET_DEBUG("[%s::synchronized_input_callback] Running Region Growing Segmentation", getName().c_str());
+    NODELET_DEBUG("[%s::input_callback] Running Region Growing Segmentation", getName().c_str());
 
     // Do the reconstruction
     rgs.extract(clusters->clusters);
@@ -166,6 +167,7 @@ void surface_filters::RegionGrowingSegmentation::synchronized_input_callback(con
 
     // Enforce that the TF frame and the timestamp are copied
     output->header = cloud->header;
+    output->is_dense = cloud->is_dense;
     pub_output_.publish(output);
 
     clusters->header = cloud->header;
@@ -244,6 +246,8 @@ auto surface_filters::RegionGrowingSegmentation::getLocalRGSObject() -> pcl::Reg
     // C++ will happily copy the kdtree's shared_ptr and leave it pointing to the same tree, and then two concurrent
     // copies of the class try to use it on different clouds at the same time, which causes :(.
     rgs.setSearchMethod(nullptr);
+    // And it will do same thing with the normals
+//    rgs.setInputNormals(nullptr);
 
     return rgs;
 }

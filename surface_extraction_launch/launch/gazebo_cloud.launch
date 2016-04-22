@@ -6,10 +6,4 @@
     </node>
 
     <include file="$(find surface_extraction_launch)/launch/surface_extraction.launch" />
-
-    <!-- Snapshotter -->
-    <node pkg="nodelet" type="nodelet" name="snapshot" args="load surface_filters/PeriodicSnapshotter /surface_extraction/nodelet_manager">
-        <!-- Topics -->
-        <remap from="~assembled_cloud" to="/assembled_cloud" />
-    </node>
 </launch>

@@ -28,7 +28,7 @@ normals_estimation: {
 }
 
 region_segmentation: {
-  min_cluster_size: 200, # Points per cluster
+  min_cluster_size: 500, # Points per cluster
   smooth_mode: false # Don't allow regions to grow around corners
 }
 

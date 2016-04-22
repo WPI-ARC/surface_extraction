@@ -90,7 +90,7 @@ void surface_filters::SACSegmentAndFit::synchronized_input_callback(const PointC
                                                                     const PointClusters::ConstPtr &input_clusters) {
     // No subscribers, no work
     if (pub_output_.getNumSubscribers() <= 0 && pub_segments_.getNumSubscribers() <= 0) {
-        NODELET_DEBUG("[%s::synchronized_input_callback] Input received but there are no subscribers; returning.",
+        NODELET_DEBUG("[%s::input_callback] Input received but there are no subscribers; returning.",
                       getName().c_str());
         return;
     }
@@ -99,7 +99,7 @@ void surface_filters::SACSegmentAndFit::synchronized_input_callback(const PointC
 
     if (normals_ros != NULL) {
         NODELET_DEBUG(
-            "[%s::synchronized_input_callback]\n"
+            "[%s::input_callback]\n"
             "                                 - PointCloud with %d data points(%s), stamp %f, and frame %s on topic %s "
             "received.\n"
             "                                 - Normals PointCloud with %d data points(%s), stamp %f, and frame %s on "
@@ -119,7 +119,7 @@ void surface_filters::SACSegmentAndFit::synchronized_input_callback(const PointC
             input_clusters->header.frame_id.c_str(), getMTPrivateNodeHandle().resolveName("clusters").c_str());
     } else {
         NODELET_DEBUG(
-            "[%s::synchronized_input_callback]\n"
+            "[%s::input_callback]\n"
             "                                 - PointCloud with %d data points(%s), stamp %f, and frame %s on topic %s "
             "received.\n"
             "                                 - PointClusters with %zu clusters, stamp %f, and frame %s on topic %s "
@@ -150,7 +150,7 @@ void surface_filters::SACSegmentAndFit::synchronized_input_callback(const PointC
     extraction.setInputCloud(cloud);
 
     NODELET_DEBUG(
-        "[%s::synchronized_input_callback] Performing SAC segmentation and fitting with should_output_cloud = %d",
+        "[%s::input_callback] Performing SAC segmentation and fitting with should_output_cloud = %d",
         getName().c_str(), should_populate_output_cloud);
 
     for (PointIndices input_cluster : input_clusters->clusters) {
@@ -243,7 +243,7 @@ void surface_filters::SACSegmentAndFit::synchronized_input_callback(const PointC
 
     pub_used_indices_.publish(used_indices);
 
-    NODELET_DEBUG("[%s::synchronized_input_callback] Successfully published output and clusters.", getName().c_str());
+    NODELET_DEBUG("[%s::input_callback] Successfully published output and clusters.", getName().c_str());
 }
 
 void surface_filters::SACSegmentAndFit::config_callback(SACConfig &config, uint32_t level __attribute((unused))) {

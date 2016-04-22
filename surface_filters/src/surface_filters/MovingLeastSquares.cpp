@@ -75,7 +75,7 @@ void surface_filters::MovingLeastSquaresNodelet::synchronized_input_callback(con
                                                                              const PointIndices::ConstPtr &indices) {
     // No subscribers, no work
     if (pub_output_.getNumSubscribers() <= 0 && pub_normals_.getNumSubscribers() <= 0) {
-        NODELET_DEBUG("[%s::synchronized_input_callback] Input received but there are no subscribers; returning.",
+        NODELET_DEBUG("[%s::input_callback] Input received but there are no subscribers; returning.",
                       getName().c_str());
         return;
     }
@@ -84,7 +84,7 @@ void surface_filters::MovingLeastSquaresNodelet::synchronized_input_callback(con
 
     /// DEBUG
     if (indices) {
-        NODELET_DEBUG("[%s::synchronized_input_callback]\n"
+        NODELET_DEBUG("[%s::input_callback]\n"
                       "                                 - PointCloud with %d data points (%s), stamp %f, and frame %s "
                       "on topic %s received.\n"
                       "                                 - PointIndices with %zu values, stamp %f, and frame %s on "
@@ -95,7 +95,7 @@ void surface_filters::MovingLeastSquaresNodelet::synchronized_input_callback(con
                       pcl_conversions::fromPCL(indices->header.stamp).toSec(), indices->header.frame_id.c_str(),
                       getMTPrivateNodeHandle().resolveName("indices").c_str());
     } else {
-        NODELET_DEBUG("[%s::synchronized_input_callback] PointCloud with %d data points, stamp %f, and frame %s on "
+        NODELET_DEBUG("[%s::input_callback] PointCloud with %d data points, stamp %f, and frame %s on "
                       "topic %s received.",
                       getName().c_str(), cloud->width * cloud->height, fromPCL(cloud->header).stamp.toSec(),
                       cloud->header.frame_id.c_str(), getMTPrivateNodeHandle().resolveName("input").c_str());
@@ -114,7 +114,7 @@ void surface_filters::MovingLeastSquaresNodelet::synchronized_input_callback(con
     mls.setInputCloud(cloud);
     if (indices) mls.setIndices(indices);
 
-    NODELET_DEBUG("[%s::synchronized_input_callback] Running MLS with search radius %f, polynomial fit %d, polynomial "
+    NODELET_DEBUG("[%s::input_callback] Running MLS with search radius %f, polynomial fit %d, polynomial "
                   "order %d, sqr gauss param %f, triangulate normals %d",
                   getName().c_str(), impl_.getSearchRadius(), impl_.getPolynomialFit(), impl_.getPolynomialOrder(),
                   impl_.getSqrGaussParam(), compute_normals_);
@@ -130,10 +130,12 @@ void surface_filters::MovingLeastSquaresNodelet::synchronized_input_callback(con
 
     // Publish outputs with the same header
     output->header = cloud->header;
+    output->is_dense = cloud->is_dense;
     pub_output_.publish(output);
 
     if (compute_normals_) {
         normals->header = cloud->header;
+        normals->is_dense = cloud->is_dense;
         pub_normals_.publish(normals);
     }
 }

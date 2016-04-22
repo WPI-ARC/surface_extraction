@@ -4,6 +4,9 @@
 
 #include <pluginlib/class_list_macros.h>
 #include <surface_filters/FreePointAccumulation.h>
+#include <pcl/filters/extract_indices.h>
+
+#define LOG(...) NODELET_DEBUG_STREAM("[" << getName().c_str() << ":" << __func__ << "] " << __VA_ARGS__)
 
 //////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -22,6 +25,9 @@ void surface_filters::FreePointAccumulation::onInit() {
 
     sub_input_filter_.subscribe(*pnh_, "indexed_input", max_queue_size_);
     sub_indices_filter_.subscribe(*pnh_, "indices", max_queue_size_);
+
+    sub_found_inliers_ = pnh_->subscribe<PointIndices>("found_inliers", max_queue_size_,
+                                                       bind(&FreePointAccumulation::found_inliers_callback, this, _1));
 
     if (approximate_sync_) {
         sync_input_indices_a_ = boost::make_shared<ApproxTimeSynchronizer>(ApproxPolicy(max_queue_size_),
@@ -42,14 +48,19 @@ void surface_filters::FreePointAccumulation::onInit() {
 
     publish_throttle_.setInterval(ros::Duration(0.5));
 
+    inliers_filter_.setDistance(perpendicular_dist_threshold_);
+    inliers_filter_.subscribe(*pnh_, "surfaces", max_queue_size_);
+
     NODELET_DEBUG("[%s::onInit] FreePointAccumulation Nodelet successfully created with connections:\n"
                   " - [subscriber] unindexed_input    : %s\n"
                   " - [subscriber] indexed_input      : %s\n"
                   " - [subscriber] indices            : %s\n"
+                  " - [subscriber] surfaces           : %s\n"
                   " - [publisher]  accumulated_points : %s\n",
                   getName().c_str(), getMTPrivateNodeHandle().resolveName("unindexed_input").c_str(),
                   getMTPrivateNodeHandle().resolveName("indexed_input").c_str(),
                   getMTPrivateNodeHandle().resolveName("indices").c_str(),
+                  getMTPrivateNodeHandle().resolveName("surfaces").c_str(),
                   getMTPrivateNodeHandle().resolveName("accumulated_points").c_str());
 }
 
@@ -65,39 +76,74 @@ void surface_filters::FreePointAccumulation::synchronized_input_callback(const P
     assert(cloud_in); // Assert non-null
     grouper_.add(cloud_in, indices_in);
 
-    NODELET_DEBUG_STREAM_THROTTLE(5, "[" << getName().c_str() << ":synchronized_input_callback] "
+    NODELET_DEBUG_STREAM_THROTTLE(5, "[" << getName().c_str() << ":input_callback] "
                                          << "FreePointAccumulation has " << grouper_.size() << " pending points");
 
     do_publish();
+}
+
+void surface_filters::FreePointAccumulation::found_inliers_callback(const pcl::PointIndices::ConstPtr &indices) {
+    auto cloud_it = processing_clouds_.find(indices->header);
+
+    assert(cloud_it != processing_clouds_.end());
+
+    std::vector<int> outlier_indices;
+
+    pcl::ExtractIndices<PointIn> extract;
+    extract.setInputCloud(cloud_it->second);
+    extract.setIndices(indices);
+    extract.setNegative(true);
+    extract.filter(outlier_indices);
+
+    LOG("Processing finished: had " << cloud_it->second->size() << " points, matched " << indices->indices.size()
+                                    << ", " << outlier_indices.size() << " remaining");
+
+    grouper_.add(cloud_it->second, outlier_indices);
+
+    processing_clouds_.erase(cloud_it);
 }
 
 void surface_filters::FreePointAccumulation::do_publish() {
     // Blocks until it's time to run OR returns false if another call to do_publish is taking care of it
     if (!publish_throttle_.runNow()) return;
 
-    std::vector<int> inlier_indices;
+    //! TEMPORARY: Only run one detection at a time
+    if (processing_clouds_.size() > 1) return;
+
+    std::vector<int> radius_filtered;
 
     auto points = grouper_.finish_group_if([&](const PointCloudIn::ConstPtr &accumulated_points) {
+        // First, remove NaN (No idea where it came from but it ruins the further steps in the pipeline)
+
         // Simultaneously filter out the outliers and evaluate whether there are enough points to send to the pipeline
         radius_outlier_.setInputCloud(accumulated_points);
-        radius_outlier_.filter(inlier_indices);
+        auto indices = inliers_filter_.getFilteredIndices(accumulated_points);
+        if (!indices) NODELET_WARN_STREAM("Inliers filter doesn't have any surfaces");
+//        else LOG("Inliers filtered from " << accumulated_points->size() << " to " << indices->size() << " ("
+//                 << (accumulated_points->size() - indices->size()) << " removed)");
+        radius_outlier_.setIndices(indices);
+        radius_outlier_.filter(radius_filtered);
 
         // Finish the group if there are enough points
-        return inlier_indices.size() > 50; // TODO: Dynamic reconfigure for the parameter
+        return radius_filtered.size() > 50; // TODO: Dynamic reconfigure for the parameter
     });
 
     if (!points) return;
 
     // Save and publish the accumulated inliers
-    auto accumulated_inliers = boost::make_shared<PointCloudIn>(*points, inlier_indices);
+    // Technically more efficient to publish the cloud and the list of points
+    auto accumulated_inliers = boost::make_shared<PointCloudIn>(*points, radius_filtered);
+    // This is sometimes NaN and filtering out the NaN doesn't work so just mark it as "may contain NaN"
+    accumulated_inliers->is_dense = false;
     processing_clouds_[points->header] = accumulated_inliers;
     pub_accumulated_points_.publish(accumulated_inliers);
 
+    LOG("Published points to new surface detection (" << processing_clouds_.size() << " clouds pending)");
+
     // Put the outliers back in the grouper for the next run
+    // Note that this (correctly) doesn't re-add the points that were removed because they were surface inliers
     grouper_.add(points, *radius_outlier_.getRemovedIndices());
 }
-
-void surface_filters::FreePointAccumulation::do_publish(const ros::TimerEvent &) { do_publish(); }
 
 //////////////////////////////////////////////////////////////////////////////////////////////
 // void surface_filters::FreePointAccumulation::config_callback(ChangeDetectionConfig &config, uint32_t level) {

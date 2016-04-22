@@ -16,15 +16,15 @@ void surface_filters::ExpandSurfaces::onInit() {
     pub_removed_indices_ = pnh_->advertise<PointIndices>("removed_indices", max_queue_size_);
     pub_existing_inliers_ = pnh_->advertise<PointCloudIn>("existing_inliers", max_queue_size_);
 
-//    if (!pnh_->getParam("resolution", resolution_)) {
-//        NODELET_ERROR("[%s::onInit] Need a 'resolution' parameter to be set before continuing!",
-//                      getName().c_str());
-//        return;
-//    }
+    //    if (!pnh_->getParam("resolution", resolution_)) {
+    //        NODELET_ERROR("[%s::onInit] Need a 'resolution' parameter to be set before continuing!",
+    //                      getName().c_str());
+    //        return;
+    //    }
 
     // Enable the dynamic reconfigure service
-//    srv_ = boost::make_shared<dynamic_reconfigure::Server<ChangeDetectionConfig> >(*pnh_);
-//    srv_->setCallback(boost::bind(&ChangeDetection::config_callback, this, _1, _2));
+    //    srv_ = boost::make_shared<dynamic_reconfigure::Server<ChangeDetectionConfig> >(*pnh_);
+    //    srv_->setCallback(boost::bind(&ChangeDetection::config_callback, this, _1, _2));
 
     sub_input_filter_.subscribe(*pnh_, "input", max_queue_size_);
     sub_pcl_indices_filter_.subscribe(*pnh_, "indices", max_queue_size_);
@@ -32,117 +32,73 @@ void surface_filters::ExpandSurfaces::onInit() {
     if (approximate_sync_) {
         sync_input_indices_a_ = boost::make_shared<ApproxTimeSynchronizer>(ApproxPolicy(max_queue_size_),
                                                                            sub_input_filter_, sub_pcl_indices_filter_);
-        sync_input_indices_a_->registerCallback(bind(&ExpandSurfaces::synchronized_input_callback, this, _1, _2));
+        sync_input_indices_a_->registerCallback(boost::bind(&ExpandSurfaces::input_callback, this, Surfaces::ConstPtr(), _1, _2));
     } else {
         sync_input_indices_e_ = boost::make_shared<ExactTimeSynchronizer>(ExactPolicy(max_queue_size_),
                                                                           sub_input_filter_, sub_pcl_indices_filter_);
-        sync_input_indices_e_->registerCallback(bind(&ExpandSurfaces::synchronized_input_callback, this, _1, _2));
+        sync_input_indices_e_->registerCallback(boost::bind(&ExpandSurfaces::input_callback, this, Surfaces::ConstPtr(), _1, _2));
     }
 
     sub_surfaces_.subscribe(*pnh_, "surfaces", max_queue_size_);
-    surfaces_cache_ = boost::make_shared<message_filters::Cache<Surfaces> >(sub_surfaces_, 1);
-    
-//    sub_surface_clouds_.subscribe(*pnh_, "surface_clouds", max_queue_size_);
-//    surface_clouds_cache_ = boost::make_shared<message_filters::Cache<SurfaceClouds> >(sub_surface_clouds_, 1);
+    surfaces_cache_ = boost::make_shared<message_filters::Cache<Surfaces>>(sub_surfaces_, 1);
+    surfaces_cache_->registerCallback(boost::bind(&ExpandSurfaces::input_callback, this, _1, PointCloudIn::ConstPtr(), PointIndices::ConstPtr()));
 
     crophull_.setDim(2);
     crophull_.setCropOutside(true); // True returns only points inside the hull
 
+    filter_inliers_.setDistance(perpendicular_dist_threshold_);
+
     latest_update_ = 0;
 
-    NODELET_DEBUG ("[%s::onInit] ExpandSurfaces Nodelet successfully created with connections:\n"
-                           " - [subscriber] input             : %s\n"
-                           " - [subscriber] indices           : %s\n"
-                           " - [subscriber] surfaces          : %s\n"
-                           " - [publisher]  expanded_segments : %s\n"
-                           " - [publisher]  remaining_indices : %s\n"
-                           " - [publisher]  filtered_indices  : %s\n"
-                           " - [publisher]  removed_indices  : %s\n"
-                           " - [publisher]  existing_inliers   : %s\n",
-                   getName().c_str(),
-                   getMTPrivateNodeHandle().resolveName("input").c_str(),
-                   getMTPrivateNodeHandle().resolveName("indices").c_str(),
-                   getMTPrivateNodeHandle().resolveName("surfaces").c_str(),
-                   getMTPrivateNodeHandle().resolveName("expanded_segments").c_str(),
-                   getMTPrivateNodeHandle().resolveName("remaining_indices").c_str(),
-                   getMTPrivateNodeHandle().resolveName("filtered_indices").c_str(),
-                   getMTPrivateNodeHandle().resolveName("removed_indices").c_str(),
-                   getMTPrivateNodeHandle().resolveName("existing_inliers").c_str());
+    NODELET_DEBUG("[%s::onInit] ExpandSurfaces Nodelet successfully created with connections:\n"
+                  " - [subscriber] input             : %s\n"
+                  " - [subscriber] indices           : %s\n"
+                  " - [subscriber] surfaces          : %s\n"
+                  " - [publisher]  expanded_segments : %s\n"
+                  " - [publisher]  remaining_indices : %s\n"
+                  " - [publisher]  filtered_indices  : %s\n"
+                  " - [publisher]  removed_indices   : %s\n"
+                  " - [publisher]  existing_inliers  : %s\n",
+                  getName().c_str(), getMTPrivateNodeHandle().resolveName("input").c_str(),
+                  getMTPrivateNodeHandle().resolveName("indices").c_str(),
+                  getMTPrivateNodeHandle().resolveName("surfaces").c_str(),
+                  getMTPrivateNodeHandle().resolveName("expanded_segments").c_str(),
+                  getMTPrivateNodeHandle().resolveName("remaining_indices").c_str(),
+                  getMTPrivateNodeHandle().resolveName("filtered_indices").c_str(),
+                  getMTPrivateNodeHandle().resolveName("removed_indices").c_str(),
+                  getMTPrivateNodeHandle().resolveName("existing_inliers").c_str());
 }
-
 
 //////////////////////////////////////////////////////////////////////////////////////////////
-void surface_filters::ExpandSurfaces::synchronized_input_callback(const PointCloudIn::ConstPtr &cloud_in,
-                                                                  const PointIndices::ConstPtr &indices_in) {
-    //pcl::ScopeTime scopetime("Expand Surfaces");
+void surface_filters::ExpandSurfaces::input_callback(const Surfaces::ConstPtr &surfaces_in,
+                                                     const PointCloudIn::ConstPtr &cloud_in,
+                                                     const PointIndices::ConstPtr &indices_in) {
+    // pcl::ScopeTime scopetime("Expand Surfaces");
 
-    if (cloud_in->size() == 0 || indices_in->indices.size() == 0) {
+    if ((cloud_in && cloud_in->size() == 0) || (indices_in && indices_in->indices.size() == 0)) {
         return;
     }
 
-    std::lock_guard<std::mutex> processing_lock_(pending_points_mutex_);
+    auto &surfaces = surfaces_in ? surfaces_in : surfaces_cache_->getElemBeforeTime(ros::Time::now());
 
-    /// DEBUG
-//    NODELET_DEBUG("[%s::synchronized_input_callback]\n"
-//                          "                                 - PointCloud with %d data points (%s), stamp %f, and frame %s on topic %s received.\n"
-//                          "                                 - PointIndices with %zu values, stamp %f, and frame %s on topic %s received.",
-//                  getName().c_str(),
-//                  cloud->width * cloud->height, pcl::getFieldsList(*cloud).c_str(),
-//                  fromPCL(cloud->header).stamp.toSec(), cloud->header.frame_id.c_str(),
-//                  getMTPrivateNodeHandle().resolveName("input").c_str(),
-//                  indices->indices.size(), indices->header.stamp.toSec(), indices->header.frame_id.c_str(),
-//                  getMTPrivateNodeHandle().resolveName("indices").c_str());
-
-    Surfaces::ConstPtr surfaces = surfaces_cache_->getElemBeforeTime(ros::Time::now());
-
-    // TODO: Add callback to surfaces_cache_ that runs this
-    bool wait_for_next = !surfaces || surfaces->latest_update < latest_update_;
-
-    PointCloudIn::Ptr cloud;
-
-    if (wait_for_next) { // If no surfaces yet, add this to the set of pending points and return
-        std::size_t prev_num_pending_points = pending_points_ ? pending_points_->size() : 0;
-        if (!pending_points_) { // If no pending points yet, make one
-            pending_points_ = indices_in.get() != nullptr ? boost::make_shared<PointCloudIn>(*cloud_in, indices_in->indices) :
-                                           boost::make_shared<PointCloudIn>(*cloud_in);
-        } else { // If there is an existing pending points cloud,
-            *pending_points_ += indices_in.get() != nullptr ? PointCloudIn(*cloud_in, indices_in->indices) : PointCloudIn(*cloud_in);
-        }
-        if (!surfaces) {
-            NODELET_DEBUG_STREAM_THROTTLE(5, "ExpandSurfaces waiting for first surfaces list ("
-                                             << pending_points_->size() << " pending points, "
-                                             << (pending_points_->size() - prev_num_pending_points) << " new)");
-        } else {
-            NODELET_DEBUG_STREAM_THROTTLE(5, "ExpandSurfaces waiting for new surfaces list (waiting for "
-                                             << latest_update_ << ", " << pending_points_->size() << " pending points, "
-                                             << (pending_points_->size() - prev_num_pending_points) << " new)");
-        }
-        return;
-    } else if (pending_points_) { // If there are pending points to process, add the new points to them
-        *pending_points_ += indices_in.get() != nullptr ? PointCloudIn(*cloud_in, indices_in->indices) : PointCloudIn(*cloud_in);
-    }
-
-    if (pending_points_) {
-        // If pending points exists, use std::swap to put the pending points into cloud and a null sharedptr into
-        // pending points so that as soon as processing_lock_ is released, another thread can use pending_points.
-        std::swap(pending_points_, cloud);
-    }
-
-    if (cloud) {
-        this->process(surfaces, cloud, PointIndices::Ptr());
-    } else {
-        this->process(surfaces, cloud_in, indices_in);
+    bool should_process = surfaces && (surfaces->latest_update >= latest_update_);
+    if (indices_in && !should_process) {
+        grouper_.add(cloud_in, indices_in);
+    } else if (indices_in && surfaces) { // Note to future me: CLion says this is always true but it is WRONG
+        auto point_group = grouper_.finish_group_with(cloud_in, indices_in);
+        process(surfaces, point_group.first, point_group.second);
+    } else if (should_process && surfaces) {
+        process(surfaces, grouper_.finish_group(), nullptr);
     }
 }
 
-void surface_filters::ExpandSurfaces::process(const Surfaces::ConstPtr &surfaces,
-                                              const PointCloudIn::ConstPtr &cloud,
+void surface_filters::ExpandSurfaces::process(const Surfaces::ConstPtr &surfaces, const PointCloudIn::ConstPtr &cloud,
                                               const PointIndices::ConstPtr &indices) {
-    //pcl::ScopeTime scopetime("Expand surfaces processing");
-    NODELET_INFO_STREAM_THROTTLE(5 /*seconds*/, "Current lag after change detection is "
-                                                << (ros::Time::now() - pcl_conversions::fromPCL(cloud->header.stamp))
-                                                << " seconds");
+    if (!surfaces || !cloud) return;
 
+    NODELET_INFO_STREAM_THROTTLE(5, "Current lag after change detection is "
+                                        << (ros::Time::now() - pcl_conversions::fromPCL(cloud->header.stamp))
+                                        << " seconds");
 
     if (cloud->size() == 0 || (indices && indices->indices.size() == 0)) {
         return;
@@ -150,8 +106,8 @@ void surface_filters::ExpandSurfaces::process(const Surfaces::ConstPtr &surfaces
 
     HullCloudsMap hull_clouds = this->getHullCloudsMap(surfaces);
 
-    pcl::IndicesPtr filtered_indices = this->getFilteredIndices(surfaces, cloud, indices, hull_clouds);
-    pcl::IndicesPtr removed_indices = boost::make_shared<std::vector<int> >();
+    pcl::IndicesPtr filtered_indices = filter_inliers_.getFilteredIndices(surfaces, cloud, indices);
+    pcl::IndicesPtr removed_indices = boost::make_shared<std::vector<int>>();
 
     {
         pcl::PointIndicesPtr filtered_indices_msg = boost::make_shared<pcl::PointIndices>();
@@ -178,22 +134,25 @@ void surface_filters::ExpandSurfaces::process(const Surfaces::ConstPtr &surfaces
     search.setInputCloud(cloud, filtered_indices);
 
     for (const Surface &old_surface : surfaces->surfaces) {
-        //pcl::ScopeTime for_scopetime(("Expand surface " + std::to_string(old_surface.id)).c_str());
+        // pcl::ScopeTime for_scopetime(("Expand surface " + std::to_string(old_surface.id)).c_str());
 
         //
         // FILTER TO POINTS NEAR SURFACE BOUNDARY
         //
-        pcl::IndicesPtr radius_filtered = filterWithinRadiusConnected(search, hull_clouds[old_surface.id],
-                                                                      removed_indices);
+        pcl::IndicesPtr radius_filtered =
+            filterWithinRadiusConnected(search, hull_clouds[old_surface.id], removed_indices);
 
-//        NODELET_DEBUG_STREAM("Found " << radius_filtered->size() << " indices near the edges of surface " << old_surface.id);
+        //        NODELET_DEBUG_STREAM("Found " << radius_filtered->size() << " indices near the edges of surface " <<
+        //        old_surface.id);
         if (radius_filtered->size() == 0) continue;
 
         //
         // FILTER TO POINTS ON THE SURFACE
         //
-        pcl::IndicesPtr distance_filtered = filterWithinModelDistance(cloud, radius_filtered, old_surface.model);
-//        NODELET_DEBUG_STREAM("Found " << distance_filtered->size() << " indices within the plane of surface " << old_surface.id);
+        pcl::IndicesPtr distance_filtered =
+            filter_inliers_.filterWithinModelDistance(cloud, radius_filtered, old_surface.model);
+        //        NODELET_DEBUG_STREAM("Found " << distance_filtered->size() << " indices within the plane of surface "
+        //        << old_surface.id);
         if (distance_filtered->size() == 0) continue;
 
         //
@@ -201,17 +160,15 @@ void surface_filters::ExpandSurfaces::process(const Surfaces::ConstPtr &surfaces
         //
         auto new_points_cloud = PointCloudIn(*cloud, *distance_filtered);
         new_points_cloud += old_surface.inliers;
-        const Segment::Ptr new_segment = boost::make_shared<Segment>(cloud->header, old_surface.id,
-                                                                     old_surface.model, new_points_cloud);
+        const Segment::Ptr new_segment =
+            boost::make_shared<Segment>(cloud->header, old_surface.id, old_surface.model, new_points_cloud);
         this->latest_update_ = new_segment->header.stamp = pcl_conversions::toPCL(ros::Time::now());
-        NODELET_DEBUG_STREAM("[" << getName().c_str() << "::input_callback] ExpandSurface will wait for surface "
-                             << new_segment->surface_id << " at time " << this->latest_update_);
         this->pub_replace_surface_.publish(new_segment);
 
-//        NODELET_DEBUG_STREAM("[" << getName().c_str() << "::input_callback] ExpandSurface expanded surface "
-//                             << new_segment->surface_id << " from " << old_surface.inliers.size() << " to "
-//                             << new_segment->inliers.size() << " points ("
-//                             << (new_segment->inliers.size() - old_surface.inliers.size()) << " new points)");
+        //        NODELET_DEBUG_STREAM("[" << getName().c_str() << "::input_callback] ExpandSurface expanded surface "
+        //                             << new_segment->surface_id << " from " << old_surface.inliers.size() << " to "
+        //                             << new_segment->inliers.size() << " points ("
+        //                             << (new_segment->inliers.size() - old_surface.inliers.size()) << " new points)");
 
         //
         // REMOVE THOSE POINTS FROM THE INPUT
@@ -223,7 +180,6 @@ void surface_filters::ExpandSurfaces::process(const Surfaces::ConstPtr &surfaces
         std::sort(removed_indices->begin(), removed_indices->end());
     }
 
-
     {
         pcl::PointIndicesPtr removed_indices_msg = boost::make_shared<pcl::PointIndices>();
         removed_indices_msg->header = cloud->header;
@@ -231,52 +187,20 @@ void surface_filters::ExpandSurfaces::process(const Surfaces::ConstPtr &surfaces
         pub_removed_indices_.publish(removed_indices_msg);
     }
 
-
     // Always publish remaining indices
     PointIndices::Ptr remaining_indices = boost::make_shared<PointIndices>();
     remaining_indices->header = cloud->header;
     remaining_indices->indices.reserve(filtered_indices->size() - removed_indices->size());
     std::sort(filtered_indices->begin(), filtered_indices->end());
-    std::set_difference(filtered_indices->begin(), filtered_indices->end(),
-                        removed_indices->begin(), removed_indices->end(),
-                        std::back_inserter(remaining_indices->indices));
+    std::set_difference(filtered_indices->begin(), filtered_indices->end(), removed_indices->begin(),
+                        removed_indices->end(), std::back_inserter(remaining_indices->indices));
     this->pub_remaining_indices_.publish(remaining_indices);
 }
-
-pcl::IndicesPtr surface_filters::ExpandSurfaces::filterWithinModelDistance(const PointCloudIn::ConstPtr &input,
-                                                                           const pcl::IndicesConstPtr &indices,
-                                                                           const pcl::ModelCoefficients &coeff) {
-    //pcl::ScopeTime("Filter within model distance");
-
-    auto model = pcl::SampleConsensusModelPlane<PointIn>(input, *indices);
-
-    pcl::IndicesPtr output_indices = boost::make_shared<std::vector<int> >();
-    model.selectWithinDistance(Eigen::Vector4f(coeff.values[0], coeff.values[1], coeff.values[2], coeff.values[3]),
-                               perpendicular_dist_threshold_, *output_indices);
-    return output_indices;
-}
-
-pcl::IndicesPtr surface_filters::ExpandSurfaces::filterWithinHull(const PointCloudIn::ConstPtr &input,
-                                                                  const pcl::IndicesConstPtr &indices,
-                                                                  const PointCloudIn::Ptr &hull_cloud, // Can't be Const
-                                                                  const std::vector<pcl::Vertices> &hull_polygons) {
-    //pcl::ScopeTime("Filter within hull");
-
-    this->crophull_.setHullCloud(hull_cloud);
-    this->crophull_.setHullIndices(hull_polygons);
-    this->crophull_.setInputCloud(input);
-    this->crophull_.setIndices(indices);
-
-    pcl::IndicesPtr output_indices = boost::make_shared<std::vector<int> >();
-    this->crophull_.filter(*output_indices);
-
-    return output_indices;
-}
-
-pcl::IndicesPtr surface_filters::ExpandSurfaces::filterWithinRadiusConnected(const pcl::search::Search<PointIn> &search,
-                                                                             const PointCloudIn::Ptr &edge_points,
-                                                                             const pcl::IndicesPtr &removed_indices) const {
-    //pcl::ScopeTime("Filter within radius !");
+pcl::IndicesPtr
+surface_filters::ExpandSurfaces::filterWithinRadiusConnected(const pcl::search::Search<PointIn> &search,
+                                                             const PointCloudIn::Ptr &edge_points,
+                                                             const pcl::IndicesPtr &removed_indices) const {
+    // pcl::ScopeTime("Filter within radius !");
     std::set<int> within_radius_indices;
 
     std::queue<PointIn> to_search(std::deque<PointIn>(edge_points->begin(), edge_points->end()));
@@ -303,64 +227,21 @@ pcl::IndicesPtr surface_filters::ExpandSurfaces::filterWithinRadiusConnected(con
         to_search.pop();
     }
 
-    pcl::IndicesPtr within_radius_nodupes = boost::make_shared<std::vector<int> >();
+    pcl::IndicesPtr within_radius_nodupes = boost::make_shared<std::vector<int>>();
     // This may reserve more space than necessary, but it shouldn't be much more.
     within_radius_nodupes->reserve(within_radius_indices.size());
 
     // Sortedness Invariants:
     // within_radius_indices is sorted because it's a set
     // removed_indices' sortedness is a loop invariant
-    std::set_difference(within_radius_indices.begin(), within_radius_indices.end(),
-                        removed_indices->begin(), removed_indices->end(),
-                        std::back_inserter(*within_radius_nodupes));
+    std::set_difference(within_radius_indices.begin(), within_radius_indices.end(), removed_indices->begin(),
+                        removed_indices->end(), std::back_inserter(*within_radius_nodupes));
 
     return within_radius_nodupes;
 }
 
-pcl::IndicesPtr surface_filters::ExpandSurfaces::getFilteredIndices(const Surfaces::ConstPtr &surfaces,
-                                                                    const PointCloudIn::ConstPtr &cloud_in,
-                                                                    const PointIndices::ConstPtr &indices,
-                                                                    const HullCloudsMap &hull_clouds) {
-    //pcl::ScopeTime("Filtering indices");
-
-    pcl::IndicesPtr indices_remaining = indices ? boost::make_shared<std::vector<int> >(indices->indices)
-                                                : boost::make_shared<std::vector<int> >();
-
-    std::sort(indices_remaining->begin(), indices_remaining->end());
-    for (const Surface &surface : surfaces->surfaces) {
-        // Clip point cloud to plane
-        pcl::IndicesPtr indices_inplane = this->filterWithinModelDistance(cloud_in, indices_remaining, surface.model);
-
-//        NODELET_DEBUG_STREAM("Found " << indices_inplane->size() << " indices in the plane of surface " << surface.id);
-        if (indices_inplane->size() == 0) continue;
-
-        // Clip point cloud to be within hull
-        pcl::IndicesPtr indices_inhull = this->filterWithinHull(cloud_in, indices_inplane,  hull_clouds.at(surface.id),
-                                                                surface.concave_hull.polygons);
-
-//        NODELET_DEBUG_STREAM("Found " << indices_inhull->size() << " indices in the hull of surface " << surface.id);
-        if (indices_inplane->size() == 0) continue;
-
-        std::sort(indices_inhull->begin(), indices_inhull->end());
-
-        pcl::IndicesPtr indices_remaining_tmp = boost::make_shared<std::vector<int> >();
-        std::set_difference(indices_remaining->begin(), indices_remaining->end(),
-                            indices_inhull->begin(), indices_inhull->end(),
-                            std::back_inserter(*indices_remaining_tmp));
-
-        indices_remaining.swap(indices_remaining_tmp);
-
-//        NODELET_DEBUG_STREAM("Now " << indices_remaining->size() << " indices remaining");
-    }
-
-//    NODELET_DEBUG_STREAM("Filtered indices from " << (indices ? indices->indices.size() : cloud_in->size())
-//                         << " to " << indices_remaining->size());
-
-    return indices_remaining;
-}
-
 auto surface_filters::ExpandSurfaces::getHullCloudsMap(const Surfaces::ConstPtr &surfaces) const -> HullCloudsMap {
-    //pcl::ScopeTime("Get hull clouds");
+    // pcl::ScopeTime("Get hull clouds");
 
     std::map<unsigned int, PointCloudIn::Ptr> hull_clouds;
 
@@ -373,11 +254,12 @@ auto surface_filters::ExpandSurfaces::getHullCloudsMap(const Surfaces::ConstPtr 
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////
-//void surface_filters::ExpandSurfaces::config_callback(ChangeDetectionConfig &config, uint32_t level) {
+// void surface_filters::ExpandSurfaces::config_callback(ChangeDetectionConfig &config, uint32_t level) {
 //    if (resolution_ != config.resolution) {
 //        resolution_ = config.resolution;
 //        hull_ = ChangeDetector(resolution_);
-//        NODELET_DEBUG("[config_callback] Setting the resolution to: %f. Note that changing the resolution requires restarting change detection", resolution_);
+//        NODELET_DEBUG("[config_callback] Setting the resolution to: %f. Note that changing the resolution requires
+//        restarting change detection", resolution_);
 //    }
 //
 //    if (min_points_in_leaf_ != config.min_points_per_leaf) {

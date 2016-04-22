@@ -75,7 +75,7 @@ set(CMAKE_BUILD_TYPE Debug)
 add_definitions(-std=c++11)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O3 -std=c++11 -Wall -Wextra -Werror")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-parameter -Wno-unknown-pragmas")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-parameter -Wno-unknown-pragmas -Wno-error=unused-parameter")
 
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
@@ -96,7 +96,7 @@ add_library(surface_filters
     src/surface_filters/BuildSurface.cpp
     src/surface_filters/ExpandSurfaces.cpp
     src/surface_filters/Triangulate.cpp
-    src/surface_filters/FreePointAccumulation.cpp include/surface_filters/ConcurrentPointGrouper.h)
+    src/surface_filters/FreePointAccumulation.cpp)
 
 add_dependencies(surface_filters
     ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencfg

@@ -95,10 +95,15 @@ void surface_filters::FreePointAccumulation::found_inliers_callback(const pcl::P
     extract.setNegative(true);
     extract.filter(outlier_indices);
 
-    LOG("Processing finished: had " << cloud_it->second->size() << " points, matched " << indices->indices.size()
-                                    << ", " << outlier_indices.size() << " remaining");
+    NODELET_INFO_STREAM("======>{\"event\": \"scan_processed\", \"value\": " << ros::Time::now() << ", \"cloud_stamp\": " << indices->header.stamp << "}");
+
+
+//    LOG("Processing finished: had " << cloud_it->second->size() << " points, matched " << indices->indices.size()
+//                                    << ", " << outlier_indices.size() << " remaining");
 
     grouper_.add(cloud_it->second, outlier_indices);
+
+    NODELET_INFO_STREAM("======>{\"event\": \"accumulated_points\", \"value\": " << grouper_.size() << ", \"cloud_stamp\": " << indices->header.stamp << "}");
 
     processing_clouds_.erase(cloud_it);
 }

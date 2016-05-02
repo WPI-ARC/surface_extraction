@@ -384,7 +384,7 @@ auto surface_filters::BuildSurface::get_concave_hull(const pcl::ModelCoefficient
         }
 
         std::cout << "Area " << area_doubled / 2 << std::endl;
-        if (area_doubled / 2 < .01) return false;
+        if (area_doubled / 2 > .01) return false;
         std::cout << "Not removing a hole of size " << area_doubled / 2 << std::endl;
 
         // Eliminate the influence of polygons sharing a vertex by taking 3 points and using the consensus

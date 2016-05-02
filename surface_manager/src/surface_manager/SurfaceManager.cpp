@@ -69,6 +69,7 @@ void surface_manager::SurfaceManager::add_surface(const SurfaceStamped::ConstPtr
 //    // Theoretically this program is never executed concurrently, so we should always get the lock on the first try
 //    assert(scope_lock.owns_lock());
 
+    NODELET_INFO_STREAM_ONCE("======>{\"event\": \"first_surface\", \"value\": " << ros::Time::now() << "}");
 
 //    auto hull_size = surface->surface.concave_hull.cloud.width * surface->surface.concave_hull.cloud.height;
 //    NODELET_DEBUG_STREAM("New Surface received with " << surface->surface.inliers.size() << " points, " << hull_size <<
@@ -221,9 +222,9 @@ void surface_manager::SurfaceManager::replace_surface(const SurfaceStamped::Cons
 //                         " and moved to " << std::distance(surfaces_.begin(), pos) <<
 //                         " (length of array is " << surfaces_.size() << ")");
 
-    NODELET_INFO_STREAM_THROTTLE(5 /*seconds*/, "Current lag in entire pipeline is "
-                                                << (ros::Time::now() - pcl_conversions::fromPCL(surface->header.stamp))
-                                                << " seconds");
+//    NODELET_INFO_STREAM_THROTTLE(5 /*seconds*/, "Current lag in entire pipeline is "
+//                                                << (ros::Time::now() - pcl_conversions::fromPCL(surface->header.stamp))
+//                                                << " seconds");
 
     if (latest_update_ < surface->header.stamp) {
         latest_update_ = surface->header.stamp;

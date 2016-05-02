@@ -5,6 +5,7 @@
 #include <pluginlib/class_list_macros.h>
 #include <surface_filters/ExpandSurfaces.h>
 #include <pcl/common/time.h>
+#include <pcl/filters/radius_outlier_removal.h>
 //////////////////////////////////////////////////////////////////////////////////////////////
 
 void surface_filters::ExpandSurfaces::onInit() {
@@ -28,6 +29,10 @@ void surface_filters::ExpandSurfaces::onInit() {
 
     sub_input_filter_.subscribe(*pnh_, "input", max_queue_size_);
     sub_pcl_indices_filter_.subscribe(*pnh_, "indices", max_queue_size_);
+
+    pnh_->getParam("parallel_distance_threshold", parallel_dist_threshold_);
+    pnh_->getParam("perpendicular_distance_threshold", perpendicular_dist_threshold_);
+
 
     if (approximate_sync_) {
         sync_input_indices_a_ = boost::make_shared<ApproxTimeSynchronizer>(ApproxPolicy(max_queue_size_),
@@ -96,9 +101,9 @@ void surface_filters::ExpandSurfaces::process(const Surfaces::ConstPtr &surfaces
                                               const PointIndices::ConstPtr &indices) {
     if (!surfaces || !cloud) return;
 
-    NODELET_INFO_STREAM_THROTTLE(5, "Current lag after change detection is "
-                                        << (ros::Time::now() - pcl_conversions::fromPCL(cloud->header.stamp))
-                                        << " seconds");
+//    NODELET_INFO_STREAM_THROTTLE(5, "Current lag after change detection is "
+//                                        << (ros::Time::now() - pcl_conversions::fromPCL(cloud->header.stamp))
+//                                        << " seconds");
 
     if (cloud->size() == 0 || (indices && indices->indices.size() == 0)) {
         return;
@@ -106,7 +111,17 @@ void surface_filters::ExpandSurfaces::process(const Surfaces::ConstPtr &surfaces
 
     HullCloudsMap hull_clouds = this->getHullCloudsMap(surfaces);
 
-    pcl::IndicesPtr filtered_indices = filter_inliers_.getFilteredIndices(surfaces, cloud, indices);
+    //! TEMP: Extra radius outlier filter
+    pcl::RadiusOutlierRemoval<PointIn> radius_filter;
+    radius_filter.setInputCloud(cloud);
+    if (indices) radius_filter.setIndices(indices);
+    radius_filter.setRadiusSearch(parallel_dist_threshold_);
+    radius_filter.setMinNeighborsInRadius(10);
+
+    auto radius_indices = boost::make_shared<PointIndices>();
+    radius_filter.filter(radius_indices->indices);
+
+    pcl::IndicesPtr filtered_indices = filter_inliers_.getFilteredIndices(surfaces, cloud, radius_indices);
     pcl::IndicesPtr removed_indices = boost::make_shared<std::vector<int>>();
 
     {

@@ -70,7 +70,7 @@ namespace surface_filters {
 
     protected:
         /** \brief Discretization resolution */
-        double perpendicular_dist_threshold_ = 0.05; //0.025;
+        double perpendicular_dist_threshold_ = 0.03; //0.025;
 
         double parallel_dist_threshold_ = 0.05; //0.1;
 

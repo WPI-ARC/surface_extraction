@@ -14,7 +14,7 @@
 
         <!-- Nodelet manager -->
         <node if="$(arg gdb)" pkg="nodelet" type="nodelet" name="nodelet_manager" args="manager" required="true"
-              output="screen" launch-prefix="xterm -e gdb --args" />
+              output="screen" launch-prefix="gdb -ex run --args" />
 
         <!--Nodelet manager -->
         <node if="$(arg valgrind)" pkg="nodelet" type="nodelet" name="nodelet_manager" args="manager" required="true"

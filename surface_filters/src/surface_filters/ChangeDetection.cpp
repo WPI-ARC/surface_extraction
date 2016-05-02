@@ -51,8 +51,10 @@ void surface_filters::ChangeDetection::synchronized_input_callback(const PointCl
                       getName().c_str());
         return;
     }
+    NODELET_INFO_STREAM_ONCE("======>{\"event\": \"first_scan\", \"time\": " << ros::Time::now() << "}");
 
-    NODELET_INFO_ONCE("ChangeDetection recieved the first point cloud");
+
+    NODELET_INFO_STREAM("======>{\"event\": \"scan_recieved\", \"value\": " << ros::Time::now() << ", \"cloud_stamp\": " << cloud->header.stamp << "}");
 
     // TODO: If cloud is given, check if it's valid
 
@@ -89,6 +91,8 @@ void surface_filters::ChangeDetection::synchronized_input_callback(const PointCl
         indices->header = cloud->header;
         pub_indices_.publish(indices);
     }
+
+    NODELET_INFO_STREAM("======>{\"event\": \"scan_size\", \"value\": " << indices->indices.size() << ", \"cloud_stamp\": " << cloud->header.stamp << "}");
 
     // Always publish output
     pub_output_.publish(cloud);

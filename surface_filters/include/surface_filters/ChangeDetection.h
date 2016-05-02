@@ -88,7 +88,7 @@ namespace surface_filters {
         ros::Publisher pub_output_;
 
         ros::Time last_print_;
-        int points_since_print;
+//        int points_since_print;
 
     public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW

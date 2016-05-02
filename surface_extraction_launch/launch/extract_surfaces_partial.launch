@@ -20,7 +20,6 @@
         <param name="use_indices" value="true" />
     </node>
 
-
     <!--Expand Surfaces -->
     <node pkg="nodelet" type="nodelet" name="expand_surfaces" args="load surface_filters/ExpandSurfaces nodelet_manager">
         <!-- Topics -->
@@ -30,6 +29,10 @@
 
         <remap from="~expanded_segments" to="updated_surface_segment" />
         <remap from="~remaining_indices" to="new_points_indices" />
+
+        <!-- Params -->
+        <remap from="~parallel_distance_threshold" to="parallel_distance_threshold" />
+        <remap from="~perpendicular_distance_threshold" to="expansion_distance_threshold" />
     </node>
 
     <!-- Extract new points for visualization only -->

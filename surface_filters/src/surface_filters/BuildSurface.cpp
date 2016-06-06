@@ -341,7 +341,8 @@ auto surface_filters::BuildSurface::get_concave_hull(const pcl::ModelCoefficient
         assert(hull.polygons[poly_i].vertices.begin() != hull.polygons[poly_i].vertices.end());
 
         // Don't cache hull.polygons[poly_i].vertices.end() because it gets invalidated
-        for (auto pt1_it = hull.polygons[poly_i].vertices.begin(); pt1_it != hull.polygons[poly_i].vertices.end(); ++pt1_it) {
+        for (auto pt1_it = hull.polygons[poly_i].vertices.begin(); pt1_it != hull.polygons[poly_i].vertices.end();
+             ++pt1_it) {
             auto pt2_it = std::find(pt1_it + 1, hull.polygons[poly_i].vertices.end(), *pt1_it);
 
             if (pt2_it != hull.polygons[poly_i].vertices.end()) {
@@ -368,7 +369,7 @@ auto surface_filters::BuildSurface::get_concave_hull(const pcl::ModelCoefficient
     // (Modified erase-remove idiom to keep the to-be-erased elements valid during tri.cloud_from_polygons)
     const auto &perimeter_v = hull.polygons[0].vertices;
     const auto inside_perimeter = [&tri, &perimeter_v](pcl::Vertices &v) -> bool { // Return true == keep
-        return true; //!!!!!!!!!
+//        return true;                                                               //!!!!!!!!!
 
         double area_doubled = 0;
         auto iter_prev = std::prev(v.vertices.end());
@@ -580,17 +581,30 @@ void surface_filters::BuildSurface::get_triangluation_trimesh(std::vector<double
     }
     assert(additional_points_mapping.size() == num_points_out - num_points_in);
 
-    // I suspect this may be doable with a memcpy but I'm not sure how to check
+    // Find whether the winding order of one triangle is counterclockwise using the Shoelace theorem
+    // The winding orders are always consistent, so this tells you whether to flip every triangle
+    const int v1 = tri_v1(tri_out.trianglelist, 0), v2 = tri_v2(tri_out.trianglelist, 0), v3 = tri_v3(tri_out.trianglelist, 0);
+    const double x1 = tri_x(tri_out.pointlist, v1), x2 = tri_x(tri_out.pointlist, v2), x3 = tri_x(tri_out.pointlist, v3);
+    const double y1 = tri_y(tri_out.pointlist, v1), y2 = tri_y(tri_out.pointlist, v2), y3 = tri_y(tri_out.pointlist, v3);
+    const bool is_ccw = (x2 - x1)*(y2 - y1) + (x3 - x2)*(y3 - y2) + (x1 - x3)*(y1 - y3) < 0;
+
     for (int i = 0; i < tri_out.numberoftriangles; i += 1) {
         // Add triangles for the top surface
         output_trimesh.triangles[i].vertex_indices = {
             {tri_v1(tri_out.trianglelist, i), tri_v2(tri_out.trianglelist, i), tri_v3(tri_out.trianglelist, i)}};
 
         // Add triangles for the bottom surface
+        // Vertex order is reversed to represent an opposite-direction face
         auto offset_i = i + tri_out.numberoftriangles;
-        output_trimesh.triangles[offset_i].vertex_indices = {{tri_v1(tri_out.trianglelist, i) + cloud_size,
+        output_trimesh.triangles[offset_i].vertex_indices = {{tri_v3(tri_out.trianglelist, i) + cloud_size,
                                                               tri_v2(tri_out.trianglelist, i) + cloud_size,
-                                                              tri_v3(tri_out.trianglelist, i) + cloud_size}};
+                                                              tri_v1(tri_out.trianglelist, i) + cloud_size}};
+
+        // If the winding order is not counterclockwise, swap them so it will be
+        if (!is_ccw) {
+            std::swap(output_trimesh.triangles[i].vertex_indices[0], output_trimesh.triangles[i].vertex_indices[2]);
+            std::swap(output_trimesh.triangles[offset_i].vertex_indices[0], output_trimesh.triangles[offset_i].vertex_indices[2]);
+        }
 
         // In some circumstances (including an hourglass shape), triangle adds duplicates of the points, and if it does
         // then tri_out.trianglelist will contain out-of-bounds indices. This detects them and replaces them with the
@@ -616,6 +630,7 @@ void surface_filters::BuildSurface::get_triangluation_trimesh(std::vector<double
         count += 2;
     }
 
+    // Add the strip of triangles to connect the top and bottom faces
     int offset = tri_out.numberoftriangles * 2;
     for (const pcl::Vertices &polygon : hull.polygons) {
         auto polysize = polygon.vertices.size();
@@ -623,6 +638,7 @@ void surface_filters::BuildSurface::get_triangluation_trimesh(std::vector<double
             auto next_i = (i + 1) % polysize;
             output_trimesh.triangles[offset + i * 2].vertex_indices = {
                 {polygon.vertices[next_i] + cloud_size, polygon.vertices[i] + cloud_size, polygon.vertices[i]}};
+
             output_trimesh.triangles[offset + i * 2 + 1].vertex_indices = {
                 {polygon.vertices[i], polygon.vertices[next_i], polygon.vertices[next_i] + cloud_size}};
 

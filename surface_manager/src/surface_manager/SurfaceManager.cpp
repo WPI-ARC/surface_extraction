@@ -386,9 +386,10 @@ void surface_manager::SurfaceManager::publish_inliers() const {
 
 void surface_manager::SurfaceManager::publish_surfaces_mesh_pairs() const {
     Surfaces::Ptr surfaces_msg;
+    const auto publish_time = pcl_conversions::toPCL(ros::Time::now());
     if (this->surfaces_pub_.getNumSubscribers() > 0) {
         surfaces_msg = boost::make_shared<Surfaces>();
-        surfaces_msg->header.stamp = pcl_conversions::toPCL(ros::Time::now());
+        surfaces_msg->header.stamp = publish_time;
         surfaces_msg->header.frame_id = this->target_frame_;
         surfaces_msg->latest_update = this->latest_update_;
         surfaces_msg->surfaces.reserve(this->surfaces_.size());
@@ -397,7 +398,7 @@ void surface_manager::SurfaceManager::publish_surfaces_mesh_pairs() const {
     SurfaceMeshes::Ptr surface_meshes_msg;
     if (this->surface_meshes_pub_.getNumSubscribers() > 0) {
         surface_meshes_msg = boost::make_shared<SurfaceMeshes>();
-        surface_meshes_msg->header.stamp = pcl_conversions::toPCL(ros::Time::now());
+        surface_meshes_msg->header.stamp = publish_time;
         surface_meshes_msg->header.frame_id = this->target_frame_;
         surfaces_msg->latest_update = this->latest_update_;
         surface_meshes_msg->surface_meshes.reserve(this->surfaces_.size());

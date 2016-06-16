@@ -86,7 +86,6 @@ void surface_filters::BuildSurface::synchronized_input_callback(const Segment::C
 
 auto surface_filters::BuildSurface::publish_surface(const Segment::ConstPtr &segment, bool is_new)
     -> std::pair<SurfaceStamped::Ptr, std::vector<double>> {
-    ros::WallTime start = ros::WallTime::now();
 
     // Create output objects
     SurfaceStamped::Ptr surface = boost::make_shared<SurfaceStamped>();
@@ -117,7 +116,6 @@ auto surface_filters::BuildSurface::publish_surface(const Segment::ConstPtr &seg
 surface_filters::BuildSurface::SurfaceMeshStamped::Ptr
 surface_filters::BuildSurface::publish_surface_mesh(const SurfaceStamped::ConstPtr &surface, std::vector<double> &holes,
                                                     bool is_new) {
-    ros::WallTime start = ros::WallTime::now();
 
     // Create output objects
     SurfaceMeshStamped::Ptr surface_mesh = boost::make_shared<SurfaceMeshStamped>();
@@ -369,7 +367,6 @@ auto surface_filters::BuildSurface::get_concave_hull(const pcl::ModelCoefficient
     // (Modified erase-remove idiom to keep the to-be-erased elements valid during tri.cloud_from_polygons)
     const auto &perimeter_v = hull.polygons[0].vertices;
     const auto inside_perimeter = [&tri, &perimeter_v](pcl::Vertices &v) -> bool { // Return true == keep
-//        return true;                                                               //!!!!!!!!!
 
         double area_doubled = 0;
         auto iter_prev = std::prev(v.vertices.end());
@@ -383,6 +380,8 @@ auto surface_filters::BuildSurface::get_concave_hull(const pcl::ModelCoefficient
             std::reverse(v.vertices.begin(), v.vertices.end());
             area_doubled = -area_doubled;
         }
+
+        return true;                                                               //!!!!!!!!!
 
         std::cout << "Area " << area_doubled / 2 << std::endl;
         if (area_doubled / 2 > .01) return false;

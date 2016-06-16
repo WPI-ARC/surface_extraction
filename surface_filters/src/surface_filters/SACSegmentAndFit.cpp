@@ -325,7 +325,7 @@ void surface_filters::SACSegmentAndFit::config_callback(SACConfig &config, uint3
     }
 }
 
-auto surface_filters::SACSegmentAndFit::getLocalRANSACObject() -> pcl::SACSegmentation<PointIn> {
+auto surface_filters::SACSegmentAndFit::getLocalRANSACObject() -> SacSegmentation {
     std::lock_guard<std::mutex> lock(setup_mutex_);
 
     // Make a copy of the data member

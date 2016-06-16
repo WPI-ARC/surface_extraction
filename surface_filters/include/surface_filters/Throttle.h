@@ -20,6 +20,8 @@ private:
     std::mutex mutex_;
 
 public:
+    Throttle(ros::Duration interval, ros::Duration delay) : interval_(interval), last_run_time_(ros::Time() + delay), has_queued_run_(false), mutex_() {}
+
     Throttle(ros::Duration interval) : interval_(interval), last_run_time_(0), has_queued_run_(false), mutex_() {}
 
     Throttle() : interval_(0), last_run_time_(0), has_queued_run_(false), mutex_() {}
@@ -63,6 +65,13 @@ public:
         // Lock so interval can't change in the middle of runNow
         std::lock_guard<std::mutex> lock(mutex_);
         interval_ = interval;
+    }
+
+    void setInterval(ros::Duration interval, ros::Duration delay) {
+        // Lock so interval can't change in the middle of runNow
+        std::lock_guard<std::mutex> lock(mutex_);
+        interval_ = interval;
+        last_run_time_ = ros::Time() + delay;
     }
 };
 }

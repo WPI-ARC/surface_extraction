@@ -1,5 +1,5 @@
 <launch>
-    <arg name="topic_name" default="/scan_cloud" />
+    <arg name="topic_name" default="/onboard_worldmodel/pointcloud_vis" />
 
     <arg name="gdb" default="false" />
     <arg name="valgrind" default="false" />
@@ -29,9 +29,7 @@
             <group unless="$(arg valgrind)">
                 <group unless="$(arg cachegrind)">
                     <node unless="$(arg no_manager)" pkg="nodelet" type="nodelet" name="nodelet_manager" args="manager"
-                          required="true" output="screen">
-                            <param name="num_worker_threads" value="500" />
-                    </node>
+                          required="true" output="screen" />
                     <!--<node pkg="nodelet" type="nodelet" name="nodelet_manager_valgrind" args="manager" required="true"-->
                           <!--output="screen" launch-prefix="valgrind &#45;&#45;track-origins=yes" />-->
 
@@ -41,6 +39,7 @@
 
         <!-- SurfaceManager -->
         <node pkg="nodelet" type="nodelet" name="surface_manager" args="load surface_manager/SurfaceManager nodelet_manager">
+            <remap from="~input" to="$(arg topic_name)" />
             <!-- Topics -->
             <remap from="~add_surface" to="surface_builder/new_surface" />
             <remap from="~add_surface_mesh" to="surface_builder/new_surface_mesh" />
@@ -72,46 +71,17 @@
             <param name="max_queue_size" value="1000" />
         </node>
 
-        <!-- Downsample -->
-        <node pkg="nodelet" type="nodelet" name="downsample" args="load pcl/VoxelGrid nodelet_manager">
-            <!-- Topics -->
-            <remap from="~input" to="$(arg topic_name)" />
-
-            <!-- Params -->
-            <remap from="~leaf_size" to="downsample_resolution" />
-            <param name="filter_field_name" value="" />
-
-            <!-- input_frame transforms the cloud into the frame before the filter -->
-            <remap from="~input_frame" to="target_frame" />
-            <!-- output_frame tells the nodelet to not re-transform the cloud into the original frame -->
-            <remap from="~output_frame" to="target_frame" />
-
-            <param name="max_queue_size" value="100" />
-        </node>
-
         <!-- Change Detection (does NOT perform downsampling) -->
         <node pkg="nodelet" type="nodelet" name="change_detect" args="load surface_filters/ChangeDetection nodelet_manager">
             <!-- Topics -->
             <remap from="~input" to="downsample/output" />
-            <remap from="~new_indices" to="new_points_indices" />
+
             <remap from="~output" to="new_points_indexed" />
+            <remap from="~new_scene" to="new_points_unindexed" />
 
             <!-- Params -->
             <remap from="~resolution" to="downsample_resolution" />
-
-            <param name="max_queue_size" value="100" />
         </node>
-
-        <!-- Extract new points for visualization only -->
-        <node pkg="nodelet" type="nodelet" name="change_detect_vis" args="load pcl/ExtractIndices nodelet_manager">
-        <!-- Topics -->
-            <remap from="~input" to="new_points_indexed" />
-            <remap from="~indices" to="new_points_indices" />
-
-            <!-- Params -->
-            <param name="use_indices" value="true" />
-        </node>
-
 
         <!-- Accumulates unaccounted-for points -->
         <node pkg="nodelet" type="nodelet" name="point_accumulator" args="load surface_filters/FreePointAccumulation nodelet_manager">
@@ -121,8 +91,6 @@
             <remap from="~indices" to="new_points_indices" />
             <remap from="~found_inliers" to="found_inliers" />
             <remap from="~surfaces" to="surface_manager/surfaces" />
-
-            <param name="max_queue_size" value="1000" />
         </node>
 
         <!-- Full-Scene Pipeline -->

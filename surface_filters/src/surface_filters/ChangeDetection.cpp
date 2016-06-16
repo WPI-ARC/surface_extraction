@@ -5,7 +5,6 @@
 
 #include <pluginlib/class_list_macros.h>
 #include <surface_filters/ChangeDetection.h>
-#include <pcl/io/io.h>
 
 //////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -51,10 +50,10 @@ void surface_filters::ChangeDetection::synchronized_input_callback(const PointCl
                       getName().c_str());
         return;
     }
-    NODELET_INFO_STREAM_ONCE("======>{\"event\": \"first_scan\", \"time\": " << ros::Time::now() << "}");
+//    NODELET_INFO_STREAM_ONCE("======>{\"event\": \"first_scan\", \"time\": " << ros::Time::now() << "}");
 
 
-    NODELET_INFO_STREAM("======>{\"event\": \"scan_recieved\", \"value\": " << ros::Time::now() << ", \"cloud_stamp\": " << cloud->header.stamp << "}");
+//    NODELET_INFO_STREAM("======>{\"event\": \"scan_recieved\", \"value\": " << ros::Time::now() << ", \"cloud_stamp\": " << cloud->header.stamp << "}");
 
     // TODO: If cloud is given, check if it's valid
 
@@ -62,8 +61,6 @@ void surface_filters::ChangeDetection::synchronized_input_callback(const PointCl
 //    NODELET_DEBUG("[%s::input_callback] PointCloud with %d data points, stamp %f, and frame %s on topic %s received.",
 //                  getName().c_str(), cloud->width * cloud->height, fromPCL(cloud->header).stamp.toSec(),
 //                  cloud->header.frame_id.c_str(), getMTPrivateNodeHandle().resolveName("input").c_str());
-
-    ros::WallTime start = ros::WallTime::now();
 
     impl_.setInputCloud(cloud);
     impl_.addPointsFromInputCloud();
@@ -75,31 +72,17 @@ void surface_filters::ChangeDetection::synchronized_input_callback(const PointCl
     // Swap in preparation for the next call
     impl_.switchBuffers();
 
-    float new_percentage = indices->indices.size() / (float) cloud->size();
+    indices->header = cloud->header;
+    pub_indices_.publish(indices);
 
-    if (new_percentage > 0) {
-//        NODELET_DEBUG_STREAM(std::setprecision(3) <<
-//                             "(" << (ros::WallTime::now() - start) << " sec, " << cloud->size() << " points) "
-//                             << "Change Detection Finished with " << indices->indices.size()
-//                             << " new points (" << new_percentage*100 <<"%)");
-    }
-
-    if (new_percentage >= new_scene_threshold_) {
-        // Then it's a new scene -- republish the cloud
-        pub_new_scene_.publish(cloud);
-    } else {
-        indices->header = cloud->header;
-        pub_indices_.publish(indices);
-    }
-
-    NODELET_INFO_STREAM("======>{\"event\": \"scan_size\", \"value\": " << indices->indices.size() << ", \"cloud_stamp\": " << cloud->header.stamp << "}");
+//    NODELET_INFO_STREAM("======>{\"event\": \"scan_size\", \"value\": " << indices->indices.size() << ", \"cloud_stamp\": " << cloud->header.stamp << "}");
 
     // Always publish output
     pub_output_.publish(cloud);
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////
-void surface_filters::ChangeDetection::config_callback(ChangeDetectionConfig &config, uint32_t level) {
+void surface_filters::ChangeDetection::config_callback(ChangeDetectionConfig &config, uint32_t) {
     if (resolution_ != config.resolution) {
         resolution_ = config.resolution;
         impl_ = ChangeDetector(resolution_);

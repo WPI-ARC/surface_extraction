@@ -41,12 +41,7 @@ void surface_filters::FreePointAccumulation::onInit() {
             bind(&FreePointAccumulation::synchronized_input_callback, this, _1, _2));
     }
 
-    // TODO: Dynamic reconfigure for these params
-    radius_outlier_ = pcl::RadiusOutlierRemoval<PointIn>(true); // Allow us to query for the removed points
-    radius_outlier_.setMinNeighborsInRadius(10);
-    radius_outlier_.setRadiusSearch(0.25);
-
-    publish_throttle_.setInterval(ros::Duration(0.5));
+    publish_throttle_.setInterval(ros::Duration(0.5), ros::Duration(0.5));
 
     inliers_filter_.setDistance(perpendicular_dist_threshold_);
     inliers_filter_.subscribe(*pnh_, "surfaces", max_queue_size_);
@@ -79,76 +74,128 @@ void surface_filters::FreePointAccumulation::synchronized_input_callback(const P
     NODELET_DEBUG_STREAM_THROTTLE(5, "[" << getName().c_str() << ":input_callback] "
                                          << "FreePointAccumulation has " << grouper_.size() << " pending points");
 
-    do_publish();
+    std::lock_guard<std::mutex> lock(publish_future_mutex_);
+    if (!publish_future_.valid() || publish_future_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+        NODELET_DEBUG_STREAM("Starting a publish thread");
+        publish_future_ = std::async(std::launch::async, &FreePointAccumulation::do_publish, this);
+    }
 }
 
 void surface_filters::FreePointAccumulation::found_inliers_callback(const pcl::PointIndices::ConstPtr &indices) {
-    auto cloud_it = processing_clouds_.find(indices->header);
+    auto cloud = get_processing_cloud(indices->header);
 
-    assert(cloud_it != processing_clouds_.end());
+    assert(cloud != nullptr && "The cloud associated with these indices was not in the map of stored clouds");
 
     std::vector<int> outlier_indices;
 
     pcl::ExtractIndices<PointIn> extract;
-    extract.setInputCloud(cloud_it->second);
+    extract.setInputCloud(cloud);
     extract.setIndices(indices);
     extract.setNegative(true);
     extract.filter(outlier_indices);
 
-    NODELET_INFO_STREAM("======>{\"event\": \"scan_processed\", \"value\": " << ros::Time::now() << ", \"cloud_stamp\": " << indices->header.stamp << "}");
-
-
-//    LOG("Processing finished: had " << cloud_it->second->size() << " points, matched " << indices->indices.size()
-//                                    << ", " << outlier_indices.size() << " remaining");
-
-    grouper_.add(cloud_it->second, outlier_indices);
-
-    NODELET_INFO_STREAM("======>{\"event\": \"accumulated_points\", \"value\": " << grouper_.size() << ", \"cloud_stamp\": " << indices->header.stamp << "}");
-
-    processing_clouds_.erase(cloud_it);
+    grouper_.add(cloud, outlier_indices);
 }
 
 void surface_filters::FreePointAccumulation::do_publish() {
     // Blocks until it's time to run OR returns false if another call to do_publish is taking care of it
     if (!publish_throttle_.runNow()) return;
 
+    std::lock_guard<std::mutex> processing_clouds_lock(processing_clouds_mutex_);
     //! TEMPORARY: Only run one detection at a time
     if (processing_clouds_.size() > 1) return;
 
-    std::vector<int> radius_filtered;
-
-    auto points = grouper_.finish_group_if([&](const PointCloudIn::ConstPtr &accumulated_points) {
-        // First, remove NaN (No idea where it came from but it ruins the further steps in the pipeline)
-
-        // Simultaneously filter out the outliers and evaluate whether there are enough points to send to the pipeline
-        radius_outlier_.setInputCloud(accumulated_points);
-        auto indices = inliers_filter_.getFilteredIndices(accumulated_points);
-        if (!indices) NODELET_WARN_STREAM("Inliers filter doesn't have any surfaces");
-//        else LOG("Inliers filtered from " << accumulated_points->size() << " to " << indices->size() << " ("
-//                 << (accumulated_points->size() - indices->size()) << " removed)");
-        radius_outlier_.setIndices(indices);
-        radius_outlier_.filter(radius_filtered);
-
-        // Finish the group if there are enough points
-        return radius_filtered.size() > 50; // TODO: Dynamic reconfigure for the parameter
-    });
+    auto points = get_points_to_process();
 
     if (!points) return;
+    NODELET_WARN_STREAM("Removed " << points->size() << " points for processing");
 
     // Save and publish the accumulated inliers
     // Technically more efficient to publish the cloud and the list of points
-    auto accumulated_inliers = boost::make_shared<PointCloudIn>(*points, radius_filtered);
     // This is sometimes NaN and filtering out the NaN doesn't work so just mark it as "may contain NaN"
-    accumulated_inliers->is_dense = false;
-    processing_clouds_[points->header] = accumulated_inliers;
-    pub_accumulated_points_.publish(accumulated_inliers);
+    points->is_dense = false;
+    processing_clouds_[points->header] = points;
+    pub_accumulated_points_.publish(points);
 
     LOG("Published points to new surface detection (" << processing_clouds_.size() << " clouds pending)");
-
-    // Put the outliers back in the grouper for the next run
-    // Note that this (correctly) doesn't re-add the points that were removed because they were surface inliers
-    grouper_.add(points, *radius_outlier_.getRemovedIndices());
 }
+
+auto surface_filters::FreePointAccumulation::get_points_to_process() -> PointCloudIn::Ptr {
+    PointCloudIn::Ptr accumulated_points = this->grouper_.finish_group();
+
+    pcl::RadiusOutlierRemoval<PointIn> radius_outlier_(true);
+    pcl::ExtractIndices<PointIn> extract;
+
+    auto radius_filtered = boost::make_shared<std::vector<int>>();
+    auto cloud_to_process = boost::make_shared<PointCloudIn>();
+    auto cloud_to_keep = boost::make_shared<PointCloudIn>();
+
+    NODELET_INFO_STREAM("Starting with " << accumulated_points->size() << " points");
+
+    // Get a list of indices excluding inliers to existing planes
+    auto indices = this->inliers_filter_.getFilteredIndices(accumulated_points);
+    if (!indices) NODELET_WARN_STREAM("Inliers filter doesn't have any surfaces");
+    else NODELET_INFO_STREAM("Filtered to " << indices->size() << " points that aren't plane inliers");
+
+    // Filter indices to only those which aren't radius outliers
+    radius_outlier_.setRadiusSearch(0.25);
+    radius_outlier_.setMinNeighborsInRadius(10);
+    radius_outlier_.setInputCloud(accumulated_points);
+    if (indices) radius_outlier_.setIndices(indices);
+    radius_outlier_.filter(*radius_filtered);
+
+    NODELET_INFO_STREAM("Filtered to " << radius_filtered->size() << " points that aren't radius outliers");
+
+    // If there are fewer than 50 unfiltered points, don't process anything
+    if (radius_filtered->size() < 50) {
+        NODELET_INFO_STREAM("Too few points -- not processing");
+        // Use cloud_to_process just to get a null pointer with the correct type
+        cloud_to_keep = accumulated_points;
+    }
+
+    extract.setInputCloud(accumulated_points);
+
+    // Use ExtractIndices to get the cloud_to_process
+    extract.setIndices(radius_filtered);
+    extract.filter(*cloud_to_process);
+
+    assert(cloud_to_process->size() == radius_filtered->size() && "Incorrect cloud_to_process output from ExtractIndices");
+
+    // Use ExtractIndices to get the cloud_to_keep
+    extract.setIndices(radius_outlier_.getRemovedIndices());
+    extract.filter(*cloud_to_keep);
+
+    assert(cloud_to_keep->size() == radius_outlier_.getRemovedIndices()->size() && "Incorrect cloud_to_keep output from ExtractIndices");
+
+    NODELET_INFO_STREAM("Discarding " << (accumulated_points->size() - cloud_to_process->size() - cloud_to_keep->size()) << " plane inliers");
+
+    this->grouper_.add(cloud_to_keep);
+    return cloud_to_process;
+}
+
+auto surface_filters::FreePointAccumulation::get_processing_cloud(const pcl::PCLHeader &header) -> PointCloudIn::Ptr {
+    std::lock_guard<std::mutex> processing_clouds_lock(processing_clouds_mutex_);
+
+    auto cloud_it = processing_clouds_.find(header);
+
+    NODELET_DEBUG_STREAM(processing_clouds_.size() << " clouds stored, with headers:");
+    for (const auto &cloud : processing_clouds_) {
+        NODELET_DEBUG_STREAM("Frame: " << cloud.first.frame_id << ", seq: " << cloud.first.seq << ", stamp: " << cloud.first.stamp);
+    }
+    NODELET_DEBUG_STREAM("Looking for header:");
+    NODELET_DEBUG_STREAM("Frame: " << header.frame_id << ", seq: " << header.seq << ", stamp: " << header.stamp);
+
+    if (cloud_it == processing_clouds_.end()) {
+        return nullptr;
+    }
+
+    PointCloudIn::Ptr cloud = cloud_it->second;
+    processing_clouds_.erase(cloud_it);
+
+    return cloud;
+}
+
+
 
 //////////////////////////////////////////////////////////////////////////////////////////////
 // void surface_filters::FreePointAccumulation::config_callback(ChangeDetectionConfig &config, uint32_t level) {

@@ -50,6 +50,8 @@
     <build_depend>pcl_msgs</build_depend>
     <build_depend>surface_msgs</build_depend>
     <build_depend>surfaces</build_depend>
+    <build_depend>surface_filters</build_depend>
+    <build_depend>arc_utilities</build_depend>
     <run_depend>libpcl-all-dev</run_depend>
     <run_depend>pcl_conversions</run_depend>
     <run_depend>pcl_ros</run_depend>
@@ -60,6 +62,8 @@
     <run_depend>pcl_msgs</run_depend>
     <run_depend>surface_msgs</run_depend>
     <run_depend>surfaces</run_depend>
+    <run_depend>surface_filters</run_depend>
+    <run_depend>arc_utilities</run_depend>
 
 
     <!-- The export tag contains other, unspecified, tags -->

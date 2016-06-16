@@ -112,6 +112,19 @@ public:
         }
     }
 
+    template <typename FilterFunc>
+    typename PointCloudType::Ptr extract_subset(FilterFunc filter) {
+        // Filter takes the full cloud and returns a {removed, remaining} tuple/pair
+        // (where removed and remanining are CloudPtrs)
+
+        std::lock_guard<std::recursive_mutex> lock(mutex_);
+
+        typename PointCloudType::Ptr removed_cloud;
+        std::tie(removed_cloud, cloud_ptr_) = filter(cloud_ptr_);
+
+        return removed_cloud;
+    }
+
     std::size_t size() {
         std::lock_guard<std::recursive_mutex> lock(mutex_);
         return cloud_ptr_ ? cloud_ptr_->size() : 0;

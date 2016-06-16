@@ -38,8 +38,8 @@ void surface_manager::SurfaceManager::onInit() {
     updated_surface_synchronizer_->connectInput(updated_surface_sub_, updated_surface_mesh_sub_);
     updated_surface_synchronizer_->registerCallback(bind(&SurfaceManager::replace_surface, this, _1, _2));
 
-    // Start publisher timer
-    publish_timer_ = private_nh.createTimer(ros::Duration(publish_interval_), bind(&SurfaceManager::publish, this, _1));
+    // Start publisher timer (the "true" makes it a one-shot timer)
+    publish_timer_ = private_nh.createTimer(ros::Duration(publish_interval_), bind(&SurfaceManager::publish, this, _1), true);
 
     NODELET_DEBUG ("[%s::onInit] SurfaceManager Nodelet successfully created with connections:\n"
                            " - [subscriber] add_surface            : %s\n"
@@ -137,6 +137,8 @@ void surface_manager::SurfaceManager::add_surface(const SurfaceStamped::ConstPtr
     }
 
     if (latest_update_ < surface->header.stamp) latest_update_ = surface->header.stamp;
+
+    this->schedule_publish_in(ros::Duration(publish_max_lag_));
 }
 
 void surface_manager::SurfaceManager::replace_surface(const SurfaceStamped::ConstPtr surface,
@@ -229,9 +231,23 @@ void surface_manager::SurfaceManager::replace_surface(const SurfaceStamped::Cons
     if (latest_update_ < surface->header.stamp) {
         latest_update_ = surface->header.stamp;
     }
+
+    this->schedule_publish_in(ros::Duration(publish_max_lag_));
 }
 
-void surface_manager::SurfaceManager::publish(const ros::TimerEvent &event) const {
+void surface_manager::SurfaceManager::schedule_publish_in(const ros::Duration time) {
+    auto next_publish_candidate = ros::Time() + time;
+
+    // If there is no publish scheduled, or if now + time is sooner than the next scheduled publish,
+    // move the publish up. Otherwise, leave it alone.
+    if (!publish_timer_.hasPending() || next_publish_candidate < next_publish_) {
+        publish_timer_.setPeriod(time, true);
+        publish_timer_.start();
+        next_publish_ = next_publish_candidate;
+    }
+}
+
+void surface_manager::SurfaceManager::publish(const ros::TimerEvent &event) {
     std::unique_lock<std::mutex> scope_lock(currently_executing_, std::try_to_lock);
     // Theoretically this program is never executed concurrently, so we should always get the lock on the first try
     assert(scope_lock.owns_lock());
@@ -243,6 +259,8 @@ void surface_manager::SurfaceManager::publish(const ros::TimerEvent &event) cons
     this->publish_perimeter_points();
     this->publish_perimeter_lines();
     this->publish_mesh_triangles();
+
+    this->schedule_publish_in(ros::Duration(publish_interval_));
 }
 
 void surface_manager::SurfaceManager::publish_mesh_triangles() const {
@@ -425,11 +443,16 @@ void surface_manager::SurfaceManager::config_callback(SurfaceManagerConfig &conf
     std::unique_lock<std::mutex> scope_lock(currently_executing_, std::try_to_lock);
     // Theoretically this program is never executed concurrently, so we should always get the lock on the first try
     assert(scope_lock.owns_lock());
-    
+
     if (publish_interval_ != config.publish_interval) {
         publish_interval_ = static_cast<float>(config.publish_interval);
         publish_timer_.setPeriod(ros::Duration(publish_interval_));
         NODELET_DEBUG ("[config_callback] Setting publish interval: %f.", publish_interval_);
+    }
+
+    if (publish_max_lag_ != config.publish_max_lag) {
+        publish_max_lag_ = static_cast<float>(config.publish_max_lag);
+        NODELET_DEBUG ("[config_callback] Setting publish max lag to: %f.", publish_max_lag_);
     }
 
     if (target_frame_ != config.target_frame) {

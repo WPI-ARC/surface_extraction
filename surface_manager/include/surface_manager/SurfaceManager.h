@@ -113,11 +113,14 @@ namespace surface_manager {
 
         decltype(pcl::PCLHeader().stamp) latest_update_;
 
+        ros::Time next_publish_;
+
         std::vector<SurfaceMeshPair> surfaces_;
 
         int max_queue_size_;
 
         float publish_interval_;
+        float publish_max_lag_;
 
         std::string target_frame_;
 
@@ -127,7 +130,8 @@ namespace surface_manager {
 
         void replace_surface(const SurfaceStamped::ConstPtr surface, const SurfaceMeshStamped::ConstPtr mesh);
 
-        void publish(const ros::TimerEvent &event) const;
+        void schedule_publish_in(const ros::Duration time);
+        void publish(const ros::TimerEvent &event);
 
         void publish_surfaces_mesh_pairs() const;
         void publish_inliers() const;

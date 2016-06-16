@@ -51,6 +51,8 @@ namespace surface_filters {
         typedef surfaces::PointClusters PointClusters;
         typedef surfaces::Segment<PointIn> Segment;
 
+        typedef pcl::SACSegmentation<PointIn> SacSegmentation;
+
         // Message synchronizer types
         template<typename ...SubscribedTypes>
         using ExactTimeSynchronizer = message_filters::Synchronizer<sync_policies::ExactTime<SubscribedTypes...> >;
@@ -126,13 +128,13 @@ namespace surface_filters {
         void synchronized_input_callback(const PointCloudIn::ConstPtr &cloud, const NormalCloudIn::ConstPtr &normals,
                                          const PointClusters::ConstPtr &input_clusters);
 
-        pcl::SACSegmentation<PointIn> getLocalRANSACObject();
+        SacSegmentation getLocalRANSACObject();
         pcl::EuclideanClusterExtraction<PointIn> getLocalExtractionObject();
 
 
     private:
         /** \brief The PCL implementation used. */
-        pcl::SACSegmentation<PointIn> sac_;
+        SacSegmentation sac_;
 
         std::mutex setup_mutex_;
 

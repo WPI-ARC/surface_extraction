@@ -2,8 +2,8 @@ downsample_resolution: 0.01 # Meters
 
 target_frame: "/world"
 
-parallel_distance_threshold: 0.1 # Meters (I think)
-expansion_distance_threshold: 0.1 # Meters (I think)
+parallel_distance_threshold: 0.15 # Meters (I think)
+expansion_distance_threshold: 0.15 # Meters (I think)
 perpendicular_distance_threshold: 0.02 # Meters (I think)
 
 # These settings are for the static sample point cloud (which is misaligned)

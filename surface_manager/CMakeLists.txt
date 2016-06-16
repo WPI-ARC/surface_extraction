@@ -17,6 +17,8 @@ find_package(catkin REQUIRED COMPONENTS
     sensor_msgs
     surface_msgs
     surfaces
+    surface_filters
+    arc_utilities
 )
 
 ## System dependencies are found with CMake's conventions
@@ -162,6 +164,7 @@ include_directories(SYSTEM
 # Include header files so QTCreator will show them in its project view
 add_library(surface_manager
     src/surface_manager/SurfaceManager.cpp
+    #src/surface_manager/IncrementalSurfaceManager.cpp
 )
 
 add_dependencies(surface_manager ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencfg surfaces)

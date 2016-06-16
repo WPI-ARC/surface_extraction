@@ -8,6 +8,7 @@
 // Standard and Boost includes
 #include <atomic>
 #include <mutex>
+#include <future>
 #include <unordered_map>
 
 // ROS includes
@@ -17,6 +18,7 @@
 // PCL includes
 #include <pcl/conversions.h>
 #include <pcl/filters/radius_outlier_removal.h>
+#include <pcl/common/time.h>
 
 // Surfaces and Local includes
 #include <surfaces/utils.hpp>
@@ -38,7 +40,6 @@ class FreePointAccumulation : public pcl_ros::PCLNodelet {
 
     // Point Cloud types
     typedef pcl::PointCloud<PointIn> PointCloudIn;
-    typedef PointCloudIn PointCloudOut;
 
     typedef pcl::PointIndices PointIndices;
 
@@ -56,8 +57,6 @@ public:
 protected:
     /** \brief Discretization resolution */
     double perpendicular_dist_threshold_ = 0.10; // 0.025;
-
-    double parallel_dist_threshold_ = 0.05; // 0.1;
 
     /** \brief Pointer to a dynamic reconfigure service. */
     //        boost::shared_ptr<dynamic_reconfigure::Server<ChangeDetectionConfig> > srv_;
@@ -79,21 +78,19 @@ private:
 
     void found_inliers_callback(const PointIndices::ConstPtr &indices);
 
+    PointCloudIn::Ptr get_processing_cloud(const pcl::PCLHeader &header);
+
     void do_publish();
+
+    auto get_points_to_process() -> PointCloudIn::Ptr;
 
 
 private:
-    pcl::RadiusOutlierRemoval<PointIn> radius_outlier_;
-
     FilterSurfaceInliers<PointIn> inliers_filter_;
 
     // NOTE this redefines sub_indices_filter_ to be a pcl::PointIndices instead of pcl_msgs::PointIndices
     // If this is removed then very frustrating compile errors will result
     message_filters::Subscriber<PointIndices> sub_indices_filter_;
-
-    // Need another subscriber to handle non-indexed input
-    ros::Subscriber sub_input_noindices_;
-    ros::Subscriber sub_found_inliers_;
 
     /** \brief Synchronized input and indices (used when 'input' is not the only required topic) */
     boost::shared_ptr<ExactTimeSynchronizer> sync_input_indices_e_;
@@ -104,10 +101,13 @@ private:
 
     ConcurrentPointGrouper<PointIn> grouper_;
 
-
+    std::mutex processing_clouds_mutex_;
     std::unordered_map<pcl::PCLHeader, PointCloudIn::Ptr, surfaces::PCLHeaderHashNoSeq> processing_clouds_;
 
     Throttle publish_throttle_;
+
+    std::future<void> publish_future_;
+    std::mutex publish_future_mutex_;
 
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW

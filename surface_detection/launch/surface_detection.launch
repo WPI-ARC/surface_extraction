@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8" ?>
+ <launch>
+    <env name="ROSCONSOLE_CONFIG_FILE" value="$(find surface_detection)/custom_rosconsole.conf"/>
+
+    <node name="surface_detection" type="surface_detection_node" pkg="surface_detection" output="screen">
+        <remap from="~input" to="/scan_cloud" />
+    </node>
+</launch>

@@ -15,6 +15,7 @@ find_package(catkin REQUIRED COMPONENTS
     arc_utilities
     surface_msgs2
     surface_types
+    expand_surfaces
 )
 
 ## System dependencies are found with CMake's conventions

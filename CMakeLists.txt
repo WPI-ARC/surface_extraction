@@ -4,4 +4,5 @@ add_subdirectory(surface_detection)
 add_subdirectory(surface_utils)
 #add_subdirectory(surface_msgs2)
 add_subdirectory(surface_types)
+add_subdirectory(expand_surfaces)
 

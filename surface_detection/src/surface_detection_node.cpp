@@ -9,8 +9,10 @@
 #include <surface_msgs2/SurfaceDetectionRequest.h>
 #include <surface_msgs2/SurfaceDetectionResponse.h>
 
-#include "surface_detection/SurfaceDetection.h"
 #include <arc_utilities/eigen_helpers_conversions.hpp>
+#include "surface_detection/SurfaceDetection.h"
+#include "surface_detection/ProgressListener.hpp"
+#include <arc_utilities/pretty_print.hpp>
 
 using Request = surface_msgs2::SurfaceDetectionRequest;
 using Response = surface_msgs2::SurfaceDetectionResponse;
@@ -23,14 +25,15 @@ using surface_detection::SurfaceDetection;
 // Parameters
 // TODO: Get these from parameter server
 std::string frame = "/world";
-const double discretization = 0.1;
+const double discretization = 0.02;
 const double perpendicular_distance = 0.025;
+const double parallel_distance = 0.05;
 
 int main(int argc, char **argv) {
     // Setup
     ros::init(argc, argv, "surface_detection");
     ros::NodeHandle n;
-    SurfaceDetection surface_detection(discretization, perpendicular_distance);
+    SurfaceDetection surface_detection(discretization, perpendicular_distance, parallel_distance);
 
     ROS_DEBUG_STREAM("Connected to ROS");
 
@@ -50,17 +53,21 @@ int main(int argc, char **argv) {
     // I SURE DO LOVE MAKING FUNCTORS ALL OVER HTE GODDAMN PLACE
     class get_surfaces {
         SurfaceDetection &surface_detection;
+        ProgressListener progress;
     public:
 
-        get_surfaces(SurfaceDetection &sd) : surface_detection(sd) {}
+        get_surfaces(SurfaceDetection &sd, ProgressListener pl) : surface_detection(sd),  progress(pl) {}
 
         bool go (Request &req, Response &resp) {
+            auto center = GeometryPoseToEigenAffine3f(req.center);
+            auto extents = GeometryVector3ToEigenVector3f(req.extents);
+            ROS_DEBUG_STREAM("Center: " << PrettyPrint::PrettyPrint(center) << ", Extents: <x: " << extents[0] << ", y: " << extents[1] << " z, " << extents[2] << ">");
             std::tie(resp.surfaces, resp.surface_meshes) = surface_detection.detect_surfaces_within(
-                    GeometryPoseToEigenAffine3f(req.center), GeometryVector3ToEigenVector3f(req.extents));
+                    center, extents, progress);
             return true;
         }
     };
-    get_surfaces getter(surface_detection);
+    get_surfaces getter(surface_detection, ProgressListener(&n, frame));
     // Make service provider
     auto srv = n.advertiseService("get_surfaces", &get_surfaces::go, &getter);
 

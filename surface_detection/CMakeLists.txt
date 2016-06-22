@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(surface_detection)
 
+set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/../CMake;${CMAKE_SOURCE_DIR}/CMake")
+include(cotire)
+
 set(PCL_DIR "~/Desktop/pcl-1.8/install/usr/local/share/pcl-1.8")
 set(BOOST_ROOT "~/Desktop/boost_1_60_0")
 
@@ -16,6 +19,8 @@ find_package(catkin REQUIRED COMPONENTS
     surface_msgs2
     surface_types
     expand_surfaces
+    detect_surfaces
+    collect_points
 )
 
 ## System dependencies are found with CMake's conventions
@@ -155,6 +160,8 @@ add_dependencies(surface_detection_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${ca
 target_link_libraries(surface_detection_node
    ${catkin_LIBRARIES} ${Boost_LIBRARIES} ${Eigen3_LIBRARIES} ${PCL_LIBRARIES}
 )
+
+cotire(surface_detection_node)
 
 #############
 ## Install ##

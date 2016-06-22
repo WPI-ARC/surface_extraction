@@ -40,7 +40,7 @@
 #define tri_n3(neighbors, i) (neighbors[i * 3 + 2])
 
 
-namespace surfaces {
+namespace surfaces_pcl_utils {
     struct PCLHeaderHashNoSeq {
         std::size_t operator()(const pcl::PCLHeader &h) const {
             std::size_t seed = 0;
@@ -133,8 +133,21 @@ namespace surfaces {
     }
 
     inline std::size_t count_vertices(const std::vector<pcl::Vertices> &polygons) {
-        return std::accumulate(polygons.begin(), polygons.end(), 0,
+        return std::accumulate(polygons.begin(), polygons.end(), std::size_t(0),
                                [](const std::size_t sum, const pcl::Vertices &v){ return sum + v.vertices.size(); });
+    }
+
+    inline pcl::PointIndices reindex(const pcl::PointIndices &indexer, const pcl::PointIndices &indices) {
+        // Takes a PointIndices that relates to an original cloud and another that relates to a cloud that was filtered
+        // by the original and returns a PointIndices with the contents of the second that relates to the original cloud
+        // (Turns cloud[indexer[indices[i]]] into cloud[reindexed[i]] for i = 0..indices.size())
+        pcl::PointIndices reindexed;
+        reindexed.header = indices.header;
+        reindexed.indices.resize(indices.indices.size());
+        for (auto index : indices.indices) {
+            reindexed.indices[index] = indexer.indices[index];
+        }
+        return reindexed;
     }
 }
 

@@ -11,11 +11,11 @@
 
 #include <arc_utilities/eigen_helpers_conversions.hpp>
 #include "surface_detection/SurfaceDetection.h"
-#include "surface_detection/ProgressListener.hpp"
+#include "surface_utils/ProgressListener.hpp"
 #include <arc_utilities/pretty_print.hpp>
 
-using Request = surface_msgs2::SurfaceDetectionRequest;
-using Response = surface_msgs2::SurfaceDetectionResponse;
+using surface_msgs2::SurfaceDetectionRequest;
+using surface_msgs2::SurfaceDetectionResponse;
 
 using EigenHelpersConversions::GeometryPoseToEigenAffine3f;
 using EigenHelpersConversions::GeometryVector3ToEigenVector3f;
@@ -28,14 +28,17 @@ std::string frame = "/world";
 const double discretization = 0.02;
 const double perpendicular_distance = 0.025;
 const double parallel_distance = 0.05;
+const double mls_radius = 0.10;
+const unsigned int min_points_per_surface = 50;
+const double min_plane_width = 0.1;
 
 int main(int argc, char **argv) {
     // Setup
     ros::init(argc, argv, "surface_detection");
     ros::NodeHandle n;
-    SurfaceDetection surface_detection(discretization, perpendicular_distance, parallel_distance);
+    SurfaceDetection surface_detection(discretization, perpendicular_distance, parallel_distance, mls_radius, min_points_per_surface, min_plane_width);
 
-    ROS_DEBUG_STREAM("Connected to ROS");
+    ROS_INFO_STREAM("Connected to ROS");
 
     // Make publishers
     auto pp_pub = n.advertise<SurfaceDetection::PointCloud>("pending_points", 1);
@@ -47,6 +50,9 @@ int main(int argc, char **argv) {
     auto pp_timer = n.createTimer(ros::Duration(1), [&surface_detection, &pp_pub](const ros::TimerEvent &) {
         auto cloud = surface_detection.get_pending_points();
         cloud.header.frame_id = frame;
+
+        ROS_DEBUG_STREAM_THROTTLE(10, "Currently have " << cloud.size() << " pending points");
+
         pp_pub.publish(cloud);
     });
 
@@ -58,7 +64,7 @@ int main(int argc, char **argv) {
 
         get_surfaces(SurfaceDetection &sd, ProgressListener pl) : surface_detection(sd),  progress(pl) {}
 
-        bool go (Request &req, Response &resp) {
+        bool go (SurfaceDetectionRequest &req, SurfaceDetectionResponse &resp) {
             auto center = GeometryPoseToEigenAffine3f(req.center);
             auto extents = GeometryVector3ToEigenVector3f(req.extents);
             ROS_DEBUG_STREAM("Center: " << PrettyPrint::PrettyPrint(center) << ", Extents: <x: " << extents[0] << ", y: " << extents[1] << " z, " << extents[2] << ">");
@@ -71,6 +77,7 @@ int main(int argc, char **argv) {
     // Make service provider
     auto srv = n.advertiseService("get_surfaces", &get_surfaces::go, &getter);
 
+    ROS_INFO_STREAM("Setup complete!");
     ros::spin();
 
     return 0;

@@ -16,7 +16,7 @@ find_package(catkin REQUIRED COMPONENTS
 ## System dependencies are found with CMake's conventions
 find_package(Boost 1.6 REQUIRED COMPONENTS system)
 find_package(PCL 1.8 REQUIRED)
-find_package(CGAL REQUIRED)
+find_package(CGAL 4.6 REQUIRED COMPONENTS Core)
 include(${CGAL_USE_FILE})
 
 ## Uncomment this if the package has a setup.py. This macro ensures
@@ -114,6 +114,7 @@ catkin_package(
 ###########
 ## Build ##
 ###########
+set(CMAKE_BUILD_TYPE Debug)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -std=c++11 -Wall -Wextra -Wno-unused-parameter -Wno-unused-local-typedefs")
 

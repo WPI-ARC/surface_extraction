@@ -24,11 +24,11 @@ ExpandSurfaces::ExpandSurfaces(double perpendicular_dist, double parallel_dist)
     assert(parallel_distance_ > 0);
 }
 
-pcl::PointIndices ExpandSurfaces::filterWithinRadiusConnected(const Search &search, const PointCloud::Ptr &edge_points,
+pcl::PointIndices ExpandSurfaces::filterWithinRadiusConnected(const Search &search, const PointCloud &edge_points,
                                               const pcl::PointIndices &remaining_indices) const {
     std::set<int> within_radius_indices;
 
-    std::queue<Point> to_search(std::deque<Point>(edge_points->begin(), edge_points->end()));
+    std::queue<Point> to_search(std::deque<Point>(edge_points.begin(), edge_points.end()));
 
     while (!to_search.empty()) {
         const auto &point = to_search.front();
@@ -81,7 +81,7 @@ pcl::PointIndices ExpandSurfaces::filterWithinModelDistance(const PointCloud::Co
 
 pcl::PointIndices ExpandSurfaces::expand_surfaces(const std::map<int, Surface> &surfaces, const CloudIndexPair &input,
                                   std::function<void(Surface)> callback) {
-    pcl::ScopeTime("SurfaceDetection::detect_surfaces_within");
+    pcl::ScopeTime st("SurfaceDetection::detect_surfaces_within");
     auto cloud = boost::shared_ptr<const PointCloud>(&input.first, null_deleter());
     auto indices = boost::shared_ptr<const pcl::PointIndices>(&input.second, null_deleter());
 
@@ -99,12 +99,10 @@ pcl::PointIndices ExpandSurfaces::expand_surfaces(const std::map<int, Surface> &
     for (const auto &old_surface_pair : surfaces) {
         const auto &old_surface = old_surface_pair.second;
 
-        auto hull_cloud = boost::make_shared<PointCloud>(old_surface.inliers, old_surface.boundary.indices);
-
         //
         // FILTER TO POINTS NEAR SURFACE BOUNDARY
         //
-        auto radius_filtered = filterWithinRadiusConnected(search, hull_cloud, remaining_indices);
+        auto radius_filtered = filterWithinRadiusConnected(search, old_surface.boundary, remaining_indices);
         if (radius_filtered.indices.size() == 0) continue;
 
         //

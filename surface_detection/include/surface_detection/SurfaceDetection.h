@@ -32,31 +32,32 @@ public:
     typedef surface_types::Surfaces Surfaces;
 
     SurfaceDetection(double discretization, double perpendicular_dist, double parallel_dist, double mls_radius,
-                     unsigned int min_pts_in_surface, double min_plane_width, double alpha)
+                     unsigned int min_pts_in_surface, double min_plane_width, double alpha, float extrusion_distance)
         : // State
           surfaces_(),
           // Implementation
           collect_points_(discretization, perpendicular_dist), expand_surfaces_(perpendicular_dist, parallel_dist),
           detect_surfaces_(perpendicular_dist, parallel_dist, mls_radius, min_pts_in_surface, min_plane_width),
-          build_surface_(perpendicular_dist, alpha) {}
+          build_surface_(perpendicular_dist, alpha, extrusion_distance) {}
 
     void add_points(const PointCloud::ConstPtr &points) { collect_points_.add_points(points); }
 
     PointCloud get_pending_points() { return collect_points_.get_pending_points(); }
 
     Surfaces detect_surfaces_within(const Eigen::Affine3f &center, const Eigen::Vector3f &extents, ProgressListener p) {
-        pcl::ScopeTime("SurfaceDetection::detect_surfaces_within");
+        pcl::ScopeTime st("SurfaceDetection::detect_surfaces_within");
         // Get points to process
         auto points_to_process = collect_points_.pending_points_within(center, extents);
         ROS_DEBUG_STREAM("Processing " << points_to_process.second.indices.size() << " points");
         p.pair("points_to_process", points_to_process);
 
-        std::vector<Surface> surfaces;
+        Surfaces surfaces;
+        surfaces.header.frame_id = "/world"; // TODO un-hard-code this
 
         // Expand surfaces
         points_to_process.second = expand_surfaces_.expand_surfaces(surfaces_, points_to_process, [&, this](Surface s) {
             build_surface_.build_updated_surface(s, [&, this](Surface updated_surface) {
-                surfaces.push_back(updated_surface);
+                surfaces.surfaces.push_back(updated_surface);
                 ROS_DEBUG_STREAM("Got an expanded version of surface " << s.id);
             });
         });
@@ -69,13 +70,13 @@ public:
 
                     build_surface_.build_new_surface(*inliers_cloud, model,
                                                      tf.cast<double>(), p, [&, this](Surface new_surface) {
-                                surfaces.push_back(new_surface);
+                                surfaces.surfaces.push_back(new_surface);
                                 ROS_DEBUG_STREAM("Got a new surface");
                             });
             });
         ROS_DEBUG_STREAM("Finished detecting surfaces");
 
-        return {};
+        return surfaces;
     }
 
     Surfaces detect_surfaces_within(const Eigen::Affine3f &center, const Eigen::Vector3f &extents) {

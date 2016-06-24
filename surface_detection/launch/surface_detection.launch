@@ -3,8 +3,8 @@
     <env name="ROSCONSOLE_CONFIG_FILE" value="$(find surface_detection)/custom_rosconsole.conf"/>
 
     <!-- launch-prefix="valgrind - -leak-check=full"-->
-    <!--launch-prefix="gdb &#45;&#45;args"-->
-    <node name="surface_detection" type="surface_detection_node" pkg="surface_detection" output="screen" >
+
+    <node name="surface_detection" type="surface_detection_node" pkg="surface_detection" output="screen" launch-prefix="gdb --args">
         <remap from="~input" to="/scan_cloud" />
     </node>
 </launch>

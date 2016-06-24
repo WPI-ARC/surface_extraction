@@ -34,7 +34,7 @@ DetectSurfaces::DetectSurfaces(double perpendicular_dist, double parallel_dist, 
 
 void DetectSurfaces::detect_surfaces(const CloudIndexPair &input, ProgressListener &p,
                                      std::function<void(Indices, Model, Eigen::Affine3f)> callback) {
-    pcl::ScopeTime("DetectSurfaces::detect_surfaces");
+    pcl::ScopeTime st("DetectSurfaces::detect_surfaces");
     auto normals = get_normals(input);
     if (input.second.indices.size() != normals->size()) {
         ROS_ERROR_STREAM("Expected normals to have " << input.second.indices.size()
@@ -216,7 +216,6 @@ void DetectSurfaces::find_transform_and_filter(NormalCloud::Ptr &normals, pcl::P
         min_y = std::min(min_y, pt.y);
 
         if (max_y - min_y < min_plane_width_) {
-            //            ROS_INFO_STREAM("PCA discarded a surface for being only " << (max_y - min_y) << " m wide");
             return;
         }
     }

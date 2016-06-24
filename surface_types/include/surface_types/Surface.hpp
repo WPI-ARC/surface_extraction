@@ -13,11 +13,11 @@
 #include <shape_msgs/Mesh.h>
 
 // Manual conversion to/from ROS
+#include <surface_msgs2/Surface.h>
 #include <vector>
 #include <eigen_conversions/eigen_msg.h>
 
 // ROS message serialization
-#include <surface_msgs2/Surface.h>
 #include <pcl_ros/point_cloud.h>
 #include <surface_types/pcl_shim/PointIndices_Serialization.hpp>
 #include <surface_types/pcl_shim/ModelCoefficients_Serialization.hpp>
@@ -30,7 +30,7 @@ struct Surface {
     pcl::PointCloud<pcl::PointXYZ> inliers;
     pcl::ModelCoefficients model;
     Eigen::Affine3d pose;
-    pcl::PointIndices boundary;
+    pcl::PointCloud<pcl::PointXYZ> boundary;
     std::vector<pcl::Vertices> polygons;
     shape_msgs::Mesh mesh;
 
@@ -40,19 +40,21 @@ public:
     operator surface_msgs2::Surface() const {
         surface_msgs2::Surface s_ros;
 
-        // ID, color, model
+        // ID, color, model, pose
         s_ros.id = id;
         s_ros.color = color;
         pcl_conversions::fromPCL(model, s_ros.model);
+        tf::poseEigenToMsg(pose, s_ros.pose);
 
         // Inliers
         pcl::PCLPointCloud2 inliers_pointcloud2;
         pcl::toPCLPointCloud2<pcl::PointXYZ>(inliers, inliers_pointcloud2);
         pcl_conversions::fromPCL(inliers_pointcloud2, s_ros.inliers);
 
-        // Pose, boundary
-        tf::poseEigenToMsg(pose, s_ros.pose);
-        pcl_conversions::fromPCL(boundary, s_ros.boundary);
+        // Boundary
+        pcl::PCLPointCloud2 boundary_pointcloud2;
+        pcl::toPCLPointCloud2<pcl::PointXYZ>(boundary, boundary_pointcloud2);
+        pcl_conversions::fromPCL(boundary_pointcloud2, s_ros.boundary);
 
         // Vertices
         s_ros.polygons.resize(polygons.size());
@@ -70,7 +72,7 @@ public:
     typedef boost::shared_ptr<::surface_types::Surface const> ConstPtr;
 
     void clear_computed_values() {
-        boundary = pcl::PointIndices();
+        boundary.clear();
         polygons.clear();
         mesh = shape_msgs::Mesh();
     }
@@ -92,9 +94,9 @@ inline std::ostream &operator<<(std::ostream &s, const Surface &v) {
     s << "pose:" << std::endl;
     // Print eigen transform as a matrix using .format() to set the indentation
     s << v.pose.matrix().format(Eigen::IOFormat(Eigen::StreamPrecision, 0, " ", "\n", "  ")) << std::endl;
-    s << "boundary[" << v.boundary.indices.size() << "]:" << std::endl;
-    for (auto &b : v.boundary.indices)
-        s << "  " << b << std::endl;
+    s << "boundary[" << v.boundary.size() << "]:" << std::endl;
+    for (auto &inlier : v.boundary)
+        s << "  " << inlier << std::endl;
     s << "polygons[" << v.polygons.size() << "]:" << std::endl;
     for (auto &vertices : v.polygons) {
         s << "  vertices[" << vertices.vertices.size() << "]:" << std::endl;

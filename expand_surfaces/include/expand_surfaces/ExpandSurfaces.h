@@ -38,7 +38,7 @@ public:
                                       std::function<void(Surface)> callback);
 
 private:
-    pcl::PointIndices filterWithinRadiusConnected(const Search &search, const PointCloud::Ptr &edge_points,
+    pcl::PointIndices filterWithinRadiusConnected(const Search &search, const PointCloud &edge_points,
                                                   const pcl::PointIndices &remaining_indices) const;
 
     pcl::PointIndices filterWithinModelDistance(const PointCloud::ConstPtr &input, const pcl::PointIndices &indices,

@@ -18,9 +18,8 @@ sensor_msgs/PointCloud2 inliers
 # original purpose
 geometry_msgs/Pose pose
 
-# A list of indices of boundary points, where the largest gap between points is controlled by a parameter to the
-# surface detection
-pcl_msgs/PointIndices boundary
+# A list of boundary points, where the largest gap between points is controlled by a parameter to the surface detection
+sensor_msgs/PointCloud2 boundary
 
 # The surface polygon, described as a list of simple polygons, each of which is an ordered list of indices into the
 # inliers point cloud. The first item in the list is the outer boundary, and all subsequent items describe holes. Every

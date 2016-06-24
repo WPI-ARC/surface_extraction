@@ -270,6 +270,51 @@ public:
         }, nh_ptr_, pubs_, frame_)).detach();
     }
 
+    void mesh(std::string name, surface_types::Surface &surface) {
+        if (!nh_ptr_) return;
+
+        // Need another reference to the member data pointers in case object is destroyed before the thread finishes
+        std::thread(std::bind([name, surface](NHPtr nh, std::shared_ptr<PubMap> pubs, std::string frame) {
+            assert(name.length() != 0);
+            assert(nh != nullptr);
+            assert(pubs != nullptr);
+
+            std::map<std::string, ros::Publisher>::iterator pub = pubs->find(name);
+
+            if (pub == pubs->end()) {
+                pub = pubs->insert(std::make_pair(name, (*nh)->advertise<visualization_msgs::Marker>(name, 10))).first;
+
+                ros::Rate r(2);
+                ros::Time stop_time = ros::Time::now() + ros::Duration(10);
+                while (pub->second.getNumSubscribers() == 0 && ros::Time::now() < stop_time) {
+                    r.sleep();
+                }
+            }
+
+            visualization_msgs::Marker marker;
+            marker.header.stamp = ros::Time::now();
+            marker.header.frame_id = frame;
+            marker.ns = "surface_triangles";
+            marker.id = surface.id;
+            marker.type = visualization_msgs::Marker::TRIANGLE_LIST;
+            marker.action = visualization_msgs::Marker::MODIFY;
+            // perimeter.pose not needed
+            marker.scale.x = 1;
+            marker.scale.y = 1;
+            marker.scale.z = 1;
+            marker.color = surface.color;
+
+            marker.points.reserve(surface.mesh.triangles.size() * 3);
+            for (const shape_msgs::MeshTriangle &triangle : surface.mesh.triangles) {
+                marker.points.push_back(surface.mesh.vertices[triangle.vertex_indices[0]]);
+                marker.points.push_back(surface.mesh.vertices[triangle.vertex_indices[1]]);
+                marker.points.push_back(surface.mesh.vertices[triangle.vertex_indices[2]]);
+            }
+
+            pub->second.publish(marker);
+        }, nh_ptr_, pubs_, frame_)).detach();
+    }
+
 protected:
     NHPtr nh_ptr_;
     std::shared_ptr<PubMap> pubs_;

@@ -21,6 +21,7 @@ find_package(catkin REQUIRED COMPONENTS
     expand_surfaces
     detect_surfaces
     collect_points
+    build_surface
 )
 
 ## System dependencies are found with CMake's conventions

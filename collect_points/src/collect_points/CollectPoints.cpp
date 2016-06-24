@@ -15,6 +15,7 @@
 #include <arc_utilities/pretty_print.hpp>
 #include <surface_utils/conversions.hpp>
 #include <surface_utils/smart_ptr.hpp>
+#include <pcl/common/time.h>
 
 using surface_utils::toLabeledPoint;
 
@@ -47,6 +48,7 @@ bool CollectPoints::inside_any_surface(const Point &point) const {
 
 CollectPoints::CloudIndexPair CollectPoints::pending_points_within(const Eigen::Affine3f &center,
                                                                    const Eigen::Vector3f &extents) {
+    pcl::ScopeTime("CollectPoints::pending_points_within");
     auto result = std::make_pair(get_pending_points(), pcl::PointIndices());
     Eigen::Vector3f xyz, rpy;
     pcl::getTranslationAndEulerAngles(center, xyz[0], xyz[1], xyz[2], rpy[0], rpy[1], rpy[2]);

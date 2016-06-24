@@ -8,4 +8,5 @@ add_subdirectory(surface_types)
 add_subdirectory(expand_surfaces)
 add_subdirectory(detect_surfaces)
 add_subdirectory(collect_points)
+add_subdirectory(build_surface)
 

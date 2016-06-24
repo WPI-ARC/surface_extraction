@@ -1,5 +1,4 @@
 geometry_msgs/Pose center
 geometry_msgs/Vector3 extents
 ---
-surface_msgs2/Surfaces surfaces
-surface_msgs2/SurfaceMeshes surface_meshes
+surface_msgs2/Surface[] surfaces

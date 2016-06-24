@@ -12,6 +12,7 @@ find_package(catkin REQUIRED COMPONENTS
   pcl_ros
   roscpp
   surface_msgs2
+    eigen_conversions
 )
 
 ## System dependencies are found with CMake's conventions
@@ -108,7 +109,7 @@ find_package(PCL 1.8 REQUIRED)
 catkin_package(
   INCLUDE_DIRS include
 #  LIBRARIES surface_types
-#  CATKIN_DEPENDS pcl_conversions pcl_ros roscpp surface_msgs
+  CATKIN_DEPENDS eigen_conversions
 #  DEPENDS PCL boost
 )
 

@@ -1,20 +1,23 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(surface_msgs2)
+project(build_surface)
+
+set(PCL_DIR "~/Desktop/pcl-1.8/install/usr/local/share/pcl-1.8")
+set(BOOST_ROOT "~/Desktop/boost_1_60_0")
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
-    pcl_msgs
-    std_msgs
-    shape_msgs
-    geometry_msgs
-    message_generation
+  roscpp
+    surface_types
+    surface_utils
 )
 
 ## System dependencies are found with CMake's conventions
-# find_package(Boost REQUIRED COMPONENTS system)
-
+find_package(Boost 1.6 REQUIRED COMPONENTS system)
+find_package(PCL 1.8 REQUIRED)
+find_package(CGAL REQUIRED)
+include(${CGAL_USE_FILE})
 
 ## Uncomment this if the package has a setup.py. This macro ensures
 ## modules and global scripts declared therein get installed
@@ -46,18 +49,18 @@ find_package(catkin REQUIRED COMPONENTS
 ##   * add every package in MSG_DEP_SET to generate_messages(DEPENDENCIES ...)
 
 ## Generate messages in the 'msg' folder
-add_message_files(
-    FILES
-    Surface.msg
-    SurfaceStamped.msg
-    Surfaces.msg
-)
+# add_message_files(
+#   FILES
+#   Message1.msg
+#   Message2.msg
+# )
 
 ## Generate services in the 'srv' folder
- add_service_files(
-   FILES
-   SurfaceDetection.srv
- )
+# add_service_files(
+#   FILES
+#   Service1.srv
+#   Service2.srv
+# )
 
 ## Generate actions in the 'action' folder
 # add_action_files(
@@ -67,14 +70,10 @@ add_message_files(
 # )
 
 ## Generate added messages and services with any dependencies listed here
-generate_messages(
-    DEPENDENCIES
-    pcl_msgs
-    std_msgs
-    shape_msgs
-    sensor_msgs
-    geometry_msgs
-)
+# generate_messages(
+#   DEPENDENCIES
+#   std_msgs  # Or other packages containing msgs
+# )
 
 ################################################
 ## Declare ROS dynamic reconfigure parameters ##
@@ -106,42 +105,54 @@ generate_messages(
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
-    #  INCLUDE_DIRS include
-    #  LIBRARIES surface_msgs
-    #  CATKIN_DEPENDS pcl_msgs std_msgs
-    #  DEPENDS system_lib
+  INCLUDE_DIRS include
+  LIBRARIES build_surface
+#  CATKIN_DEPENDS roscpp
+  DEPENDS PCL CGAL
 )
 
 ###########
 ## Build ##
 ###########
 
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -std=c++11 -Wall -Wextra -Wno-unused-parameter -Wno-unused-local-typedefs")
+
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 # include_directories(include)
 include_directories(
+    include
     ${catkin_INCLUDE_DIRS}
 )
+include_directories(SYSTEM
+    ${Boost_INCLUDE_DIRS}
+    ${PCL_INCLUDE_DIRS}
+    ${Eigen3_INCLUDE_DIRS}
+    ${CGAL_INCLUDE_DIRS}
+    )
 
 ## Declare a C++ library
-# add_library(surface_msgs
-#   src/${PROJECT_NAME}/surface_msgs.cpp
-# )
+ add_library(build_surface
+   src/${PROJECT_NAME}/BuildSurface.cpp
+ )
 
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
 ## either from message generation or dynamic reconfigure
-# add_dependencies(surface_msgs ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+ add_dependencies(build_surface ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
+target_link_libraries(build_surface
+    ${catkin_LIBRARIES} ${Boost_LIBRARIES} ${Eigen3_LIBRARIES} ${PCL_LIBRARIES} ${CGAL_LIBS}
+    )
 ## Declare a C++ executable
-# add_executable(surface_msgs_node src/surface_msgs_node.cpp)
+# add_executable(build_surface_node src/build_surface_node.cpp)
 
 ## Add cmake target dependencies of the executable
 ## same as for the library above
-# add_dependencies(surface_msgs_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+# add_dependencies(build_surface_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
-# target_link_libraries(surface_msgs_node
+# target_link_libraries(build_surface_node
 #   ${catkin_LIBRARIES}
 # )
 
@@ -160,18 +171,18 @@ include_directories(
 # )
 
 ## Mark executables and/or libraries for installation
-# install(TARGETS surface_msgs surface_msgs_node
-#   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-#   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-#   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-# )
+ install(TARGETS build_surface
+   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+ )
 
 ## Mark cpp header files for installation
-# install(DIRECTORY include/${PROJECT_NAME}/
-#   DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
-#   FILES_MATCHING PATTERN "*.h"
-#   PATTERN ".svn" EXCLUDE
-# )
+install(DIRECTORY include/${PROJECT_NAME}/
+    DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
+    FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp"
+    PATTERN ".svn" EXCLUDE
+    )
 
 ## Mark other files for installation (e.g. launch and bag files, etc.)
 # install(FILES
@@ -185,7 +196,7 @@ include_directories(
 #############
 
 ## Add gtest based cpp test target and link libraries
-# catkin_add_gtest(${PROJECT_NAME}-test test/test_surface_msgs.cpp)
+# catkin_add_gtest(${PROJECT_NAME}-test test/test_build_surface.cpp)
 # if(TARGET ${PROJECT_NAME}-test)
 #   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
 # endif()

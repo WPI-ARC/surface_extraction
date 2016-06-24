@@ -5,6 +5,7 @@
 #ifndef SURFACES_UTILS_HPP
 #define SURFACES_UTILS_HPP
 
+#include <ros/console.h>
 #include <boost/smart_ptr.hpp>
 #include <boost/lexical_cast.hpp>
 #include <boost/iterator/zip_iterator.hpp>
@@ -125,10 +126,18 @@ namespace surfaces_pcl_utils {
     }
 
     template <typename T>
-    inline pcl::IndicesPtr all_indices(typename pcl::PointCloud<T>::ConstPtr cloud) {
+    inline pcl::IndicesPtr all_indices(const typename pcl::PointCloud<T>::ConstPtr cloud) {
         pcl::IndicesPtr indices = boost::make_shared<std::vector<int> >();
         indices->resize(cloud->size());
         std::iota(indices->begin(), indices->end(), 0);
+        return indices;
+    }
+
+    template <typename T>
+    inline std::vector<int> all_indices(const typename pcl::PointCloud<T> &cloud) {
+        std::vector<int> indices;
+        indices.resize(cloud.size());
+        std::iota(indices.begin(), indices.end(), 0);
         return indices;
     }
 
@@ -137,16 +146,34 @@ namespace surfaces_pcl_utils {
                                [](const std::size_t sum, const pcl::Vertices &v){ return sum + v.vertices.size(); });
     }
 
+    inline std::vector<int> reindex(const std::vector<int> &indexer, const std::vector<int> &indices) {
+        // Takes indices that relate to an original cloud and another set that relates to a cloud that was filtered
+        // by the original and returns an indices set with the contents of the second that relates to the original cloud
+        // (Turns cloud[indexer[indices[i]]] into cloud[reindexed[i]] for i = 0..indices.size())
+        if (indexer.size() <= indices.size()) {
+            ROS_WARN("Indices is not smaller than reindexer, which is only valid if indices contains duplicates");
+        }
+        std::vector<int> reindexed;
+        for (auto index : indices) {
+            assert(index >= 0);
+
+            if (static_cast<std::size_t>(index) >= indexer.size()) {
+                ROS_ERROR_STREAM("Error: index " << index << " is out of bounds of indexer");
+            }
+
+            // Use .at to get the bounds check
+            reindexed.push_back(indexer.at(static_cast<std::size_t>(index)));
+        }
+        return reindexed;
+    }
+
     inline pcl::PointIndices reindex(const pcl::PointIndices &indexer, const pcl::PointIndices &indices) {
         // Takes a PointIndices that relates to an original cloud and another that relates to a cloud that was filtered
         // by the original and returns a PointIndices with the contents of the second that relates to the original cloud
         // (Turns cloud[indexer[indices[i]]] into cloud[reindexed[i]] for i = 0..indices.size())
         pcl::PointIndices reindexed;
         reindexed.header = indices.header;
-        reindexed.indices.resize(indices.indices.size());
-        for (auto index : indices.indices) {
-            reindexed.indices[index] = indexer.indices[index];
-        }
+        reindexed.indices = reindex(indexer.indices, indices.indices);
         return reindexed;
     }
 }

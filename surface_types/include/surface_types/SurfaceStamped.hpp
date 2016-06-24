@@ -8,28 +8,26 @@
 #include <ros/ros.h>
 #include <pcl/point_types.h>
 #include "Surface.hpp"
-#include <surface_msgs2/SurfacesStamped.h>
+#include <surface_msgs2/SurfaceStamped.h>
 
 namespace surface_types {
 
 // Defined similarly to pcl::PointIndices
-    template <typename PointType>
-    struct SurfacesStamped
+    struct SurfaceStamped
     {
-        SurfacesStamped() : header(), surface()
+        SurfaceStamped() : header(), surface()
         {}
 
         ::pcl::PCLHeader header;
-        ::surface_types::Surface<PointType> surface;
+        ::surface_types::Surface surface;
 
 
     public:
-        typedef boost::shared_ptr< ::surface_types::SurfacesStamped<PointType> > Ptr;
-        typedef boost::shared_ptr< ::surface_types::SurfacesStamped<PointType> const> ConstPtr;
-    }; // struct SurfacesStamped
+        typedef boost::shared_ptr< ::surface_types::SurfaceStamped> Ptr;
+        typedef boost::shared_ptr< ::surface_types::SurfaceStamped const> ConstPtr;
+    }; // struct SurfaceStamped
 
-    template <typename PointType>
-    inline std::ostream& operator << (std::ostream& s, const ::surface_types::SurfacesStamped<PointType> &v)
+    inline std::ostream& operator << (std::ostream& s, const ::surface_types::SurfaceStamped &v)
     {
         s << "header: " << std::endl;
         s << "  " << v.header;
@@ -43,67 +41,62 @@ namespace ros
 {
     namespace message_traits
     {
-        template<typename T> struct IsFixedSize<surface_types::SurfacesStamped<T> > : public FalseType {};
-// TODO: Determine if this actually is a simple message
-        template<typename T> struct IsSimple<surface_types::SurfacesStamped<T> > : public FalseType {};
-        template<typename T> struct HasHeader<surface_types::SurfacesStamped<T> > : public FalseType {};
+        struct IsFixedSize<surface_types::SurfaceStamped> : public FalseType {};
+        struct IsSimple<surface_types::SurfaceStamped> : public FalseType {};
+        struct HasHeader<surface_types::SurfaceStamped> : public FalseType {};
 
-        template<typename T>
-        struct MD5Sum<surface_types::SurfacesStamped<T> >
+        struct MD5Sum<surface_types::SurfaceStamped>
         {
             static const char* value()
             {
                 return MD5Sum<surface_msgs2::SurfacesStamped>::value();
             }
 
-            static const char* value(const surface_types::SurfacesStamped<T>& m)
+            static const char* value(const surface_types::SurfaceStamped& m)
             {
                 return MD5Sum<surface_msgs2::SurfacesStamped>::value();
             }
         };
 
-        template<typename T>
-        struct DataType<surface_types::SurfacesStamped<T> >
+        struct DataType<surface_types::SurfaceStamped>
         {
             static const char* value()
             {
                 return DataType<surface_msgs2::SurfacesStamped>::value();
             }
 
-            static const char* value(const surface_types::SurfacesStamped<T>& m)
+            static const char* value(const surface_types::SurfaceStamped& m)
             {
                 return DataType<surface_msgs2::SurfacesStamped>::value();
             }
         };
 
-        template<typename T>
-        struct Definition<surface_types::SurfacesStamped<T> >
+        struct Definition<surface_types::SurfaceStamped>
         {
             static const char* value()
             {
                 return Definition<surface_msgs2::SurfacesStamped>::value();
             }
 
-            static const char* value(const surface_types::SurfacesStamped<T>& m)
+            static const char* value(const surface_types::SurfaceStamped& m)
             {
                 return Definition<surface_msgs2::SurfacesStamped>::value();
             }
         };
 
-        template<typename T>
-        struct TimeStamp<surface_types::SurfacesStamped<T> >
+        struct TimeStamp<surface_types::SurfaceStamped>
         {
-            static ros::Time* pointer(surface_types::SurfacesStamped<T> &m) {
+            static ros::Time* pointer(surface_types::SurfaceStamped &m) {
                 header_.reset(new std_msgs::Header());
                 pcl_conversions::fromPCL(m.header, *(header_));
                 return &(header_->stamp);
             }
-            static ros::Time const* pointer(const surface_types::SurfacesStamped<T>& m) {
+            static ros::Time const* pointer(const surface_types::SurfaceStamped& m) {
                 header_const_.reset(new std_msgs::Header());
                 pcl_conversions::fromPCL(m.header, *(header_const_));
                 return &(header_const_->stamp);
             }
-            static ros::Time value(const surface_types::SurfacesStamped<T>& m) {
+            static ros::Time value(const surface_types::SurfaceStamped& m) {
                 return pcl_conversions::fromPCL(m.header).stamp;
             }
         private:
@@ -115,24 +108,23 @@ namespace ros
 
     namespace serialization
     {
-        template<typename T>
-        struct Serializer<surface_types::SurfacesStamped<T> >
+        struct Serializer<surface_types::SurfaceStamped>
         {
             template<typename Stream>
-            inline static void write(Stream& stream, const surface_types::SurfacesStamped<T>& item)
+            inline static void write(Stream& stream, const surface_types::SurfaceStamped& item)
             {
                 stream.next(item.header);
                 stream.next(item.surface);
             }
 
             template<typename Stream>
-            inline static void read(Stream& stream, surface_types::SurfacesStamped<T>& item)
+            inline static void read(Stream& stream, surface_types::SurfaceStamped& item)
             {
                 stream.next(item.header);
                 stream.next(item.surface);
             }
 
-            inline static int32_t serializedLength(const surface_types::SurfacesStamped<T>& item)
+            inline static int32_t serializedLength(const surface_types::SurfaceStamped& item)
             {
                 uint32_t size = 0;
                 size += serializationLength(item.header);

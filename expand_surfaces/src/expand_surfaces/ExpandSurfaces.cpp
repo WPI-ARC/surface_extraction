@@ -13,10 +13,10 @@
 
 // Surface types
 #include <surface_types/Surface.hpp>
-#include <surface_types/SurfaceMesh.hpp>
 
 // Utils
 #include <surface_utils/smart_ptr.hpp>
+#include <pcl/common/time.h>
 
 ExpandSurfaces::ExpandSurfaces(double perpendicular_dist, double parallel_dist)
         : perpendicular_distance_(perpendicular_dist), parallel_distance_(parallel_dist) {
@@ -79,12 +79,13 @@ pcl::PointIndices ExpandSurfaces::filterWithinModelDistance(const PointCloud::Co
     return output_indices;
 }
 
-pcl::PointIndices ExpandSurfaces::expand_surfaces(const std::map<int, SurfaceMeshPair> &surfaces, const CloudIndexPair &input,
+pcl::PointIndices ExpandSurfaces::expand_surfaces(const std::map<int, Surface> &surfaces, const CloudIndexPair &input,
                                   std::function<void(Surface)> callback) {
+    pcl::ScopeTime("SurfaceDetection::detect_surfaces_within");
     auto cloud = boost::shared_ptr<const PointCloud>(&input.first, null_deleter());
     auto indices = boost::shared_ptr<const pcl::PointIndices>(&input.second, null_deleter());
 
-    if (cloud->size() == 0 || indices->indices.size() == 0) {
+    if (cloud->size() == 0 || indices->indices.size() == 0 || surfaces.size() == 0) {
         return input.second;
     }
 
@@ -96,10 +97,9 @@ pcl::PointIndices ExpandSurfaces::expand_surfaces(const std::map<int, SurfaceMes
     remaining_indices.indices = indices->indices;
 
     for (const auto &old_surface_pair : surfaces) {
-        const auto &old_surface = old_surface_pair.second.first;
+        const auto &old_surface = old_surface_pair.second;
 
-        auto hull_cloud = boost::make_shared<pcl::PointCloud<Point>>();
-        pcl::fromPCLPointCloud2(old_surface.concave_hull.cloud, *hull_cloud);
+        auto hull_cloud = boost::make_shared<PointCloud>(old_surface.inliers, old_surface.boundary.indices);
 
         //
         // FILTER TO POINTS NEAR SURFACE BOUNDARY
@@ -116,9 +116,9 @@ pcl::PointIndices ExpandSurfaces::expand_surfaces(const std::map<int, SurfaceMes
         //
         // ADD NEW POINTS TO SURFACE
         //
-        surface_types::Surface<Point> new_surface(old_surface);
-        new_surface.concave_hull = pcl::PolygonMesh();
+        surface_types::Surface new_surface(old_surface);
         new_surface.inliers += pcl::PointCloud<Point>(*cloud, distance_filtered.indices);
+        new_surface.clear_computed_values();
 
         callback(new_surface);
 

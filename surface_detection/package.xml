@@ -48,6 +48,7 @@
   <build_depend>expand_surfaces</build_depend>
   <build_depend>detect_surfaces</build_depend>
   <build_depend>collect_points</build_depend>
+  <build_depend>build_surface</build_depend>
 
   <run_depend>roscpp</run_depend>
   <run_depend>surface_utils</run_depend>
@@ -57,6 +58,7 @@
   <run_depend>expand_surfaces</run_depend>
   <run_depend>detect_surfaces</run_depend>
   <run_depend>collect_points</run_depend>
+  <run_depend>build_surface</run_depend>
 
   <!-- The export tag contains other, unspecified, tags -->
   <export>

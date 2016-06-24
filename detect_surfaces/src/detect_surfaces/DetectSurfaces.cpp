@@ -10,10 +10,7 @@
 #include <pcl/segmentation/sac_segmentation.h>
 #include <pcl/segmentation/extract_clusters.h>
 #include <pcl/common/pca.h>
-
-// Surfaces
-#include <surface_types/Surfaces.hpp>
-#include <surface_types/SurfaceMesh.hpp>
+#include <pcl/common/time.h>
 
 // Utils
 #include <surface_utils/pcl_utils.hpp>
@@ -37,7 +34,14 @@ DetectSurfaces::DetectSurfaces(double perpendicular_dist, double parallel_dist, 
 
 void DetectSurfaces::detect_surfaces(const CloudIndexPair &input, ProgressListener &p,
                                      std::function<void(Indices, Model, Eigen::Affine3f)> callback) {
+    pcl::ScopeTime("DetectSurfaces::detect_surfaces");
     auto normals = get_normals(input);
+    if (input.second.indices.size() != normals->size()) {
+        ROS_ERROR_STREAM("Expected normals to have " << input.second.indices.size()
+                         << " points, but it had " << normals->size());
+        assert(false && "Normals cloud has the wrong number of points");
+    }
+
     p.points<Normal>("normals", normals);
     p.normal_vectors("normal_vectors", normals);
 
@@ -46,6 +50,7 @@ void DetectSurfaces::detect_surfaces(const CloudIndexPair &input, ProgressListen
     normal_search->setInputCloud(normals);
 
     std::vector<Indices> planes;
+    std::vector<Eigen::Affine3f> tfs;
 
     // Welcome to callback hell!
     region_segmentation(normals, normal_search, [&, this](Indices region) {
@@ -53,13 +58,22 @@ void DetectSurfaces::detect_surfaces(const CloudIndexPair &input, ProgressListen
             euclidean_segmentation(normals, normal_search, inliers, [&, this](Indices segment) {
                 find_transform_and_filter(normals, segment, [&, this](Eigen::Affine3f transform) {
                     planes.push_back(segment);
-                    callback(segment, model, transform);
+                    tfs.push_back(transform);
+                    // segment refers to normals, which is a subset of input.first, so it needs to be reindex to
+                    // refer to index.first before being returned
+                    if (input.second.indices.size() != normals->size()) {
+                        ROS_ERROR_STREAM("Expected normals to have " << input.second.indices.size()
+                                                                     << " points, but it had " << normals->size());
+                        assert(false && "Normals cloud has the wrong number of points");
+                    }
+                    callback(surfaces_pcl_utils::reindex(input.second, segment), model, transform);
                 });
             });
         });
     });
 
     p.points<pcl::PointXYZRGB>("new_planes", make_segment_colored_cloud(normals, planes));
+    p.poses("plane_transforms", tfs);
 }
 
 DetectSurfaces::NormalCloud::Ptr DetectSurfaces::get_normals(const CloudIndexPair &input) {
@@ -75,6 +89,9 @@ DetectSurfaces::NormalCloud::Ptr DetectSurfaces::get_normals(const CloudIndexPai
     // Do the reconstruction
     auto normals = boost::make_shared<NormalCloud>();
     mls.process(*normals);
+
+    assert(normals->size() <= input.second.indices.size() && "Normals size is greater than indices size");
+    assert(normals->size() >= input.second.indices.size() && "Normals size is less than indices size");
 
     return normals;
 }
@@ -93,7 +110,7 @@ std::size_t DetectSurfaces::region_segmentation(NormalCloud::Ptr &normals, Norma
     std::vector<pcl::PointIndices> clusters;
     rgs.extract(clusters);
 
-    ROS_INFO_STREAM("Region segmentation found " << clusters.size() << " regions");
+    //    ROS_INFO_STREAM("Region segmentation found " << clusters.size() << " regions");
 
     std::reverse(clusters.begin(), clusters.end()); // For debuggging
 
@@ -115,7 +132,7 @@ DetectSurfaces::sac_segmentation_and_fit(NormalCloud::Ptr &normals, NormalSearch
 
     sac.setInputCloud(normals);
     sac.setInputNormals(normals);
-//    sac.setSamplesMaxDist(parallel_distance_, search);
+    //    sac.setSamplesMaxDist(parallel_distance_, search);
 
     auto remaining_indices = boost::make_shared<pcl::PointIndices>(region);
     pcl::PointIndices remaining_indices_tmp;
@@ -160,7 +177,7 @@ DetectSurfaces::sac_segmentation_and_fit(NormalCloud::Ptr &normals, NormalSearch
         remaining_indices->indices.swap(remaining_indices_tmp.indices);
     }
 
-    ROS_INFO_STREAM("SAC segmentation found " << n_found_clusters << " planes");
+    //    ROS_INFO_STREAM("SAC segmentation found " << n_found_clusters << " planes");
 
     return *remaining_indices;
 }
@@ -178,7 +195,7 @@ void DetectSurfaces::euclidean_segmentation(NormalCloud::Ptr &normals, NormalSea
 
     std::vector<pcl::PointIndices> clusters;
     seg.extract(clusters);
-    ROS_INFO_STREAM("Euclidean segmentation found " << clusters.size() << " clusters");
+    //    ROS_INFO_STREAM("Euclidean segmentation found " << clusters.size() << " clusters");
 
     std::for_each(clusters.begin(), clusters.end(), callback);
 }
@@ -199,13 +216,13 @@ void DetectSurfaces::find_transform_and_filter(NormalCloud::Ptr &normals, pcl::P
         min_y = std::min(min_y, pt.y);
 
         if (max_y - min_y < min_plane_width_) {
-            ROS_INFO_STREAM("PCA discarded a surface for being only " << (max_y - min_y) << " m wide");
+            //            ROS_INFO_STREAM("PCA discarded a surface for being only " << (max_y - min_y) << " m wide");
             return;
         }
     }
 
     // If it didn't return yet, then the cloud is wide enough
-    callback(Eigen::Affine3f(pca.getEigenVectors()) * Eigen::Translation3f(pca.getMean().head(3)));
+    callback(Eigen::Translation3f(pca.getMean().head(3)) * Eigen::Affine3f(pca.getEigenVectors()));
 }
 
 auto DetectSurfaces::make_segment_colored_cloud(NormalCloud::Ptr &normals, std::vector<pcl::PointIndices> &segments)

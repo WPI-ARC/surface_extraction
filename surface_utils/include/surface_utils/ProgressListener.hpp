@@ -11,10 +11,18 @@
 #include <thread>
 #include <geometry_msgs/PoseArray.h>
 #include <geometry_msgs/PoseStamped.h>
+#include <visualization_msgs/MarkerArray.h>
 #include <tf/tf.h>
+#include <eigen_conversions/eigen_msg.h>
+#include <Eigen/Geometry>
+#include <surface_types/Surface.hpp>
+
+EIGEN_DEFINE_STL_VECTOR_SPECIALIZATION(Eigen::Affine3f)
+EIGEN_DEFINE_STL_VECTOR_SPECIALIZATION(Eigen::Affine3d)
 
 class ProgressListener {
     typedef std::map<std::string, ros::Publisher> PubMap;
+    typedef std::shared_ptr<ros::NodeHandle *> NHPtr;
 
 public:
     // Use this constructor to disable ProgressListener
@@ -28,31 +36,28 @@ public:
         points->header.frame_id = frame_;
 
         // Need another reference to the member data pointers in case object is destroyed before the thread finishes
-        std::thread(std::bind(
-                        [name](std::shared_ptr<ros::NodeHandle *> nh, std::shared_ptr<PubMap> pubs,
-                               typename pcl::PointCloud<PointT>::ConstPtr pts) {
-                            assert(name.length() != 0);
-                            assert(nh != nullptr);
-                            assert(pubs != nullptr);
-                            assert(pts != nullptr);
+        std::thread(
+            std::bind([name](NHPtr nh, std::shared_ptr<PubMap> pubs, typename pcl::PointCloud<PointT>::ConstPtr pts) {
+                assert(name.length() != 0);
+                assert(nh != nullptr);
+                assert(pubs != nullptr);
+                assert(pts != nullptr);
 
-                            std::map<std::string, ros::Publisher>::iterator pub = pubs->find(name);
+                std::map<std::string, ros::Publisher>::iterator pub = pubs->find(name);
 
-                            if (pub == pubs->end()) {
-                                pub = pubs->insert(std::make_pair(name, (*nh)->advertise<pcl::PointCloud<PointT>>(
-                                                                            name, 10))).first;
+                if (pub == pubs->end()) {
+                    pub = pubs->insert(std::make_pair(name, (*nh)->advertise<pcl::PointCloud<PointT>>(name, 10))).first;
 
-                                ros::Rate r(2);
-                                ros::Time stop_time = ros::Time::now() + ros::Duration(10);
-                                while (pub->second.getNumSubscribers() == 0 && ros::Time::now() < stop_time) {
-                                    r.sleep();
-                                }
-                            }
+                    ros::Rate r(2);
+                    ros::Time stop_time = ros::Time::now() + ros::Duration(10);
+                    while (pub->second.getNumSubscribers() == 0 && ros::Time::now() < stop_time) {
+                        r.sleep();
+                    }
+                }
 
-                            pub->second.publish(pts);
+                pub->second.publish(pts);
 
-                        },
-                        nh_ptr_, pubs_, points)).detach();
+            }, nh_ptr_, pubs_, points)).detach();
     }
 
     template <typename PointT>
@@ -68,63 +73,205 @@ public:
 
         // Need another reference to the member data pointers in case object is destroyed before the thread finishes
         std::thread(std::bind(
-                [name](std::shared_ptr<ros::NodeHandle *> nh, std::shared_ptr<PubMap> pubs,
-                       pcl::PointCloud<pcl::PointNormal>::ConstPtr pts, std::string frame) {
-                    assert(name.length() != 0);
-                    assert(nh != nullptr);
-                    assert(pubs != nullptr);
-                    assert(pts != nullptr);
+                        [name](NHPtr nh, std::shared_ptr<PubMap> pubs, pcl::PointCloud<pcl::PointNormal>::ConstPtr pts,
+                               std::string frame) {
+                            assert(name.length() != 0);
+                            assert(nh != nullptr);
+                            assert(pubs != nullptr);
+                            assert(pts != nullptr);
 
-                    std::map<std::string, ros::Publisher>::iterator pub = pubs->find(name);
+                            std::map<std::string, ros::Publisher>::iterator pub = pubs->find(name);
 
-                    bool made_new_pub = false;
-                    if (pub == pubs->end()) {
-                        pub = pubs->insert(std::make_pair(name, (*nh)->advertise<geometry_msgs::PoseArray>(
-                                name, 10))).first;
+                            bool made_new_pub = false;
+                            if (pub == pubs->end()) {
+                                pub = pubs->insert(std::make_pair(name, (*nh)->advertise<geometry_msgs::PoseArray>(
+                                                                            name, 10))).first;
 
-                        made_new_pub = true;
-                    }
+                                made_new_pub = true;
+                            }
 
-                    geometry_msgs::PoseArray poses;
-                    poses.header.frame_id = frame;
+                            geometry_msgs::PoseArray poses;
+                            poses.header.frame_id = frame;
 
-                    for (auto &pt : *pts) {
-                        geometry_msgs::Pose pose;
-                        geometry_msgs::Quaternion msg;
+                            for (auto &pt : *pts) {
+                                geometry_msgs::Pose pose;
+                                geometry_msgs::Quaternion msg;
 
-                        // extracting surface normals
-                        tf::Vector3 axis_vector(pt.normal[0], pt.normal[1], pt.normal[2]);
-                        tf::Vector3 up_vector(0.0, 0.0, 1.0);
+                                // extracting surface normals
+                                tf::Vector3 axis_vector(pt.normal[0], pt.normal[1], pt.normal[2]);
+                                tf::Vector3 up_vector(0.0, 0.0, 1.0);
 
-                        tf::Vector3 right_vector = axis_vector.cross(up_vector);
-                        right_vector.normalized();
-                        tf::Quaternion q(right_vector, -1.0 * acos(axis_vector.dot(up_vector)));
-                        q.normalize();
-                        tf::quaternionTFToMsg(q, msg);
+                                tf::Vector3 right_vector = axis_vector.cross(up_vector);
+                                right_vector.normalized();
+                                tf::Quaternion q(right_vector, -1.0 * acos(axis_vector.dot(up_vector)));
+                                q.normalize();
+                                tf::quaternionTFToMsg(q, msg);
 
-                        //adding pose to pose array
-                        pose.position.x = pt.x;
-                        pose.position.y = pt.y;
-                        pose.position.z = pt.z;
-                        pose.orientation = msg;
-                        poses.poses.push_back(pose);
-                    }
+                                // adding pose to pose array
+                                pose.position.x = pt.x;
+                                pose.position.y = pt.y;
+                                pose.position.z = pt.z;
+                                pose.orientation = msg;
+                                poses.poses.push_back(pose);
+                            }
 
-                    if (made_new_pub) { // Then wait for it
-                        ros::Rate r(2);
-                        ros::Time stop_time = ros::Time::now() + ros::Duration(10);
-                        while (pub->second.getNumSubscribers() == 0 && ros::Time::now() < stop_time) {
-                            r.sleep();
-                        }
-                    }
+                            if (made_new_pub) { // Then wait for it
+                                ros::Rate r(2);
+                                ros::Time stop_time = ros::Time::now() + ros::Duration(10);
+                                while (pub->second.getNumSubscribers() == 0 && ros::Time::now() < stop_time) {
+                                    r.sleep();
+                                }
+                            }
 
-                    pub->second.publish(poses);
-                },
-                nh_ptr_, pubs_, normals_cloud, frame_)).detach();
+                            pub->second.publish(poses);
+                        },
+                        nh_ptr_, pubs_, normals_cloud, frame_)).detach();
+    }
+
+    void pose(std::string name, geometry_msgs::PoseStamped &p) {
+        if (!nh_ptr_) return;
+
+        // Need another reference to the member data pointers in case object is destroyed before the thread finishes
+        std::thread(std::bind([name, p](NHPtr nh, std::shared_ptr<PubMap> pubs, std::string frame) {
+            assert(name.length() != 0);
+            assert(nh != nullptr);
+            assert(pubs != nullptr);
+
+            std::map<std::string, ros::Publisher>::iterator pub = pubs->find(name);
+
+            if (pub == pubs->end()) {
+                pub = pubs->insert(std::make_pair(name, (*nh)->advertise<geometry_msgs::PoseStamped>(name, 10))).first;
+
+                ros::Rate r(2);
+                ros::Time stop_time = ros::Time::now() + ros::Duration(10);
+                while (pub->second.getNumSubscribers() == 0 && ros::Time::now() < stop_time) {
+                    r.sleep();
+                }
+            }
+
+            pub->second.publish(p);
+
+        }, nh_ptr_, pubs_, frame_)).detach();
+    }
+
+    void pose(std::string name, geometry_msgs::Pose &p) {
+        geometry_msgs::PoseStamped ps;
+        ps.header.frame_id = frame_;
+        ps.pose = p;
+        this->pose(name, ps);
+    }
+
+    void pose(std::string name, Eigen::Affine3d &e) {
+        geometry_msgs::Pose p;
+        tf::poseEigenToMsg(e, p);
+        this->pose(name, p);
+    }
+
+    void pose(std::string name, Eigen::Affine3f &e) {
+        geometry_msgs::Pose p;
+        tf::poseEigenToMsg(e.cast<double>(), p);
+        this->pose(name, p);
+    }
+
+    void poses(std::string name, std::vector<geometry_msgs::Pose> &p) {
+        if (!nh_ptr_) return;
+
+        // Need another reference to the member data pointers in case object is destroyed before the thread finishes
+        std::thread(std::bind([name, p](NHPtr nh, std::shared_ptr<PubMap> pubs, std::string frame) {
+            assert(name.length() != 0);
+            assert(nh != nullptr);
+            assert(pubs != nullptr);
+
+            std::map<std::string, ros::Publisher>::iterator pub = pubs->find(name);
+
+            if (pub == pubs->end()) {
+                pub = pubs->insert(std::make_pair(name, (*nh)->advertise<geometry_msgs::PoseArray>(name, 10))).first;
+
+                ros::Rate r(2);
+                ros::Time stop_time = ros::Time::now() + ros::Duration(10);
+                while (pub->second.getNumSubscribers() == 0 && ros::Time::now() < stop_time) {
+                    r.sleep();
+                }
+            }
+
+            geometry_msgs::PoseArray ps;
+            ps.header.frame_id = frame;
+            ps.poses = p;
+
+            pub->second.publish(ps);
+
+        }, nh_ptr_, pubs_, frame_)).detach();
+    }
+
+    void poses(std::string name, std::vector<Eigen::Affine3d> &e) {
+        std::vector<geometry_msgs::Pose> ps;
+        ps.resize(e.size());
+        for (std::size_t i = 0; i < e.size(); i++)
+            tf::poseEigenToMsg(e[i], ps[i]);
+        this->poses(name, ps);
+    }
+
+    void poses(std::string name, std::vector<Eigen::Affine3f> &e) {
+        std::vector<geometry_msgs::Pose> ps;
+        ps.resize(e.size());
+        for (std::size_t i = 0; i < e.size(); i++)
+            tf::poseEigenToMsg(e[i].cast<double>(), ps[i]);
+        this->poses(name, ps);
+    }
+
+    void polygons(std::string name, surface_types::Surface &surface) {
+        if (!nh_ptr_) return;
+
+        // Need another reference to the member data pointers in case object is destroyed before the thread finishes
+        std::thread(std::bind([name, surface](NHPtr nh, std::shared_ptr<PubMap> pubs, std::string frame) {
+            assert(name.length() != 0);
+            assert(nh != nullptr);
+            assert(pubs != nullptr);
+
+            std::map<std::string, ros::Publisher>::iterator pub = pubs->find(name);
+
+            if (pub == pubs->end()) {
+                pub = pubs->insert(std::make_pair(name, (*nh)->advertise<visualization_msgs::Marker>(name, 10))).first;
+
+                ros::Rate r(2);
+                ros::Time stop_time = ros::Time::now() + ros::Duration(10);
+                while (pub->second.getNumSubscribers() == 0 && ros::Time::now() < stop_time) {
+                    r.sleep();
+                }
+            }
+
+            visualization_msgs::Marker m;
+            m.header.frame_id = frame;
+            m.header.stamp = ros::Time();
+            m.ns = "surface_polygons";
+            m.id = surface.id;
+            m.type = visualization_msgs::Marker::LINE_LIST;
+            m.action = visualization_msgs::Marker::ADD;
+            // m.pose not needed
+            m.scale.x = 0.005;
+            // m.scale otherwise not needed
+            m.color = surface.color;
+            for (auto polygon : surface.polygons) {
+                auto first = m.points.size();
+                // First add two copies of each point
+                for (auto index : polygon.vertices) {
+                    geometry_msgs::Point p;
+                    p.x = surface.inliers[index].x;
+                    p.y = surface.inliers[index].y;
+                    p.z = surface.inliers[index].z;
+                    m.points.push_back(p);
+                    m.points.push_back(p);
+                }
+                // Then rotate all the new points
+                std::rotate(m.points.begin() + first, m.points.begin() + first + 1,  m.points.end());
+            }
+
+            pub->second.publish(m);
+        }, nh_ptr_, pubs_, frame_)).detach();
     }
 
 protected:
-    std::shared_ptr<ros::NodeHandle *> nh_ptr_;
+    NHPtr nh_ptr_;
     std::shared_ptr<PubMap> pubs_;
     std::string frame_;
 };

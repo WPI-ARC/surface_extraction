@@ -31,12 +31,13 @@ const double parallel_distance = 0.05;
 const double mls_radius = 0.10;
 const unsigned int min_points_per_surface = 50;
 const double min_plane_width = 0.1;
+const double alpha = 0.05;
 
 int main(int argc, char **argv) {
     // Setup
     ros::init(argc, argv, "surface_detection");
     ros::NodeHandle n;
-    SurfaceDetection surface_detection(discretization, perpendicular_distance, parallel_distance, mls_radius, min_points_per_surface, min_plane_width);
+    SurfaceDetection surface_detection(discretization, perpendicular_distance, parallel_distance, mls_radius, min_points_per_surface, min_plane_width, alpha);
 
     ROS_INFO_STREAM("Connected to ROS");
 
@@ -68,8 +69,7 @@ int main(int argc, char **argv) {
             auto center = GeometryPoseToEigenAffine3f(req.center);
             auto extents = GeometryVector3ToEigenVector3f(req.extents);
             ROS_DEBUG_STREAM("Center: " << PrettyPrint::PrettyPrint(center) << ", Extents: <x: " << extents[0] << ", y: " << extents[1] << " z, " << extents[2] << ">");
-            std::tie(resp.surfaces, resp.surface_meshes) = surface_detection.detect_surfaces_within(
-                    center, extents, progress);
+            resp = surface_detection.detect_surfaces_within(center, extents, progress);
             return true;
         }
     };

@@ -10,6 +10,7 @@ set(BOOST_ROOT "~/Desktop/boost_1_60_0")
 find_package(catkin REQUIRED COMPONENTS
   pcl_ros
   roscpp
+    eigen_conversions
 )
 
 ## System dependencies are found with CMake's conventions
@@ -108,7 +109,7 @@ find_package(PCL 1.8 REQUIRED)
 catkin_package(
   INCLUDE_DIRS include
 #  LIBRARIES surface_utils
-#  CATKIN_DEPENDS pcl_ros roscpp
+  CATKIN_DEPENDS pcl_ros roscpp eigen_conversions
 #  DEPENDS system_lib
 )
 

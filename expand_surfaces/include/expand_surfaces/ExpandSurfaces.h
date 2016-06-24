@@ -19,17 +19,13 @@ namespace pcl {
 }
 
 namespace surface_types {
-    template <typename PointT> class Surface;
-    class SurfaceMesh;
+    class Surface;
 }
 
 class ExpandSurfaces {
     typedef pcl::PointXYZ Point;
     typedef pcl::PointCloud<Point> PointCloud;
-    typedef surface_types::Surface<Point> Surface;
-    typedef surface_types::SurfaceMesh SurfaceMesh;
-
-    typedef std::pair<Surface, SurfaceMesh> SurfaceMeshPair;
+    typedef surface_types::Surface Surface;
 
     typedef pcl::search::Search<Point> Search;
 
@@ -38,7 +34,7 @@ class ExpandSurfaces {
 public:
     ExpandSurfaces(double perpendicular_dist, double parallel_dist);
 
-    pcl::PointIndices expand_surfaces(const std::map<int, SurfaceMeshPair> &surfaces, const CloudIndexPair &input,
+    pcl::PointIndices expand_surfaces(const std::map<int, Surface> &surfaces, const CloudIndexPair &input,
                                       std::function<void(Surface)> callback);
 
 private:

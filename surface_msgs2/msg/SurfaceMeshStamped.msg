@@ -1,2 +1,0 @@
-Header header
-surface_msgs2/SurfaceMesh surface_mesh

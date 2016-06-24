@@ -23,9 +23,7 @@ class Search;
 class ProgressListener;
 
 namespace surface_types {
-template <typename PointT>
 class Surface;
-class SurfaceMesh;
 }
 
 class DetectSurfaces {

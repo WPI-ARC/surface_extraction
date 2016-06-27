@@ -6,6 +6,7 @@
 
 // PCL
 #include <pcl/surface/mls.h>
+#include <pcl/filters/radius_outlier_removal.h>
 #include <pcl/segmentation/impl/region_growing.hpp>
 #include <pcl/segmentation/sac_segmentation.h>
 #include <pcl/segmentation/extract_clusters.h>
@@ -17,6 +18,7 @@
 #include <surface_utils/ProgressListener.hpp>
 #include <surface_utils/color_generator.hpp>
 #include <surface_utils/smart_ptr.hpp>
+#include <arc_utilities/pretty_print.hpp>
 
 // Some much-needed shorter names for the sake of code formatting
 using Indices = pcl::PointIndices;
@@ -32,15 +34,21 @@ DetectSurfaces::DetectSurfaces(double perpendicular_dist, double parallel_dist, 
     assert(min_points_per_surface_ >= 3);
 }
 
-void DetectSurfaces::detect_surfaces(const CloudIndexPair &input, ProgressListener &p,
+void DetectSurfaces::detect_surfaces(const CloudIndexPair &input_pre_filtering, ProgressListener &p,
                                      std::function<void(Indices, Model, Eigen::Affine3f)> callback) {
     pcl::ScopeTime st("DetectSurfaces::detect_surfaces");
+    auto input = radius_filter(input_pre_filtering);
     auto normals = get_normals(input);
     if (input.second.indices.size() != normals->size()) {
-        ROS_ERROR_STREAM("Expected normals to have " << input.second.indices.size()
-                         << " points, but it had " << normals->size());
+        ROS_ERROR_STREAM("Expected normals to have " << input.second.indices.size() << " points, but it had "
+                                                     << normals->size());
         assert(false && "Normals cloud has the wrong number of points");
     }
+
+    assert(input_pre_filtering.first.sensor_origin_.isApprox(normals->sensor_origin_) &&
+           "Get normals did not preserve sensor origin");
+    assert(input_pre_filtering.first.sensor_orientation_.isApprox(normals->sensor_orientation_) &&
+           "Get normals did not preserve sensor orientation");
 
     p.points<Normal>("normals", normals);
     p.normal_vectors("normal_vectors", normals);
@@ -52,11 +60,18 @@ void DetectSurfaces::detect_surfaces(const CloudIndexPair &input, ProgressListen
     std::vector<Indices> planes;
     std::vector<Eigen::Affine3f> tfs;
 
+    int n_regions = 0, n_planes = 0, n_euclidean = 0, n_filtered = 0;
+
     // Welcome to callback hell!
     region_segmentation(normals, normal_search, [&, this](Indices region) {
+        n_regions++;
         sac_segmentation_and_fit(normals, normal_search, region, [&, this](Indices inliers, Model model) {
+            n_planes++;
             euclidean_segmentation(normals, normal_search, inliers, [&, this](Indices segment) {
+                n_euclidean++;
                 find_transform_and_filter(normals, segment, [&, this](Eigen::Affine3f transform) {
+                    n_filtered++;
+
                     planes.push_back(segment);
                     tfs.push_back(transform);
                     // segment refers to normals, which is a subset of input.first, so it needs to be reindex to
@@ -72,8 +87,25 @@ void DetectSurfaces::detect_surfaces(const CloudIndexPair &input, ProgressListen
         });
     });
 
+    ROS_DEBUG_STREAM("DetectSurfaces found " << n_regions << " regions, " << n_planes << " planes, " << n_euclidean
+                                             << " euclidean segements, " << n_filtered << " surfaces after filtering");
+
     p.points<pcl::PointXYZRGB>("new_planes", make_segment_colored_cloud(normals, planes));
     p.poses("plane_transforms", tfs);
+}
+
+DetectSurfaces::CloudIndexPair DetectSurfaces::radius_filter(const CloudIndexPair &input) {
+    pcl::RadiusOutlierRemoval<pcl::PointXYZ> filter;
+    filter.setRadiusSearch(mls_radius_);
+    filter.setMinNeighborsInRadius(3);
+
+    filter.setInputCloud(boost::shared_ptr<const PointCloud>(&input.first, null_deleter()));
+    filter.setIndices(boost::shared_ptr<const std::vector<int>>(&input.second.indices, null_deleter()));
+
+    auto output = std::make_pair(input.first, pcl::PointIndices());
+
+    filter.filter(output.second.indices);
+    return output;
 }
 
 DetectSurfaces::NormalCloud::Ptr DetectSurfaces::get_normals(const CloudIndexPair &input) {
@@ -92,6 +124,9 @@ DetectSurfaces::NormalCloud::Ptr DetectSurfaces::get_normals(const CloudIndexPai
 
     assert(normals->size() <= input.second.indices.size() && "Normals size is greater than indices size");
     assert(normals->size() >= input.second.indices.size() && "Normals size is less than indices size");
+
+    normals->sensor_origin_ = input.first.sensor_origin_;
+    normals->sensor_orientation_ = input.first.sensor_orientation_;
 
     return normals;
 }
@@ -149,6 +184,26 @@ DetectSurfaces::sac_segmentation_and_fit(NormalCloud::Ptr &normals, NormalSearch
         sac.segment(inliers, model);
 
         if (inliers.indices.size() >= min_points_per_surface_) {
+            // Make sure the normal is oriented towards the cloud's acquisition viewpoint
+            normals->sensor_origin_[3] = 1; // Required to ensure the correctness of the `if` statement
+            // The correctness of the `if` statement depends on the first 3 values of the model being normalized
+            assert(std::abs(Eigen::Map<Eigen::Vector3f>(model.values.data(), 3).norm() - 1) < 1e-4 &&
+                   "Coefficients aren't normalized");
+            if (Eigen::Map<Eigen::Vector4f>(model.values.data(), 4).dot(normals->sensor_origin_) < 0) {
+                ROS_DEBUG_STREAM("Orienting plane normal towards point <"
+                                 << normals->sensor_origin_[0] << ", " << normals->sensor_origin_[1] << ", "
+                                 << normals->sensor_origin_[2] << ", " << normals->sensor_origin_[3] << ">");
+                model.values[0] *= -1;
+                model.values[1] *= -1;
+                model.values[2] *= -1;
+                model.values[3] *= -1;
+            }
+            // Make sure I didn't mess it up
+            assert(std::abs(Eigen::Map<Eigen::Vector3f>(model.values.data(), 3).norm() - 1) < 1e-4 &&
+                   "Coefficients aren't normalized after re-orienting");
+            assert(Eigen::Map<Eigen::Vector4f>(model.values.data(), 4).dot(normals->sensor_origin_) >= 0 &&
+                   "Model isn't oriented towards viewpoint after re-orienting");
+
             n_found_clusters++;
             callback(inliers, model);
         } else {
@@ -202,26 +257,55 @@ void DetectSurfaces::euclidean_segmentation(NormalCloud::Ptr &normals, NormalSea
 
 void DetectSurfaces::find_transform_and_filter(NormalCloud::Ptr &normals, pcl::PointIndices &inliers,
                                                std::function<void(Eigen::Affine3f)> callback) {
-    pcl::PCA<Normal> pca(true); // true -> don't compute coefficients
+    // Lifted from pcl::getPrincipalTransformation
+    // (not using that because I want to be able to pass indices)
+    Eigen::Affine3f tf;
+    EIGEN_ALIGN16 Eigen::Matrix3f covariance_matrix;
+    Eigen::Vector4f centroid;
 
-    pca.setInputCloud(normals);
-    pca.setIndices(boost::shared_ptr<const std::vector<int>>(&inliers.indices, null_deleter()));
+    pcl::computeMeanAndCovarianceMatrix(*normals, inliers, covariance_matrix, centroid);
 
-    Normal pt;
-    float max_y = 0, min_y = 0;
+    EIGEN_ALIGN16 Eigen::Matrix3f eigen_vects;
+    Eigen::Vector3f eigen_vals;
+    pcl::eigen33(covariance_matrix, eigen_vects, eigen_vals);
+
+    tf.translation() = centroid.head(3);
+    tf.linear() = eigen_vects;
+
+    // This puts x along the major axis instead of z
+    tf.rotate(Eigen::AngleAxisf(M_PI_2, Eigen::Vector3f::UnitY()));
+
+    auto tf_inverse = tf.inverse();
+
+    // Note: Don't start at zero, because if there aren't points around zero that incorrectly increases the spread
+    float max_y = std::numeric_limits<float>::min(), min_y = std::numeric_limits<float>::max();
+    float max_z = std::numeric_limits<float>::min(), min_z = std::numeric_limits<float>::max();
     for (const int point_idx : inliers.indices) {
-        pca.project(normals->points[point_idx], pt);
+        Normal pt = pcl::transformPoint((*normals)[point_idx], tf_inverse);
 
         max_y = std::max(max_y, pt.y);
         min_y = std::min(min_y, pt.y);
-
-        if (max_y - min_y < min_plane_width_) {
-            return;
-        }
+        max_z = std::max(max_z, pt.z);
+        min_z = std::min(min_z, pt.z);
     }
 
-    // If it didn't return yet, then the cloud is wide enough
-    callback(Eigen::Translation3f(pca.getMean().head(3)) * Eigen::Affine3f(pca.getEigenVectors()));
+    assert((max_z - min_z) * perpendicular_distance_ && "Z-spread was not less than twice the perpendicular distance");
+
+    if (max_y - min_y < min_plane_width_) {
+        return;
+    }
+
+    ROS_DEBUG_STREAM("Y-spread: " << (max_y - min_y));
+
+    // Make sure the orientation of the transform puts the sensor origin in +z direction
+    auto origin_tf = tf.inverse() * normals->sensor_origin_.head<3>();
+    if (origin_tf[2] < 0) {
+        ROS_DEBUG_STREAM("Flipping transform");
+        // Rotate by pi around the y axis to flip the transform
+        tf.rotate(Eigen::AngleAxisf(M_PI, Eigen::Vector3f::UnitY()));
+    }
+
+    callback(tf);
 }
 
 auto DetectSurfaces::make_segment_colored_cloud(NormalCloud::Ptr &normals, std::vector<pcl::PointIndices> &segments)

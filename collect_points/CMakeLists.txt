@@ -12,6 +12,7 @@ find_package(catkin REQUIRED COMPONENTS
     arc_utilities
     surface_types
     surface_utils
+    eigen_conversions
 )
 
 ## System dependencies are found with CMake's conventions

@@ -43,11 +43,15 @@ class color_generator;
 // Along with each point, store a PCL point index (uint32_t) and a visited boolean
 struct CustomPointInfo {
     uint32_t pcl_index;
+    uint32_t pcl_index2;
     bool visited;
 
-    CustomPointInfo() : pcl_index(std::numeric_limits<uint32_t>::max()), visited(false) {} // For CGAL
-    CustomPointInfo(uint32_t i) : pcl_index(i), visited(false) {}                          // For me
-    CustomPointInfo(uint32_t i, bool v) : pcl_index(i), visited(v) {}                      // For completeness
+    // For CGAL
+    CustomPointInfo() : pcl_index(std::numeric_limits<uint32_t>::max()), pcl_index2(pcl_index), visited(false) {}
+    // For me
+    CustomPointInfo(uint32_t i) : pcl_index(i), pcl_index2(std::numeric_limits<uint32_t>::max()), visited(false) {}
+    // For completeness
+    CustomPointInfo(uint32_t i, uint32_t i2, bool v) : pcl_index(i), pcl_index2(i), visited(v) {}
 };
 
 struct CustomFaceInfo {
@@ -85,7 +89,6 @@ typedef CGAL::Triangulation_face_base_with_info_2<CustomFaceInfo, K, Simplificat
 typedef CGAL::Triangulation_data_structure_2<SimplificationVb, SimplificationFb> SimplificationTds;
 typedef CGAL::Constrained_Delaunay_triangulation_2<K, SimplificationTds, CGAL::Exact_predicates_tag> CDT;
 typedef CGAL::Constrained_triangulation_plus_2<CDT> CT;
-typedef CT::Point SimplificationPoint;
 typedef PS::Stop_above_cost_threshold SimplificationStop;
 typedef PS::Squared_distance_cost SimplificationCost;
 //////////////////////////////////////// END CGAL ////////////////////////////////////////
@@ -113,7 +116,8 @@ protected:
     random_colors::color_generator color_gen_;
 
 private:
-    pcl::ModelCoefficients find_model_for_inliers(const PointCloud &inliers);
+    pcl::ModelCoefficients optimize_model_for_inliers(const PointCloud &inliers,
+                                                      const pcl::ModelCoefficients &old_coeff);
     pcl::ModelCoefficients find_model_for_inliers(const PointCloud &cloud, const pcl::ModelCoefficients &prev_model);
 
     Eigen::Affine3d adjust_pose_to_model(Eigen::Affine3d old_pose, pcl::ModelCoefficients model);

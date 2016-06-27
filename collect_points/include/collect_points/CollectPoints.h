@@ -7,6 +7,7 @@
 
 #include <pcl/octree/octree_pointcloud_voxelcentroid.h>
 #include <pcl/octree/octree_search.h>
+#include <tf/transform_listener.h>
 
 namespace pcl {
     class PointIndices;
@@ -24,7 +25,7 @@ class CollectPoints {
     typedef std::pair<PointCloud, pcl::PointIndices> CloudIndexPair;
 
 public:
-    CollectPoints(double discretization, double perpendicular_dist);
+    CollectPoints(double discretization, double perpendicular_dist, std::string target_frame, std::string camera_frame);
 
     void add_points(const PointCloud::ConstPtr &points);
 
@@ -36,6 +37,12 @@ public:
 
 protected:
     double perpendicular_dist_;
+    std::string target_frame_;
+    std::string camera_frame_;
+
+    ros::Time silence_tf_warnings_until_;
+
+    tf::TransformListener tf_listener_;
 
     SurfacePointsOctree surface_points_;
     PendingPointsOctree pending_points_;

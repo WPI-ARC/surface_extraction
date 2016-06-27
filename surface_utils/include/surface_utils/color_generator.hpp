@@ -34,7 +34,13 @@ public:
         return std::make_tuple(h, s, v);
     }
 
+    std::tuple<double, double, double> repeat_hsv() {
+        return std::make_tuple(h, s, v);
+    }
+
     std::tuple<double, double, double> rgb() { return hsv_to_rgb(hsv()); }
+
+    std::tuple<double, double, double> repeat_rgb() { return hsv_to_rgb(repeat_hsv()); }
 
     std::tuple<double, double, double> hsv_to_rgb(std::tuple<double, double, double> hsv) {
         double h, s, v, r, g, b;

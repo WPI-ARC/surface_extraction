@@ -55,17 +55,53 @@ void BuildSurface::build_updated_surface(const Surface &old_surface,
     updated_surface.id = old_surface.id;
     updated_surface.color = old_surface.color;
 
+    // ros console escapes my backslashes
+    ROS_INFO("%c[38;2;%d;%d;%dmBuilding updated surface: %d", 0x1B, static_cast<int>(old_surface.color.r * 256),
+             static_cast<int>(old_surface.color.g * 256), static_cast<int>(old_surface.color.b * 256), old_surface.id);
+
     // Inliers was already updated
     updated_surface.inliers = old_surface.inliers;
 
     // The rest needs to be computed
-    //    updated_surface.model = find_model_for_inliers(updated_surface.inliers, old_surface.model);
-    //    updated_surface.pose = adjust_pose_to_model(old_surface.pose, updated_surface.model);
-    //    auto p = ProgressListener();
-    //    std::tie(updated_surface.boundary, updated_surface.polygons) =
-    //        find_boundary_and_polygons(updated_surface.inliers, updated_surface.pose, p);
-    //    updated_surface.polygons = simplify_polygons(<#initializer #>, updated_surface.polygons);
-    //    updated_surface.mesh = create_trimesh(updated_surface.boundary, updated_surface.polygons);
+    updated_surface.model = find_model_for_inliers(updated_surface.inliers, old_surface.model);
+    updated_surface.pose = adjust_pose_to_model(old_surface.pose, updated_surface.model);
+    auto pose_float = updated_surface.pose.cast<float>();
+
+    auto p = ProgressListener();
+    auto cgal_points = get_cgal_2d_points(updated_surface.inliers, pose_float);
+    std::tie(updated_surface.boundary, updated_surface.polygons) =
+        find_boundary_and_polygons(updated_surface.inliers, cgal_points, pose_float, p);
+    auto triangulation = get_simplified_triangulation(cgal_points, updated_surface.polygons);
+
+    auto un_simplified_polygons = updated_surface.polygons;
+
+    updated_surface.polygons = simplify_polygons(triangulation);
+
+    // Ensure the polygon simplification only removed vertices, didn't reorder the ones that weren't removed
+    for (std::size_t i = 0; i < updated_surface.polygons.size(); i++) {
+        auto simplified_vertices = updated_surface.polygons[i].vertices;
+        auto unsimplified_vertices = un_simplified_polygons[i].vertices;
+
+        auto curr_pos = unsimplified_vertices.begin();
+        for (auto &index : simplified_vertices) {
+            // Find the next occurrence of the simplified index in the unsimplified list
+            curr_pos = std::find(curr_pos, unsimplified_vertices.end(), index);
+            if (curr_pos == unsimplified_vertices.end()) {
+                ROS_ERROR("Got changed vertices order: ");
+                std::copy(unsimplified_vertices.begin(), unsimplified_vertices.end(),
+                          std::ostream_iterator<uint32_t>(std::cout, ", "));
+                std::cout << std::endl;
+                std::copy(simplified_vertices.begin(), simplified_vertices.end(),
+                          std::ostream_iterator<uint32_t>(std::cout, ", "));
+                std::cout << std::endl;
+            }
+            assert(curr_pos != unsimplified_vertices.end() && "Simplifying polygons changed the vertices' order");
+        }
+    }
+
+    p.polygons("polygons", updated_surface);
+    updated_surface.mesh = create_trimesh(triangulation, pose_float);
+    p.mesh("mesh", updated_surface);
 
     callback(updated_surface);
 }
@@ -81,19 +117,25 @@ void BuildSurface::build_new_surface(PointCloud inliers, pcl::ModelCoefficients 
     new_surface.color.a = 1;
     std::tie(new_surface.color.r, new_surface.color.g, new_surface.color.b) = color_gen_.rgb();
 
+    // ros console escapes my backslashes
+    ROS_INFO("%c[38;2;%d;%d;%dmBuilding new surface: %d", 0x1B, static_cast<int>(new_surface.color.r * 256),
+             static_cast<int>(new_surface.color.g * 256), static_cast<int>(new_surface.color.b * 256), new_surface.id);
+
     // inliers, model, and pose are given
     new_surface.inliers = inliers;
     new_surface.model = model;
     new_surface.pose = pose;
     auto pose_float = new_surface.pose.cast<float>();
 
-    p.pose("surface_pose", pose);
+    p.pose("surface_pose", new_surface);
+    p.plane_normal("surface_normal", new_surface);
 
     // boundary, polygons, and mesh are computed with CGAL
     auto cgal_points = get_cgal_2d_points(new_surface.inliers, pose_float);
     std::tie(new_surface.boundary, new_surface.polygons) =
         find_boundary_and_polygons(new_surface.inliers, cgal_points, pose_float, p);
     auto triangulation = get_simplified_triangulation(cgal_points, new_surface.polygons);
+    p.points<Point>("boundary_points", new_surface.boundary.makeShared());
 
     new_surface.polygons = simplify_polygons(triangulation);
     p.polygons("polygons", new_surface);
@@ -103,12 +145,14 @@ void BuildSurface::build_new_surface(PointCloud inliers, pcl::ModelCoefficients 
     callback(new_surface);
 }
 
-pcl::ModelCoefficients BuildSurface::find_model_for_inliers(const PointCloud &inliers) {
+pcl::ModelCoefficients BuildSurface::optimize_model_for_inliers(const PointCloud &inliers,
+                                                                const pcl::ModelCoefficients &model) {
     PointCloud::ConstPtr p(&inliers, null_deleter());
     pcl::SampleConsensusModelPlane<Point> sacmodel(std::move(p));
 
-    Eigen::VectorXf coefficients;
-    sacmodel.computeModelCoefficients(surfaces_pcl_utils::all_indices(inliers), coefficients);
+    Eigen::VectorXf coefficients(4), old_co(4);
+    old_co << model.values[0], model.values[1], model.values[2], model.values[3];
+    sacmodel.optimizeModelCoefficients(surfaces_pcl_utils::all_indices(inliers), old_co, coefficients);
 
     auto points_outside = inliers.size() - sacmodel.countWithinDistance(coefficients, perpendicular_distance_);
 
@@ -130,7 +174,7 @@ pcl::ModelCoefficients BuildSurface::find_model_for_inliers(const PointCloud &in
 
 pcl::ModelCoefficients BuildSurface::find_model_for_inliers(const PointCloud &cloud,
                                                             const pcl::ModelCoefficients &prev_model) {
-    auto new_model = find_model_for_inliers(cloud);
+    auto new_model = optimize_model_for_inliers(cloud, prev_model);
 
     // STL way to get dot product (probably unrolled under -03 ?)
     auto d = std::inner_product(new_model.values.begin(), new_model.values.begin() + 3, prev_model.values.begin(), 0);
@@ -196,20 +240,33 @@ BuildSurface::find_boundary_and_polygons(const PointCloud &cloud, const std::vec
 
     // Find the boundary indices
     PointCloud boundary_points;
+    auto boundary_points_flat = boost::make_shared<pcl::PointCloud<pcl::PointXYZRGB>>();
     for (auto it = shape.alpha_shape_vertices_begin(); it != shape.alpha_shape_vertices_end(); ++it) {
         if (shape.classify(*it) == Alpha_shape_2::REGULAR) {
-            Point p((*it)->point().x(), (*it)->point().y(), 0);
-            boundary_points.push_back(pcl::transformPoint(p, transform));
+            Point pt((*it)->point().x(), (*it)->point().y(), 0);
+            boundary_points.push_back(pcl::transformPoint(pt, transform));
+            auto color_tuple = color_gen_.repeat_rgb(); // Should get the same color as the surface
+            pcl::PointXYZRGB cpt(static_cast<uint8_t>(std::get<0>(color_tuple) * 255),
+                                 static_cast<uint8_t>(std::get<1>(color_tuple) * 255),
+                                 static_cast<uint8_t>(std::get<2>(color_tuple) * 255));
+            cpt.x = (*it)->point().x();
+            cpt.y = (*it)->point().y();
+            cpt.z = 0;
+            boundary_points_flat->push_back(cpt);
         } else {
             // TODO If this assert isn't triggered after testing, remove the conditional
             assert(false && "Assumption failed -- alpha shape contains non-regular points");
         }
     }
 
+    p.points<pcl::PointXYZRGB>("boundary_points_projected", boundary_points_flat);
+
     std::set<std::pair<uint32_t, uint32_t>> visited;
 
     // Find the polygons
     std::vector<pcl::Vertices> polygons;
+    std::size_t largest_polygon_id = 0;
+    double largest_polygon_area_x2 = 0;
     for (auto start_edge = shape.alpha_shape_edges_begin(); start_edge != shape.alpha_shape_edges_end(); ++start_edge) {
         // start_edge is an iterator to a pair <Face_handle, int>, where the int is an edge of the face
         if (!is_in(visited, start_edge)) {
@@ -221,16 +278,16 @@ BuildSurface::find_boundary_and_polygons(const PointCloud &cloud, const std::vec
             Alpha_shape_2::Edge_circulator current_edge =
                 shape.incident_edges(edge_target(start_edge), start_edge->first);
 
+            double polygon_area_x2 = 0;
+
             // Add vertices until the polygon is implicitly closed
             // (uses a do-while because .back() is invalid until at least one loop iteration)
-            auto prev_source = -1;
             do {
                 Alpha_shape_2::Edge_circulator start_current_edge = current_edge;
                 // Find the first regular (boundary) incident edge which hasn't been visited, going counterclockwise
-                // Note an edge has only been visited if its source AND target have been visited
-                while (is_in(visited, current_edge) || shape.classify(*current_edge) != Alpha_shape_2::REGULAR) {
+                while (shape.classify(*current_edge) != Alpha_shape_2::REGULAR || is_in(visited, current_edge)) {
                     ++current_edge;
-                    assert(edge_target(current_edge)->info().pcl_index != prev_source &&
+                    assert(current_edge != start_current_edge &&
                            "Went into an infinite loop while finding the next edge");
                 }
 
@@ -238,7 +295,15 @@ BuildSurface::find_boundary_and_polygons(const PointCloud &cloud, const std::vec
                 polygon.vertices.push_back(edge_source(current_edge)->info().pcl_index);
                 add_to(visited, current_edge);
 
-                prev_source = edge_source(current_edge)->info().pcl_index;
+                // Calculate this segment's contribution to the polygon's area
+                // Formula from http://stackoverflow.com/a/1165943/522118
+                polygon_area_x2 += (edge_target(current_edge)->point().x() - edge_source(current_edge)->point().x()) *
+                                   (edge_target(current_edge)->point().y() + edge_source(current_edge)->point().y());
+                //                ROS_DEBUG_STREAM("Adding area of edge " << edge_source(current_edge)->info().pcl_index
+                //                << " -> "
+                //                                                        << edge_target(current_edge)->info().pcl_index
+                //                                                        << " -- current total: " << (polygon_area_x2 /
+                //                                                        2));
 
                 // Get a circulator of all edges incident to the target vertex
                 current_edge = shape.incident_edges(edge_target(current_edge), current_edge->first);
@@ -246,9 +311,28 @@ BuildSurface::find_boundary_and_polygons(const PointCloud &cloud, const std::vec
             // Need to add implicit edge to the visited list (note: DON'T use current_edge, it hasn't been filtered yet)
             visited.insert(std::minmax({polygon.vertices.front(), polygon.vertices.back()}));
 
+            // Make sure the polygon is counterclockwise
+            // polygon_area_x2 is negative if counterclockwise, positive if clockwise
+            if (polygon_area_x2 > 0) {
+                ROS_DEBUG_STREAM("Polygon area: " << polygon_area_x2 / 2 << " -- reversing polygon");
+                //                std::reverse(polygon.vertices.begin(), polygon.vertices.end());
+            } else {
+                ROS_DEBUG_STREAM("Polygon area: " << polygon_area_x2 / 2);
+                // Code after this assumes area is positive
+                polygon_area_x2 *= -1;
+            }
+
+            if (polygon_area_x2 > largest_polygon_area_x2) {
+                largest_polygon_area_x2 = polygon_area_x2;
+                largest_polygon_id = polygons.size();
+            }
+
             polygons.push_back(polygon);
         }
     }
+
+    // Put the largest polygon in the front
+    std::iter_swap(polygons.begin(), polygons.begin() + largest_polygon_id);
 
     return std::make_tuple(boundary_points, polygons);
 }
@@ -259,8 +343,8 @@ CT BuildSurface::get_simplified_triangulation(const std::vector<CustomPoint> &cg
     for (auto &pcl_polygon : polygons) {
         auto i_to_pt = [&cgal_points](uint32_t i) { return cgal_points[i].first; };
         // I'm very smudge about correctly using tranform iterators
-        // IMPORTANT: The last boolean tells ct to close the polygon (it's implicitly closed)
         // This overload of insert_constraint inserts a closed (if closed=true) polyline
+        // IMPORTANT: The last boolean tells ct to close the polygon (it's implicitly closed)
         auto cid =
             ct.insert_constraint(boost::iterators::make_transform_iterator(pcl_polygon.vertices.begin(), i_to_pt),
                                  boost::iterators::make_transform_iterator(pcl_polygon.vertices.end(), i_to_pt), true);
@@ -268,8 +352,8 @@ CT BuildSurface::get_simplified_triangulation(const std::vector<CustomPoint> &cg
         // Can't pass in info to insert_constraint for some reason, so set it after
         auto it = ct.vertices_in_constraint_begin(cid);
         for (auto &index : pcl_polygon.vertices) {
-            //            assert(it != ct.vertices_in_constraint_end(cid));
-            //            assert((*it)->point() == cgal_points[index].first);
+            assert(it != ct.vertices_in_constraint_end(cid));
+            assert((*it)->point() == cgal_points[index].first);
             (*it)->info() = cgal_points[index].second;
             ++it;
         }
@@ -343,11 +427,53 @@ shape_msgs::Mesh BuildSurface::create_trimesh(CT ct, const Eigen::Affine3f &tran
     mark_domains(ct);
 
     shape_msgs::Mesh mesh;
-    // Add the top (true) and bottom (false) faces
-    add_mesh_face(mesh, transform, ct, true);
+    // Add the top (false) and bottom (true) faces
     add_mesh_face(mesh, transform, ct, false);
+    add_mesh_face(mesh, transform, ct, true);
 
-    // TODO Sides
+    // Add the sides
+    for (auto cit = ct.constraints_begin(); cit != ct.constraints_end(); ++cit) {
+        for (auto vit = ct.vertices_in_constraint_begin(*cit); vit != ct.vertices_in_constraint_end(*cit); ++vit) {
+            // Get the next vertex, stopping if it doesn't exist
+            auto next_vit = std::next(vit);
+            if (next_vit == ct.vertices_in_constraint_end(*cit)) {
+                break;
+            }
+
+            // Find the face that contains vit and next_vit
+            auto fit = ct.incident_faces(*vit);
+            auto first_fit = fit;
+            // Find the face that contains vit and next_vit and is inside the polygon
+            while (!(fit->has_vertex(*next_vit) && fit->info().in_domain())) {
+                ++fit;
+                assert(fit != first_fit && "Went into an infinite loop looking for the face that contains the next "
+                                           "vertex and is inside the polygon");
+            }
+
+            // Make the two new triangles
+            shape_msgs::MeshTriangle tri1, tri2;
+            // For the sake of formatting:
+            const auto vit_i = (*vit)->info(), next_vit_i = (*next_vit)->info();
+
+            if (fit->index(*next_vit) == fit->ccw(fit->index(*vit))) {
+                // If next_vit is counterclockwise from next_vit, then the new triangles should be
+                // <next_vit, vit, bottom(next_vit)> and <vit, bottom(vit), bottom(next_vit)>
+                tri1.vertex_indices = {next_vit_i.pcl_index, vit_i.pcl_index, next_vit_i.pcl_index2};
+                tri2.vertex_indices = {vit_i.pcl_index, vit_i.pcl_index2, next_vit_i.pcl_index2};
+            } else {
+                assert(fit->index(*next_vit) == fit->cw(fit->index(*vit)) &&
+                       "Vertex `next_vit` was neither clockwise nor counterclockwise of vertex `vit`");
+                // If next_vit is clockwise from next_vit, then the new triangles should be
+                // <next_vit, bottom(next_vit), vit> and <vit, bottom(vit), bottom(next_vit)>
+                tri1.vertex_indices = {next_vit_i.pcl_index, next_vit_i.pcl_index2, vit_i.pcl_index};
+                tri2.vertex_indices = {vit_i.pcl_index, next_vit_i.pcl_index2, vit_i.pcl_index2};
+            }
+
+            // Finally, add them to the mesh
+            mesh.triangles.push_back(tri1);
+            mesh.triangles.push_back(tri2);
+        }
+    }
 
     return mesh;
 }
@@ -363,10 +489,13 @@ void BuildSurface::add_mesh_face(shape_msgs::Mesh &mesh, const Eigen::Affine3f &
     for (auto it = ct.finite_faces_begin(); it != ct.finite_faces_end(); ++it) {
         if (it->info().in_domain()) {
             shape_msgs::MeshTriangle mesh_triangle;
-            for (int loop_i = 0; loop_i < 3; loop_i++) {
-                auto i = bottom ? (2 - loop_i) : loop_i; // Flip triangles when it's the bottom
-                if (!it->vertex(i)->info().visited) {    // Then it's not yet in the mesh meshage
-                    it->vertex(i)->info().pcl_index = static_cast<uint32_t>(mesh.vertices.size());
+            for (int i = 0; i < 3; i++) {
+                if (!it->vertex(i)->info().visited) { // Then it's not yet in the mesh meshage
+                    if (bottom) {
+                        it->vertex(i)->info().pcl_index2 = static_cast<uint32_t>(mesh.vertices.size());
+                    } else {
+                        it->vertex(i)->info().pcl_index = static_cast<uint32_t>(mesh.vertices.size());
+                    }
                     it->vertex(i)->info().visited = true;
                     // Get the 3d point and add it to the mesh
                     Point p2d(it->vertex(i)->point().x(), it->vertex(i)->point().y(), bottom ? -extrude_distance_ : 0);
@@ -378,7 +507,16 @@ void BuildSurface::add_mesh_face(shape_msgs::Mesh &mesh, const Eigen::Affine3f &
                     mesh.vertices.push_back(p);
                 }
 
-                mesh_triangle.vertex_indices[i] = it->vertex(i)->info().pcl_index;
+                if (bottom) {
+                    mesh_triangle.vertex_indices[i] = it->vertex(i)->info().pcl_index2;
+                } else {
+                    mesh_triangle.vertex_indices[i] = it->vertex(i)->info().pcl_index;
+                }
+            }
+
+            if (bottom) {
+                // Flip triangles when it's the bottom
+                std::swap(mesh_triangle.vertex_indices[0], mesh_triangle.vertex_indices[2]);
             }
             mesh.triangles.push_back(mesh_triangle);
         }

@@ -11,6 +11,7 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
     surface_types
     surface_utils
+    arc_utilities
 )
 
 ## System dependencies are found with CMake's conventions

@@ -86,12 +86,13 @@ public:
                             if (pub == pubs->end()) {
                                 pub = pubs->insert(std::make_pair(name, (*nh)->advertise<geometry_msgs::PoseArray>(
                                                                             name, 10))).first;
-
                                 made_new_pub = true;
                             }
 
                             geometry_msgs::PoseArray poses;
                             poses.header.frame_id = frame;
+
+                            Eigen::Affine3d ztf(Eigen::AngleAxisd(-M_PI / 2., Eigen::Vector3d::UnitY()));
 
                             for (auto &pt : *pts) {
                                 geometry_msgs::Pose pose;
@@ -112,7 +113,16 @@ public:
                                 pose.position.y = pt.y;
                                 pose.position.z = pt.z;
                                 pose.orientation = msg;
-                                poses.poses.push_back(pose);
+
+                                // PoseArrays always have the arrow on the x axis, but I want them on the z axis, so
+                                // transform each pose
+                                // This definitely duplicates some work, but whatever
+                                geometry_msgs::Pose result;
+                                Eigen::Affine3d tf;
+                                tf::poseMsgToEigen(pose, tf);
+                                tf::poseEigenToMsg(tf * ztf, result);
+
+                                poses.poses.push_back(result);
                             }
 
                             if (made_new_pub) { // Then wait for it
@@ -196,7 +206,18 @@ public:
 
             geometry_msgs::PoseArray ps;
             ps.header.frame_id = frame;
-            ps.poses = p;
+            //            ps.poses = p;
+            ps.poses.reserve(p.size());
+
+            // PoseArrays always have the arrow on the x axis, but I want them on the z axis, so transform each pose
+            Eigen::Affine3d ztf(Eigen::AngleAxisd(-M_PI / 2., Eigen::Vector3d::UnitY()));
+            std::transform(p.begin(), p.end(), std::back_inserter(ps.poses), [&ztf](const geometry_msgs::Pose &pose) {
+                geometry_msgs::Pose result;
+                Eigen::Affine3d tf;
+                tf::poseMsgToEigen(pose, tf);
+                tf::poseEigenToMsg(tf * ztf, result);
+                return result;
+            });
 
             pub->second.publish(ps);
 
@@ -263,7 +284,7 @@ public:
                     m.points.push_back(p);
                 }
                 // Then rotate all the new points
-                std::rotate(m.points.begin() + first, m.points.begin() + first + 1,  m.points.end());
+                std::rotate(m.points.begin() + first, m.points.begin() + first + 1, m.points.end());
             }
 
             pub->second.publish(m);
@@ -312,6 +333,136 @@ public:
             }
 
             pub->second.publish(marker);
+        }, nh_ptr_, pubs_, frame_)).detach();
+    }
+
+    void plane_normal(std::string name, surface_types::Surface &surface) {
+        if (!nh_ptr_) return;
+
+        // Need another reference to the member data pointers in case object is destroyed before the thread finishes
+        std::thread(std::bind([name, surface](NHPtr nh, std::shared_ptr<PubMap> pubs, std::string frame) {
+            assert(name.length() != 0);
+            assert(nh != nullptr);
+            assert(pubs != nullptr);
+
+            std::map<std::string, ros::Publisher>::iterator pub = pubs->find(name);
+
+            if (pub == pubs->end()) {
+                pub = pubs->insert(std::make_pair(name, (*nh)->advertise<visualization_msgs::Marker>(name, 10))).first;
+
+                ros::Rate r(2);
+                ros::Time stop_time = ros::Time::now() + ros::Duration(10);
+                while (pub->second.getNumSubscribers() == 0 && ros::Time::now() < stop_time) {
+                    r.sleep();
+                }
+            }
+
+            visualization_msgs::Marker marker;
+            marker.header.stamp = ros::Time::now();
+            marker.header.frame_id = frame;
+            marker.ns = "surface_normals";
+            marker.id = surface.id;
+            marker.type = visualization_msgs::Marker::ARROW;
+            marker.action = visualization_msgs::Marker::MODIFY;
+            // perimeter.pose not needed
+            marker.scale.x = 0.05; // Shaft diameter
+            marker.scale.y = 0.1; // Head diameter
+            marker.scale.z = 0; // Head length, or 0 for default
+            marker.color = surface.color;
+
+            marker.points.resize(2);
+            // Start point: d distance along the normal direction
+            marker.points.front().x = -surface.model.values[3] * surface.model.values[0];
+            marker.points.front().y = -surface.model.values[3] * surface.model.values[1];
+            marker.points.front().z = -surface.model.values[3] * surface.model.values[2];
+            // End point: d + 0.1 distance along the normal direction
+            marker.points.back().x = (-surface.model.values[3] + 0.5) * surface.model.values[0];
+            marker.points.back().y = (-surface.model.values[3] + 0.5) * surface.model.values[1];
+            marker.points.back().z = (-surface.model.values[3] + 0.5) * surface.model.values[2];
+
+            pub->second.publish(marker);
+        }, nh_ptr_, pubs_, frame_)).detach();
+    }
+
+    void pose(std::string name, surface_types::Surface &surface) {
+        if (!nh_ptr_) return;
+
+        // Need another reference to the member data pointers in case object is destroyed before the thread finishes
+        std::thread(std::bind([name, surface](NHPtr nh, std::shared_ptr<PubMap> pubs, std::string frame) {
+            assert(name.length() != 0);
+            assert(nh != nullptr);
+            assert(pubs != nullptr);
+
+            std::map<std::string, ros::Publisher>::iterator pub = pubs->find(name);
+
+            if (pub == pubs->end()) {
+                pub = pubs->insert(std::make_pair(name, (*nh)->advertise<visualization_msgs::Marker>(name, 10))).first;
+
+                ros::Rate r(2);
+                ros::Time stop_time = ros::Time::now() + ros::Duration(10);
+                while (pub->second.getNumSubscribers() == 0 && ros::Time::now() < stop_time) {
+                    r.sleep();
+                }
+            }
+
+            visualization_msgs::Marker marker;
+            marker.header.stamp = ros::Time::now();
+            marker.header.frame_id = frame;
+            marker.ns = "surface_poses";
+            marker.id = surface.id;
+            marker.type = visualization_msgs::Marker::ARROW;
+            marker.action = visualization_msgs::Marker::MODIFY;
+            // perimeter.pose not needed
+            marker.scale.x = 0.05; // Shaft diameter
+            marker.scale.y = 0.1; // Head diameter
+            marker.scale.z = 0; // Head length, or 0 for default
+            marker.color = surface.color;
+
+            marker.points.resize(2);
+            // Start point: d distance along the normal direction
+            marker.points.front().x = surface.pose.translation()[0];
+            marker.points.front().y = surface.pose.translation()[1];
+            marker.points.front().z = surface.pose.translation()[2];
+            // End point: d + 0.1 distance along the normal direction
+            auto unit = surface.pose * Eigen::Vector3d(0, 0, 0.5);
+            marker.points.back().x = unit[0];
+            marker.points.back().y = unit[1];
+            marker.points.back().z = unit[2];
+
+            pub->second.publish(marker);
+
+            // Publish the x axis in red
+            marker.ns = "surface_poses_x";
+            marker.scale.x /= 2;
+            marker.scale.y /= 2;
+            marker.scale.z /= 2;
+            marker.color.r = 1;
+            marker.color.g = 0;
+            marker.color.b = 0;
+            marker.color.a = 1;
+            // End point: d + 0.1 distance along the normal direction
+            auto unitx = surface.pose * Eigen::Vector3d(0.25, 0, 0);
+            marker.points.back().x = unitx[0];
+            marker.points.back().y = unitx[1];
+            marker.points.back().z = unitx[2];
+
+            pub->second.publish(marker);
+
+            // Publish the y axis in red
+            marker.ns = "surface_poses_y";
+            marker.color.r = 0;
+            marker.color.g = 1;
+            marker.color.b = 0;
+            marker.color.a = 1;
+            // End point: d + 0.1 distance along the normal direction
+            auto unity = surface.pose * Eigen::Vector3d(0, 0.25, 0);
+            marker.points.back().x = unity[0];
+            marker.points.back().y = unity[1];
+            marker.points.back().z = unity[2];
+
+            pub->second.publish(marker);
+
+
         }, nh_ptr_, pubs_, frame_)).detach();
     }
 

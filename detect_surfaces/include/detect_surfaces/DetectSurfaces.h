@@ -47,6 +47,8 @@ public:
                          std::function<void(pcl::PointIndices, pcl::ModelCoefficients, Eigen::Affine3f)> callback);
 
 private:
+    CloudIndexPair radius_filter(const CloudIndexPair &input);
+
     NormalCloud::Ptr get_normals(const CloudIndexPair &input);
 
     unsigned long region_segmentation(NormalCloud::Ptr &normals, NormalSearch::Ptr &search,
@@ -60,7 +62,7 @@ private:
                                 std::function<void(pcl::PointIndices)> callback);
 
     void find_transform_and_filter(NormalCloud::Ptr &normals, pcl::PointIndices &inliers,
-                                   std::function<void(Eigen::Affine3f)> callback);
+                                       std::function<void(Eigen::Affine3f)> callback);
 
     ColoredPointCloud::Ptr make_segment_colored_cloud(NormalCloud::Ptr &normals,
                                                       std::vector<pcl::PointIndices> &segments);

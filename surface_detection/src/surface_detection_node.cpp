@@ -24,14 +24,15 @@ using surface_detection::SurfaceDetection;
 
 // Parameters
 // TODO: Get these from parameter server
-std::string frame = "/world";
-const double discretization = 0.02;
+std::string target_frame = "/world";
+std::string camera_frame = "/left_camera_frame";
+const double discretization = 0.05;
 const double perpendicular_distance = 0.025;
-const double parallel_distance = 0.05;
+const double parallel_distance = 0.75;
 const double mls_radius = 0.10;
 const unsigned int min_points_per_surface = 50;
-const double min_plane_width = 0.1;
-const double alpha = 0.0005;
+const double min_plane_width = 0.07;
+const double alpha = 0.005;
 const float extrusion_distance = 0.02;
 
 int main(int argc, char **argv) {
@@ -39,7 +40,7 @@ int main(int argc, char **argv) {
     ros::init(argc, argv, "surface_detection");
     ros::NodeHandle n;
     SurfaceDetection surface_detection(discretization, perpendicular_distance, parallel_distance, mls_radius,
-                                       min_points_per_surface, min_plane_width, alpha, extrusion_distance);
+                                       min_points_per_surface, min_plane_width, alpha, extrusion_distance, target_frame, camera_frame);
 
     ROS_INFO_STREAM("Connected to ROS");
 
@@ -52,7 +53,7 @@ int main(int argc, char **argv) {
     // Make timers
     auto pp_timer = n.createTimer(ros::Duration(1), [&surface_detection, &pp_pub](const ros::TimerEvent &) {
         auto cloud = surface_detection.get_pending_points();
-        cloud.header.frame_id = frame;
+        cloud.header.frame_id = target_frame;
 
         ROS_DEBUG_STREAM_THROTTLE(10, "Currently have " << cloud.size() << " pending points");
 
@@ -76,7 +77,7 @@ int main(int argc, char **argv) {
             return true;
         }
     };
-    get_surfaces getter(surface_detection, ProgressListener(&n, frame));
+    get_surfaces getter(surface_detection, ProgressListener(&n, target_frame));
     // Make service provider
     auto srv = n.advertiseService("get_surfaces", &get_surfaces::go, &getter);
 

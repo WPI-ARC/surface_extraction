@@ -40,6 +40,8 @@
   <!-- Use test_depend for packages you need only for testing: -->
   <!--   <test_depend>gtest</test_depend> -->
   <buildtool_depend>catkin</buildtool_depend>
+  <build_depend>pcl_conversions</build_depend>
+  <build_depend>pcl_ros</build_depend>
   <build_depend>roscpp</build_depend>
   <build_depend>surface_utils</build_depend>
   <build_depend>arc_utilities</build_depend>
@@ -50,6 +52,8 @@
   <build_depend>collect_points</build_depend>
   <build_depend>build_surface</build_depend>
 
+  <run_depend>pcl_conversions</run_depend>
+  <run_depend>pcl_ros</run_depend>
   <run_depend>roscpp</run_depend>
   <run_depend>surface_utils</run_depend>
   <run_depend>arc_utilities</run_depend>
@@ -59,6 +63,7 @@
   <run_depend>detect_surfaces</run_depend>
   <run_depend>collect_points</run_depend>
   <run_depend>build_surface</run_depend>
+
 
   <!-- The export tag contains other, unspecified, tags -->
   <export>

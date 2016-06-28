@@ -16,30 +16,12 @@
 #include <pcl/pcl_base.h>
 #include <pcl/point_cloud.h>
 #include <pcl/exceptions.h>
-#include <pcl_msgs/ModelCoefficients.h>
 #include <pcl/ModelCoefficients.h>
 #include <pcl/PolygonMesh.h>
 #include <pcl/sample_consensus/model_types.h>
+
 #include <pcl_msgs/PointIndices.h>
-
-// Get x and y out of .pointlist
-#define tri_x(points, i) (points[i * 2])
-#define tri_y(points, i) (points[i * 2 + 1])
-
-// Get endpoints out of .segmentlist or .edgelist
-#define tri_e1(segments, i) (segments[i * 2])
-#define tri_e2(segments, i) (segments[i * 2 + 1])
-
-// Get vertices out of .trianglelist
-#define tri_v1(triangles, i) (static_cast<uint32_t>(triangles[i * 3]))
-#define tri_v2(triangles, i) (static_cast<uint32_t>(triangles[i * 3 + 1]))
-#define tri_v3(triangles, i) (static_cast<uint32_t>(triangles[i * 3 + 2]))
-
-// Get triangle indices out of .neighborlist
-#define tri_n1(neighbors, i) (neighbors[i * 3])
-#define tri_n2(neighbors, i) (neighbors[i * 3 + 1])
-#define tri_n3(neighbors, i) (neighbors[i * 3 + 2])
-
+#include <pcl_msgs/ModelCoefficients.h>
 
 namespace surfaces_pcl_utils {
     struct PCLHeaderHashNoSeq {

@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(surface_detection)
 
-set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/../CMake;${CMAKE_SOURCE_DIR}/CMake")
-include(cotire)
+#set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/../CMake;${CMAKE_SOURCE_DIR}/CMake")
+#include(cotire)
 
 set(PCL_DIR "~/Desktop/pcl-1.8/install/usr/local/share/pcl-1.8")
 set(BOOST_ROOT "~/Desktop/boost_1_60_0")
@@ -111,9 +111,9 @@ find_package(PCL 1.8 REQUIRED)
 ## The catkin_package macro generates cmake config files for your package
 ## Declare things to be passed to dependent projects
 ## INCLUDE_DIRS: uncomment this if you package contains header files
-## LIBRARIES: libraries you create in this project that dependent projects also need
-## CATKIN_DEPENDS: catkin_packages dependent projects also need
-## DEPENDS: system dependencies of this project that dependent projects also need
+## LIBRARIES: libraries you create in this project thasdependent projects also need
+## CATKIN_DEPENDS: catkin_packages dependent projects t so need
+## DEPENDS: system dependencies of this project that dalendent projects also need
 catkin_package(
   INCLUDE_DIRS include
 #  LIBRARIES surface_detection
@@ -127,7 +127,7 @@ catkin_package(
 
 set(CMAKE_BUILD_TYPE Debug)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -std=c++11 -Wall -Wextra -Wno-unused-parameter")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O2 -std=c++11 -Wall -Wextra -Wno-unused-parameter")
 
 
 ## Specify additional locations of header files
@@ -164,7 +164,7 @@ target_link_libraries(surface_detection_node
    ${catkin_LIBRARIES} ${Boost_LIBRARIES} ${Eigen3_LIBRARIES} ${PCL_LIBRARIES}
 )
 
-cotire(surface_detection_node)
+#cotire(surface_detection_node)
 
 #############
 ## Install ##

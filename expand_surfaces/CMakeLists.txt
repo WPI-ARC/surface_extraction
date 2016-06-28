@@ -8,7 +8,7 @@ set(BOOST_ROOT "~/Desktop/boost_1_60_0")
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
-  roscpp
+    roscpp
     surface_types
     surface_utils
 )
@@ -114,7 +114,7 @@ catkin_package(
 ## Build ##
 ###########
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -std=c++11 -Wall -Wextra -Wno-unused-parameter")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O2 -std=c++11 -Wall -Wextra -Wno-unused-parameter")
 
 
 ## Specify additional locations of header files

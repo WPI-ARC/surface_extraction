@@ -7,13 +7,16 @@ set(BOOST_ROOT "~/Desktop/boost_1_60_0")
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
-find_package(catkin REQUIRED COMPONENTS
-  pcl_conversions
-  pcl_ros
-  roscpp
-  surface_msgs2
-    eigen_conversions
-)
+set(CATKIN_PACKAGES
+    pcl_conversions
+    pcl_msgs
+    pcl_ros
+    std_msgs
+    shape_msgs
+    roscpp
+    surface_msgs2
+    eigen_conversions)
+find_package(catkin REQUIRED COMPONENTS ${CATKIN_PACKAGES})
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -109,7 +112,7 @@ find_package(PCL 1.8 REQUIRED)
 catkin_package(
   INCLUDE_DIRS include
 #  LIBRARIES surface_types
-  CATKIN_DEPENDS eigen_conversions
+  CATKIN_DEPENDS ${CATKIN_PACKAGES}
 #  DEPENDS PCL boost
 )
 

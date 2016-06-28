@@ -26,13 +26,13 @@ using surface_detection::SurfaceDetection;
 // TODO: Get these from parameter server
 std::string target_frame = "/world";
 std::string camera_frame = "/left_camera_frame";
-const double discretization = 0.05;
-const double perpendicular_distance = 0.025;
-const double parallel_distance = 0.75;
+const double discretization = 0.03;
+const double perpendicular_distance = 0.05;
+const double parallel_distance = 0.1;
 const double mls_radius = 0.10;
 const unsigned int min_points_per_surface = 50;
-const double min_plane_width = 0.07;
-const double alpha = 0.005;
+const double min_plane_width = 0.15;
+const double alpha = 0.01;
 const float extrusion_distance = 0.02;
 
 int main(int argc, char **argv) {
@@ -71,8 +71,6 @@ int main(int argc, char **argv) {
         bool go(SurfaceDetectionRequest &req, SurfaceDetectionResponse &resp) {
             auto center = GeometryPoseToEigenAffine3f(req.center);
             auto extents = GeometryVector3ToEigenVector3f(req.extents);
-            ROS_DEBUG_STREAM("Center: " << PrettyPrint::PrettyPrint(center) << ", Extents: <x: " << extents[0]
-                                        << ", y: " << extents[1] << " z, " << extents[2] << ">");
             resp = surface_detection.detect_surfaces_within(center, extents, progress);
             return true;
         }

@@ -268,6 +268,7 @@ BuildSurface::find_boundary_and_polygons(const PointCloud &cloud, const std::vec
     std::size_t largest_polygon_id = 0;
     double largest_polygon_area_x2 = 0;
     for (auto start_edge = shape.alpha_shape_edges_begin(); start_edge != shape.alpha_shape_edges_end(); ++start_edge) {
+        assert(shape.classify(*start_edge) == Alpha_shape_2::REGULAR && "Polygon gave a non-regular edge");
         // start_edge is an iterator to a pair <Face_handle, int>, where the int is an edge of the face
         if (!is_in(visited, start_edge)) {
             pcl::Vertices polygon;
@@ -287,8 +288,24 @@ BuildSurface::find_boundary_and_polygons(const PointCloud &cloud, const std::vec
                 // Find the first regular (boundary) incident edge which hasn't been visited, going counterclockwise
                 while (shape.classify(*current_edge) != Alpha_shape_2::REGULAR || is_in(visited, current_edge)) {
                     ++current_edge;
-                    assert(current_edge != start_current_edge &&
-                           "Went into an infinite loop while finding the next edge");
+
+                    // FOR DEBUG
+                    if (current_edge == start_current_edge) {
+                        ROS_DEBUG_STREAM("Current vertex " << edge_source(current_edge)->info().pcl_index
+                                                           << " connected to:");
+                        while (++current_edge != start_current_edge) {
+                            std::array<std::string, 4> type_str = {"EXTERIOR", "SINGULAR", "REGULAR", "INTERIOR"};
+                            ROS_DEBUG_STREAM("Vertex " << edge_target(current_edge)->info().pcl_index << ", "
+                                                       << type_str[shape.classify(*current_edge)]
+                                                       << (is_in(visited, current_edge) ? ", visited" : ""));
+                        }
+
+                        ROS_DEBUG_STREAM("Polygon closes at vertex " << polygon_last_index);
+                        ROS_DEBUG_STREAM("So far, found " << polygon.vertices.size() << " vertices in this polgon and "
+                                                          << polygons.size() << " other polygons");
+                        ROS_FATAL("Went into an infinite loop while finding the next edge");
+                        assert(false);
+                    }
                 }
 
                 // Add this edge's start vertex (aka source)

@@ -5,16 +5,23 @@
 #ifndef PROJECT_PROGRESSLISTENER_HPP
 #define PROJECT_PROGRESSLISTENER_HPP
 
-#include <ros/ros.h>
-// pcl_ros/point_cloud.h enables publishing topics using PCL types
-#include <pcl_ros/point_cloud.h>
+// System includes
 #include <thread>
-#include <geometry_msgs/PoseArray.h>
-#include <geometry_msgs/PoseStamped.h>
-#include <visualization_msgs/MarkerArray.h>
+#include <Eigen/Geometry>
+
+// ROS includes
+#include <ros/ros.h>
 #include <tf/tf.h>
 #include <eigen_conversions/eigen_msg.h>
-#include <Eigen/Geometry>
+#include <visualization_msgs/MarkerArray.h>
+#include <geometry_msgs/PoseArray.h>
+#include <geometry_msgs/PoseStamped.h>
+
+// PCL Includes
+// pcl_ros/point_cloud.h enables publishing topics using PCL types
+#include <pcl_ros/point_cloud.h>
+
+// Local includes
 #include <surface_types/Surface.hpp>
 
 EIGEN_DEFINE_STL_VECTOR_SPECIALIZATION(Eigen::Affine3f)

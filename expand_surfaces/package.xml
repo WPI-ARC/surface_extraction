@@ -41,7 +41,13 @@
   <!--   <test_depend>gtest</test_depend> -->
   <buildtool_depend>catkin</buildtool_depend>
   <build_depend>roscpp</build_depend>
+  <build_depend>arc_utilities</build_depend>
+  <build_depend>surface_types</build_depend>
+  <build_depend>surface_utils</build_depend>
   <run_depend>roscpp</run_depend>
+  <run_depend>arc_utilities</run_depend>
+  <run_depend>surface_types</run_depend>
+  <run_depend>surface_utils</run_depend>
 
 
   <!-- The export tag contains other, unspecified, tags -->

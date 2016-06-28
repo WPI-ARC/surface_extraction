@@ -7,10 +7,12 @@ set(BOOST_ROOT "~/Desktop/boost_1_60_0")
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
-find_package(catkin REQUIRED COMPONENTS
-  roscpp
+set(CATKIN_PACKAGES
+    roscpp
     surface_types
-    surface_utils
+    surface_utils)
+find_package(catkin REQUIRED COMPONENTS
+    ${CATKIN_PACKAGES}
 )
 
 ## System dependencies are found with CMake's conventions
@@ -107,7 +109,7 @@ include(${CGAL_USE_FILE})
 catkin_package(
   INCLUDE_DIRS include
   LIBRARIES build_surface
-#  CATKIN_DEPENDS roscpp
+  CATKIN_DEPENDS ${CATKIN_PACKAGES}
   DEPENDS PCL CGAL
 )
 
@@ -116,7 +118,7 @@ catkin_package(
 ###########
 set(CMAKE_BUILD_TYPE Debug)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -std=c++11 -Wall -Wextra -Wno-unused-parameter -Wno-unused-local-typedefs")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O2 -std=c++11 -Wall -Wextra -Wno-unused-parameter -Wno-unused-local-typedefs")
 
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations

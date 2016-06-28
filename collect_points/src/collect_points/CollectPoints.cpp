@@ -27,6 +27,9 @@ CollectPoints::CollectPoints(double discretization, double perpendicular_dist, s
       pending_points_(discretization) {
     pending_points_cloud_ = boost::make_shared<PointCloud>();
     pending_points_.setInputCloud(pending_points_cloud_);
+    
+    surface_points_cloud_ = boost::make_shared<LabeledCloud>();
+    surface_points_.setInputCloud(surface_points_cloud_);
 }
 
 void CollectPoints::add_points(const PointCloud::ConstPtr &points) {
@@ -94,3 +97,58 @@ CollectPoints::CloudIndexPair CollectPoints::pending_points_within(const Eigen::
 
     return result;
 }
+
+void CollectPoints::surfaces_within(const Eigen::Affine3f &center, const Eigen::Vector3f &extents,
+                                    const std::function<void(uint32_t)> callback) {
+    // First limit to within the radius
+    LabeledPoint search_pt;
+    search_pt.x = center.translation()[0];
+    search_pt.y = center.translation()[1];
+    search_pt.z = center.translation()[2];
+    std::vector<int> indices;
+    std::vector<float> sqr_distances_unused;
+    // The largest diagonal of the bounding box happens to be equal to the l2 norm
+    surface_points_.radiusSearch(search_pt, extents.norm(), indices, sqr_distances_unused);
+
+    // Make sure each point is unique and within the transform
+    std::set<uint32_t> seen_labels;
+    const auto pts = surface_points_.getInputCloud()->points;
+    auto tf = center.inverse();
+    for (auto &i : indices) {
+        if (seen_labels.find(pts[i].label) != seen_labels.end()) continue;
+
+        LabeledPoint pt = pcl::transformPoint(pts[i], tf);
+        if (std::abs(pt.x) <= extents[0] && std::abs(pt.y) <= extents[1] && std::abs(pt.z) <= extents[2]) {
+            seen_labels.insert(pt.label);
+            callback(pt.label);
+        }
+    }
+}
+
+void CollectPoints::add_surface(const CollectPoints::PointCloud &points, uint32_t label) {
+    auto removed_voxels = 0;
+    for (auto &pt : points.points) {
+        LabeledPoint lpt;
+        lpt.x = pt.x;
+        lpt.y = pt.y;
+        lpt.z = pt.z;
+        lpt.label = label;
+        surface_points_.addPointToCloud(lpt, surface_points_cloud_);
+    }
+
+    // Find and remove all the points inside the newly added surface
+    // (actually checks all surfaces, but only newly added should return true)
+    PointCloud pending_pts; // I only need the array but I don't want to risk doing an eigen aligned array wrong
+    pending_points_.getVoxelCentroids(pending_pts.points);
+    for (const auto &point : pending_pts) {
+        if (inside_any_surface(point)) {
+            pending_points_.deleteVoxelAtPoint(point);
+            removed_voxels++;
+        }
+    }
+
+    ROS_DEBUG_STREAM("Removed " << removed_voxels << " voxels from pending cloud for surface " << label);
+}
+
+
+

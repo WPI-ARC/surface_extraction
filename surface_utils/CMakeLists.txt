@@ -7,15 +7,23 @@ set(BOOST_ROOT "~/Desktop/boost_1_60_0")
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
-find_package(catkin REQUIRED COMPONENTS
-  pcl_ros
-  roscpp
+set(CATKIN_PACKAGES
+    roscpp
+    pcl_ros
+    pcl_msgs
+    visualization_msgs
+    geometry_msgs
     eigen_conversions
+    )
+find_package(catkin REQUIRED COMPONENTS
+    ${CATKIN_PACKAGES}
 )
 
 ## System dependencies are found with CMake's conventions
+find_package(cmake_modules)
 find_package(Boost 1.6 REQUIRED COMPONENTS system)
 find_package(PCL 1.8 REQUIRED)
+find_package(Eigen REQUIRED)
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -109,8 +117,8 @@ find_package(PCL 1.8 REQUIRED)
 catkin_package(
   INCLUDE_DIRS include
 #  LIBRARIES surface_utils
-  CATKIN_DEPENDS pcl_ros roscpp eigen_conversions
-#  DEPENDS system_lib
+  CATKIN_DEPENDS ${CATKIN_PACKAGES}
+  DEPENDS PCL Eigen
 )
 
 ###########
@@ -119,9 +127,9 @@ catkin_package(
 
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
-include_directories(include)
 include_directories(
-  ${catkin_INCLUDE_DIRS}
+    include
+    ${catkin_INCLUDE_DIRS}
 )
 
 ## Declare a C++ library

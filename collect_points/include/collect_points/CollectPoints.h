@@ -8,6 +8,7 @@
 #include <pcl/octree/octree_pointcloud_voxelcentroid.h>
 #include <pcl/octree/octree_search.h>
 #include <tf/transform_listener.h>
+#include <pcl/octree/octree_impl.h>
 
 namespace pcl {
     class PointIndices;
@@ -18,6 +19,7 @@ class CollectPoints {
     typedef pcl::PointCloud<Point> PointCloud;
 
     typedef pcl::PointXYZL LabeledPoint;
+    typedef pcl::PointCloud<LabeledPoint> LabeledCloud;
 
     typedef pcl::octree::OctreePointCloudSearch<LabeledPoint> SurfacePointsOctree;
     typedef pcl::octree::OctreePointCloudVoxelCentroid<Point> PendingPointsOctree;
@@ -35,6 +37,10 @@ public:
 
     CloudIndexPair pending_points_within(const Eigen::Affine3f &center, const Eigen::Vector3f &extents);
 
+    void surfaces_within(const Eigen::Affine3f &center, const Eigen::Vector3f &extents, const std::function<void(uint32_t)> callback);
+
+    void add_surface(const PointCloud &points, uint32_t label);
+
 protected:
     double perpendicular_dist_;
     std::string target_frame_;
@@ -46,6 +52,7 @@ protected:
 
     SurfacePointsOctree surface_points_;
     PendingPointsOctree pending_points_;
+    SurfacePointsOctree::PointCloud::Ptr surface_points_cloud_;
     PendingPointsOctree::PointCloud::Ptr pending_points_cloud_;
 };
 

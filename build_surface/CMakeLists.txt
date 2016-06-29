@@ -10,7 +10,8 @@ set(BOOST_ROOT "~/Desktop/boost_1_60_0")
 set(CATKIN_PACKAGES
     roscpp
     surface_types
-    surface_utils)
+    surface_utils
+    arc_utilities)
 find_package(catkin REQUIRED COMPONENTS
     ${CATKIN_PACKAGES}
 )

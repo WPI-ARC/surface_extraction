@@ -9,17 +9,21 @@
 #include <map>
 #include <functional>
 #include <pcl/point_cloud.h>
+#include <set>
 
 // Forward declarations
 namespace pcl {
-    struct PointXYZ;
-    class PointIndices;
-    class ModelCoefficients;
-    namespace search {template <typename PointT> class Search;}
+struct PointXYZ;
+class PointIndices;
+class ModelCoefficients;
+namespace search {
+template <typename PointT>
+class Search;
+}
 }
 
 namespace surface_types {
-    class Surface;
+class Surface;
 }
 
 class ExpandSurfaces {
@@ -34,11 +38,19 @@ class ExpandSurfaces {
 public:
     ExpandSurfaces(double perpendicular_dist, double parallel_dist);
 
-    pcl::PointIndices expand_surfaces(const std::map<int, Surface> &surfaces, const CloudIndexPair &input,
+    pcl::PointIndices expand_surfaces(const std::vector<Surface> &surfaces, const CloudIndexPair &input,
                                       std::function<void(Surface)> callback);
 
+    void expand_new_surface(const PointCloud &points, const pcl::search::Search<Point> &search,
+                            const pcl::PointIndices &inliers, const Eigen::Affine3f &transform,
+                            std::function<void(pcl::PointIndices)> callback);
+
 private:
-    pcl::PointIndices filterWithinRadiusConnected(const Search &search, const PointCloud &edge_points,
+    std::set<int> filterWithinRadiusConnected(const PointCloud &cloud, const Search &search,
+                                              const PointCloud &edge_points, const Eigen::Affine3f &tf) const;
+
+    pcl::PointIndices filterWithinRadiusConnected(const PointCloud &cloud, const Search &search,
+                                                  const PointCloud &edge_points, const Eigen::Affine3f &tf,
                                                   const pcl::PointIndices &remaining_indices) const;
 
     pcl::PointIndices filterWithinModelDistance(const PointCloud::ConstPtr &input, const pcl::PointIndices &indices,

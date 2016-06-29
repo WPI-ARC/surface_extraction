@@ -102,10 +102,14 @@ class BuildSurface {
 public:
     BuildSurface(double perpendicular_distance, double alpha, float extrude_distance);
 
-    void build_updated_surface(const Surface &old_surface, const std::function<void(Surface)> callback);
+    void build_updated_surface(const Surface &old_surface, ProgressListener &p,
+                               const std::function<void(BuildSurface::Surface)> callback);
 
     void build_new_surface(PointCloud inliers, pcl::ModelCoefficients model, Eigen::Affine3d pose, ProgressListener &p,
                            std::function<void(Surface)> callback);
+
+    BuildSurface::PointCloud find_surface_boundary(const BuildSurface::PointCloud &inliers,
+                                                   const Eigen::Affine3f &transform);
 
 protected:
     double perpendicular_distance_;
@@ -136,6 +140,11 @@ private:
     shape_msgs::Mesh create_trimesh(CT ct, const Eigen::Affine3f &transform);
 
     void add_mesh_face(shape_msgs::Mesh &mesh, const Eigen::Affine3f &transform, const CT &ct, bool bottom) const;
+
+    PointCloud get_boundary_from_alpha(const Alpha_shape_2 &shape, const Eigen::Affine3f &transform,
+                                       ProgressListener &p) const;
+
+    PointCloud get_boundary_from_alpha(const Alpha_shape_2 &shape, const Eigen::Affine3f &transform) const;
 };
 
 #endif // PROJECT_BuildSurfaces_H

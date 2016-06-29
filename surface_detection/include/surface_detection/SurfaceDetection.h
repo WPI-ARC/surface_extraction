@@ -22,6 +22,8 @@
 #include "surface_utils/ProgressListener.hpp"
 #include <pcl/common/time.h>
 #include <pcl/common/transforms.h>
+#include <pcl/search/kdtree.h>
+#include <surface_utils/smart_ptr.hpp>
 
 namespace surface_detection {
 class SurfaceDetection {
@@ -51,41 +53,56 @@ public:
 
     Surfaces detect_surfaces_within(const Eigen::Affine3f &center, const Eigen::Vector3f &extents, ProgressListener p) {
         pcl::ScopeTime st("SurfaceDetection::detect_surfaces_within");
-        // Get points to process
-        auto points_to_process = collect_points_.pending_points_within(center, extents);
-        ROS_DEBUG_STREAM("Processing " << points_to_process.second.indices.size() << " points");
-        p.pair("points_to_process", points_to_process);
 
-        // Expand surfaces
-        //        points_to_process.second = expand_surfaces_.expand_surfaces(surfaces_, points_to_process, [&,
-        //        this](Surface s) {
-        //            build_surface_.build_updated_surface(s, [&, this](Surface updated_surface) {
-        //                ROS_DEBUG_STREAM("Got an expanded version of surface " << s.id);
-        //                this->add_surface(updated_surface);
-        //            });
-        //        });
-        ROS_DEBUG_STREAM("Expanded surfaces, " << points_to_process.second.indices.size() << " points remaining");
-
+        // Make an object to populate
         Surfaces new_surfaces;
         new_surfaces.header.frame_id = target_frame_;
 
-        // Start with a list of all the existing surfaces nearby
+        // Get points to process
+        auto input = collect_points_.pending_points_within(center, extents);
+        ROS_DEBUG_STREAM("Processing " << input.second.indices.size() << " points");
+        p.pair("input_to_detection", input);
+
+        // Get existing surfaces nearby and try to expand them
         collect_points_.surfaces_within(center, extents, [&, this](uint32_t surface_id) {
             new_surfaces.surfaces.push_back(surfaces_[surface_id]);
         });
         ROS_DEBUG_STREAM("Started with " << new_surfaces.surfaces.size() << " existing surfaces");
 
-        // Detect new surfaces
-        detect_surfaces_.detect_surfaces(
-            points_to_process, p, [&](pcl::PointIndices indices, pcl::ModelCoefficients model, Eigen::Affine3f tf) {
-                auto inliers_cloud = boost::make_shared<PointCloud>(points_to_process.first, indices.indices);
+        input.second = expand_surfaces_.expand_surfaces(new_surfaces.surfaces, input, [&, this](Surface s_expanded) {
+            build_surface_.build_updated_surface(s_expanded, p, [&, this](Surface new_s) {
+                ROS_DEBUG_STREAM("Updated surface with id " << new_s.id);
 
-                build_surface_.build_new_surface(*inliers_cloud, model, tf.cast<double>(), p, [&, this](Surface s) {
+                this->add_or_update_surface(new_s, p);
+                auto posn = std::find_if(new_surfaces.surfaces.begin(), new_surfaces.surfaces.end(),
+                                         [&new_s](const Surface &s) { return s.id == new_s.id; });
+                assert(posn != new_surfaces.surfaces.end() && "Surface disappeared from new_surfaces during expansion");
+                (*posn) = new_s;
+            });
+        });
+
+        // Build a search object for the input points
+        pcl::search::KdTree<Point> search(false);
+        search.setInputCloud(boost::shared_ptr<PointCloud>(&input.first, null_deleter()),
+                             boost::shared_ptr<std::vector<int>>(&input.second.indices, null_deleter()));
+
+        // Make some shorter names for the sake of formatting
+        using Indices = pcl::PointIndices;
+        using Model = pcl::ModelCoefficients;
+
+        // Detect new surfaces
+        detect_surfaces_.detect_surfaces(input, p, [&](Indices indices, Model model, Eigen::Affine3f tf) {
+            expand_surfaces_.expand_new_surface(input.first, search, indices, tf, [&, this](pcl::PointIndices in) {
+                PointCloud new_inliers_cloud(input.first, in.indices);
+
+                build_surface_.build_new_surface(new_inliers_cloud, model, tf.cast<double>(), p, [&, this](Surface s) {
                     ROS_DEBUG_STREAM("Got a new surface with id " << s.id);
-                    this->add_surface(s, p);
+
+                    this->add_or_update_surface(s, p);
                     new_surfaces.surfaces.push_back(s);
                 });
             });
+        });
         ROS_DEBUG_STREAM("Detected a total of " << new_surfaces.surfaces.size() << " surfaces");
 
         return new_surfaces;
@@ -173,7 +190,7 @@ public:
         return is_inside;
     }
 
-    void add_surface(Surface &updated_surface, ProgressListener &p) {
+    void add_or_update_surface(Surface &updated_surface, ProgressListener &p) {
         surfaces_[updated_surface.id] = updated_surface;
         auto tiling = generate_tiling(updated_surface);
         p.points<Point>("tiling", tiling.makeShared());

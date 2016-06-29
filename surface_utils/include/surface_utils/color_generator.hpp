@@ -34,15 +34,15 @@ public:
         return std::make_tuple(h, s, v);
     }
 
-    std::tuple<double, double, double> repeat_hsv() {
+    std::tuple<double, double, double> repeat_hsv() const {
         return std::make_tuple(h, s, v);
     }
 
     std::tuple<double, double, double> rgb() { return hsv_to_rgb(hsv()); }
 
-    std::tuple<double, double, double> repeat_rgb() { return hsv_to_rgb(repeat_hsv()); }
+    std::tuple<double, double, double> repeat_rgb() const { return hsv_to_rgb(repeat_hsv()); }
 
-    std::tuple<double, double, double> hsv_to_rgb(std::tuple<double, double, double> hsv) {
+    std::tuple<double, double, double> hsv_to_rgb(std::tuple<double, double, double> hsv) const {
         double h, s, v, r, g, b;
         std::tie(h, s, v) = hsv;
         h *= 360; // Convert (0. < h < 1.) to (0. < h < 360.)

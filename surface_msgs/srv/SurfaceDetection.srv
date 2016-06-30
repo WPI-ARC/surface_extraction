@@ -1,5 +1,0 @@
-geometry_msgs/Pose center
-geometry_msgs/Vector3 extents
----
-surface_msgs/Surfaces surfaces
-surface_msgs/SurfaceMeshes surface_meshes

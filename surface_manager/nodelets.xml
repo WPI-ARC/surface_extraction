@@ -1,7 +1,0 @@
-<library path="lib/libsurface_manager">
-    <class name="surface_manager/SurfaceManager" type="surface_manager::SurfaceManager" base_class_type="nodelet::Nodelet">
-        <description>
-            Manage the list of surfaces
-        </description>
-    </class>
-</library>

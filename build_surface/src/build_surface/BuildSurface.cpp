@@ -194,7 +194,6 @@ pcl::ModelCoefficients BuildSurface::find_model_for_inliers(const PointCloud &cl
 }
 
 Eigen::Affine3d BuildSurface::adjust_pose_to_model(Eigen::Affine3d pose, pcl::ModelCoefficients model) {
-    ROS_WARN_STREAM("adjust_pose_to_model has not been tested yet");
     // Promote all the floats coming from model to doubles
     const auto plane_normal = Eigen::Map<Eigen::Vector3f>(model.values.data()).cast<double>();
     const auto plane_distance = static_cast<double>(model.values[3]);

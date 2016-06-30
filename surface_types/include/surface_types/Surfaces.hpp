@@ -19,6 +19,25 @@ struct Surfaces {
     std::vector<Surface> surfaces;
 
 public:
+    void add_surface(const Surface &s) {
+        s.validate();
+
+        surfaces.push_back(s);
+    }
+
+    void update_surface(const Surface &s) {
+        s.validate();
+
+        auto posn = find_id(s.id);
+        assert(posn != surfaces.end() && "Tried to update surface that isn't in this Surfaces object");
+        (*posn) = s;
+    }
+
+    std::vector<Surface>::iterator find_id(uint32_t surface_id) {
+        return std::find_if(surfaces.begin(), surfaces.end(),
+                            [&surface_id](const Surface &s) { return s.id == surface_id; });
+    }
+
     operator surface_msgs2::Surfaces() const {
         surface_msgs2::Surfaces ros_surfaces;
 

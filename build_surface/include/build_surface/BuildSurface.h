@@ -9,7 +9,7 @@
 #include <pcl/point_cloud.h>
 #include <pcl/ModelCoefficients.h>
 #include <surface_utils/color_generator.hpp>
-#include <surface_utils/ProgressListener.hpp>
+#include <surface_utils/SurfaceVisualizationController.hpp>
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 #include <CGAL/Constrained_triangulation_plus_2.h>
 
@@ -102,14 +102,20 @@ class BuildSurface {
 public:
     BuildSurface(double perpendicular_distance, double alpha, float extrude_distance);
 
-    void build_updated_surface(const Surface &old_surface, ProgressListener &p,
+    void build_updated_surface(const Surface &old_surface, const SurfaceVisualizationController &p,
                                const std::function<void(BuildSurface::Surface)> callback);
 
-    void build_new_surface(PointCloud inliers, pcl::ModelCoefficients model, Eigen::Affine3d pose, ProgressListener &p,
+    void build_new_surface(PointCloud inliers, pcl::ModelCoefficients model, Eigen::Affine3f pose,
+                           const SurfaceVisualizationController &p,
                            std::function<void(Surface)> callback);
 
     BuildSurface::PointCloud find_surface_boundary(const BuildSurface::PointCloud &inliers,
                                                    const Eigen::Affine3f &transform);
+
+    Surface new_partial_surface(const PointCloud &inliers, const pcl::ModelCoefficients &model,
+                                const Eigen::Affine3f &transform);
+
+    PointCloud tile_surface(const Surface &surface);
 
 protected:
     double perpendicular_distance_;
@@ -124,11 +130,11 @@ private:
                                                       const pcl::ModelCoefficients &old_coeff);
     pcl::ModelCoefficients find_model_for_inliers(const PointCloud &cloud, const pcl::ModelCoefficients &prev_model);
 
-    Eigen::Affine3d adjust_pose_to_model(Eigen::Affine3d old_pose, pcl::ModelCoefficients model);
+    Eigen::Affine3d adjust_pose_to_model(Eigen::Affine3d pose, pcl::ModelCoefficients model);
 
     std::tuple<BuildSurface::PointCloud, std::vector<pcl::Vertices>>
     find_boundary_and_polygons(const PointCloud &cloud, const std::vector<CustomPoint> &cgal_points,
-                               const Eigen::Affine3f &transform, ProgressListener &p);
+                               const Eigen::Affine3f &transform, const SurfaceVisualizationController &p);
 
     std::vector<pcl::Vertices> simplify_polygons(const CT &ct);
 
@@ -142,7 +148,7 @@ private:
     void add_mesh_face(shape_msgs::Mesh &mesh, const Eigen::Affine3f &transform, const CT &ct, bool bottom) const;
 
     PointCloud get_boundary_from_alpha(const Alpha_shape_2 &shape, const Eigen::Affine3f &transform,
-                                       ProgressListener &p) const;
+                                       const SurfaceVisualizationController &p) const;
 
     PointCloud get_boundary_from_alpha(const Alpha_shape_2 &shape, const Eigen::Affine3f &transform) const;
 };

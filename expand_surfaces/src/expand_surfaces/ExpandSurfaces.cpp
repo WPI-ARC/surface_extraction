@@ -129,6 +129,7 @@ pcl::PointIndices ExpandSurfaces::expand_surfaces(const std::vector<Surface> &su
         //
         // REMOVE THOSE POINTS FROM THE INPUT
         //
+        remaining_indices_tmp.indices.clear();
         remaining_indices_tmp.indices.reserve(remaining_indices.indices.size() - distance_filtered.indices.size());
         std::set_difference(remaining_indices.indices.begin(), remaining_indices.indices.end(),
                             distance_filtered.indices.begin(), distance_filtered.indices.end(),

@@ -11,7 +11,7 @@
 
 #include <arc_utilities/eigen_helpers_conversions.hpp>
 #include "surface_detection/SurfaceDetection.h"
-#include "surface_utils/ProgressListener.hpp"
+#include "surface_utils/SurfaceVisualizationController.hpp"
 #include <arc_utilities/pretty_print.hpp>
 
 using surface_msgs2::SurfaceDetectionRequest;
@@ -40,7 +40,8 @@ int main(int argc, char **argv) {
     ros::init(argc, argv, "surface_detection");
     ros::NodeHandle n;
     SurfaceDetection surface_detection(discretization, perpendicular_distance, parallel_distance, mls_radius,
-                                       min_points_per_surface, min_plane_width, alpha, extrusion_distance, target_frame, camera_frame);
+                                       min_points_per_surface, min_plane_width, alpha, extrusion_distance, target_frame,
+                                       camera_frame);
 
     ROS_INFO_STREAM("Connected to ROS");
 
@@ -63,19 +64,21 @@ int main(int argc, char **argv) {
     // I SURE DO LOVE MAKING FUNCTORS ALL OVER HTE GODDAMN PLACE
     class get_surfaces {
         SurfaceDetection &surface_detection;
-        ProgressListener progress;
+        SurfaceVisualizationController progress;
 
     public:
-        get_surfaces(SurfaceDetection &sd, ProgressListener pl) : surface_detection(sd), progress(pl) {}
+        get_surfaces(SurfaceDetection &sd, ros::NodeHandle *nhp, std::string frame)
+            : surface_detection(sd), progress{nhp, frame} {}
 
         bool go(SurfaceDetectionRequest &req, SurfaceDetectionResponse &resp) {
             auto center = GeometryPoseToEigenAffine3f(req.center);
             auto extents = GeometryVector3ToEigenVector3f(req.extents);
             resp = surface_detection.detect_surfaces_within(center, extents, progress);
+            ROS_INFO_STREAM("Replying with " << resp.surfaces.size() << " surfaces");
             return true;
         }
     };
-    get_surfaces getter(surface_detection, ProgressListener(&n, target_frame));
+    get_surfaces getter(surface_detection, &n, target_frame);
     // Make service provider
     auto srv = n.advertiseService("get_surfaces", &get_surfaces::go, &getter);
 

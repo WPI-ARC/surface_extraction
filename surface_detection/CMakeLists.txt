@@ -129,7 +129,6 @@ set(CMAKE_BUILD_TYPE Debug)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O2 -std=c++11 -Wall -Wextra -Wno-unused-parameter")
 
-
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 include_directories(
@@ -153,7 +152,9 @@ include_directories(SYSTEM
 # add_dependencies(surface_detection ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Declare a C++ executable
-add_executable(surface_detection_node src/surface_detection_node.cpp)
+add_executable(surface_detection_node
+    src/surface_detection_node.cpp
+    src/SurfaceDetection.cpp)
 
 ## Add cmake target dependencies of the executable
 ## same as for the library above

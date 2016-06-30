@@ -16,6 +16,7 @@
 #include <surface_msgs2/Surface.h>
 #include <vector>
 #include <eigen_conversions/eigen_msg.h>
+#include <boost/format.hpp>
 
 // ROS message serialization
 #include <pcl_ros/point_cloud.h>
@@ -38,6 +39,9 @@ public:
     Surface() : id(0), color(), inliers(), model(), pose(), boundary(), polygons(), mesh() {}
 
     operator surface_msgs2::Surface() const {
+        // Can only convert complete surfaces to ROS messages
+        validate_complete();
+
         surface_msgs2::Surface s_ros;
 
         // ID, color, model, pose
@@ -68,14 +72,73 @@ public:
         return s_ros;
     }
 
-    typedef boost::shared_ptr<::surface_types::Surface> Ptr;
-    typedef boost::shared_ptr<::surface_types::Surface const> ConstPtr;
+    void validate() const {
+        if (is_complete()) {
+            validate_complete(); // Reduntant, but keeping it in case I remove the check from is_complete
+        } else {
+            validate_partial();
+        }
+    }
+
+    void validate_complete() const {
+        // ID and color technically have no invalid values
+        assert(inliers.size() > 0 && "Attempted to validate a surface with no inliers");
+        assert(model.values.size() == 4 &&
+               "Attempted to validate a surface with an invalid model (to few or too many values)");
+        assert(std::abs(Eigen::Map<const Eigen::Vector3f>(model.values.data()).norm() - 1) < 1e-3 &&
+               "Attempted to validate a surface with an invalid model (normal is not unit length)");
+        // pose can't be invalid (I think)
+
+        assert(boundary.size() > 0 && "Attempted to validate a complete surface with no boundary");
+        assert(polygons.size() > 0 && "Attempted to validate a complete surface with no polygons");
+        assert(std::all_of(polygons.begin(), polygons.end(), [](pcl::Vertices v) { return v.vertices.size() > 0; }) &&
+               "Attempted to validate a complete surface with an empty polygon");
+        assert(mesh.vertices.size() > 0 && "Attempted to validate a complete surface with an empty mesh (no vertices)");
+        assert(mesh.triangles.size() > 0 &&
+               "Attempted to validate a complete surface with an empty mesh (no triangles)");
+    }
+
+    void validate_partial() const {
+        // ID and color technically have no invalid values
+        assert(inliers.size() > 0 && "Attempted to validate a surface with no inliers");
+        assert(model.values.size() == 4 &&
+               "Attempted to validate a surface with an invalid model (to few or too many values)");
+        assert(std::abs(Eigen::Map<const Eigen::Vector3f>(model.values.data()).norm() - 1) < 1e-3 &&
+               "Attempted to validate a surface with an invalid model (normal is not unit length)");
+        // pose can't be invalid (I think)
+
+        assert(boundary.size() == 0 && "Attempted to validate a partial surface with non-empty boundary");
+        assert(polygons.size() == 0 && "Attempted to validate a partial surface with non-empty polygons");
+        assert(mesh.vertices.size() == 0 && "Attempted to validate a partial surface with non-empty mesh (vertices)");
+        assert(mesh.triangles.size() == 0 && "Attempted to validate a partial surface with non-empty mesh (triangles)");
+    }
+
+    bool is_complete() const {
+        // Use boundary.size as the indicator of completeness
+        if (boundary.size() > 0) {
+            validate_complete();
+
+            return true;
+        } else {
+            validate_partial();
+
+            return false;
+        }
+    }
 
     void clear_computed_values() {
         boundary.clear();
         polygons.clear();
         mesh = shape_msgs::Mesh();
     }
+
+    boost::format print_color() const {
+        return boost::format("\x1b[38;2;%d;%d;%dm") % static_cast<int>(color.r * 256) %
+               static_cast<int>(color.g * 256) % static_cast<int>(color.b * 256);
+    }
+
+    typedef boost::shared_ptr<::surface_types::Surface> Ptr;
+    typedef boost::shared_ptr<::surface_types::Surface const> ConstPtr;
 };
 
 // struct Surface
@@ -92,19 +155,21 @@ inline std::ostream &operator<<(std::ostream &s, const Surface &v) {
     for (auto &inlier : v.inliers)
         s << "  " << inlier << std::endl;
     s << "pose:" << std::endl;
-    // Print eigen transform as a matrix using .format() to set the indentation
-    s << v.pose.matrix().format(Eigen::IOFormat(Eigen::StreamPrecision, 0, " ", "\n", "  ")) << std::endl;
-    s << "boundary[" << v.boundary.size() << "]:" << std::endl;
-    for (auto &inlier : v.boundary)
-        s << "  " << inlier << std::endl;
-    s << "polygons[" << v.polygons.size() << "]:" << std::endl;
-    for (auto &vertices : v.polygons) {
-        s << "  vertices[" << vertices.vertices.size() << "]:" << std::endl;
-        for (auto &vertex : vertices.vertices)
-            s << "    " << vertex << std::endl;
+    if (v.is_complete()) {
+        // Print eigen transform as a matrix using .format() to set the indentation
+        s << v.pose.matrix().format(Eigen::IOFormat(Eigen::StreamPrecision, 0, " ", "\n", "  ")) << std::endl;
+        s << "boundary[" << v.boundary.size() << "]:" << std::endl;
+        for (auto &inlier : v.boundary)
+            s << "  " << inlier << std::endl;
+        s << "polygons[" << v.polygons.size() << "]:" << std::endl;
+        for (auto &vertices : v.polygons) {
+            s << "  vertices[" << vertices.vertices.size() << "]:" << std::endl;
+            for (auto &vertex : vertices.vertices)
+                s << "    " << vertex << std::endl;
+        }
+        s << "mesh:" << std::endl;
+        s << "  " << v.mesh << std::endl; // You're on your own for this one
     }
-    s << "mesh:" << std::endl;
-    s << "  " << v.mesh << std::endl; // You're on your own for this one
     return (s);
 }
 }
@@ -145,6 +210,9 @@ template <>
 struct Serializer<surface_types::Surface> {
     template <typename Stream>
     inline static void write(Stream &stream, const surface_types::Surface &s) {
+        // Only try to serialize complete surfaces
+        s.validate_complete();
+
         geometry_msgs::Pose geom_pose;
         tf::poseEigenToMsg(s.pose, geom_pose);
 
@@ -191,7 +259,6 @@ struct Serializer<surface_types::Surface> {
 
         return size;
     }
-
 };
 } // namespace serialization
 } // namespace ros

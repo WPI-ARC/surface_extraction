@@ -15,7 +15,7 @@
 
 // Utils
 #include <surface_utils/pcl_utils.hpp>
-#include <surface_utils/ProgressListener.hpp>
+#include <surface_utils/SurfaceVisualizationController.hpp>
 #include <surface_utils/color_generator.hpp>
 #include <surface_utils/smart_ptr.hpp>
 #include <arc_utilities/pretty_print.hpp>
@@ -34,7 +34,7 @@ DetectSurfaces::DetectSurfaces(double perpendicular_dist, double parallel_dist, 
     assert(min_points_per_surface_ >= 3);
 }
 
-void DetectSurfaces::detect_surfaces(const CloudIndexPair &input_pre_filtering, ProgressListener &p,
+void DetectSurfaces::detect_surfaces(const CloudIndexPair &input_pre_filtering, const SurfaceVisualizationController &p,
                                      std::function<void(Indices, Model, Eigen::Affine3f)> callback) {
     pcl::ScopeTime st("DetectSurfaces::detect_surfaces");
     auto input = radius_filter(input_pre_filtering);
@@ -295,12 +295,9 @@ void DetectSurfaces::find_transform_and_filter(NormalCloud::Ptr &normals, pcl::P
         return;
     }
 
-    ROS_DEBUG_STREAM("Y-spread: " << (max_y - min_y));
-
     // Make sure the orientation of the transform puts the sensor origin in +z direction
     auto origin_tf = tf.inverse() * normals->sensor_origin_.head<3>();
     if (origin_tf[2] < 0) {
-        ROS_DEBUG_STREAM("Flipping transform");
         // Rotate by pi around the y axis to flip the transform
         tf.rotate(Eigen::AngleAxisf(M_PI, Eigen::Vector3f::UnitY()));
     }

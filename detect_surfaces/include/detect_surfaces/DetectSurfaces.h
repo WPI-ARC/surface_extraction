@@ -20,7 +20,7 @@ class Search;
 }
 }
 
-class ProgressListener;
+class SurfaceVisualizationController;
 
 namespace surface_types {
 class Surface;
@@ -43,7 +43,7 @@ public:
     DetectSurfaces(double perpendicular_dist, double parallel_dist, double mls_radius,
                    unsigned int min_points_per_surface, double min_plane_width);
 
-    void detect_surfaces(const CloudIndexPair &input, ProgressListener &p,
+    void detect_surfaces(const CloudIndexPair &input, const SurfaceVisualizationController &p,
                          std::function<void(pcl::PointIndices, pcl::ModelCoefficients, Eigen::Affine3f)> callback);
 
 private:

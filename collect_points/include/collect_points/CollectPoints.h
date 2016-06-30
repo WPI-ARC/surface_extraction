@@ -41,6 +41,8 @@ public:
 
     void add_surface(const PointCloud &points, uint32_t label);
 
+    void remove_surface(uint32_t label);
+
 protected:
     double perpendicular_dist_;
     std::string target_frame_;

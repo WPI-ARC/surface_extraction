@@ -27,7 +27,7 @@ CollectPoints::CollectPoints(double discretization, double perpendicular_dist, s
       pending_points_(discretization) {
     pending_points_cloud_ = boost::make_shared<PointCloud>();
     pending_points_.setInputCloud(pending_points_cloud_);
-    
+
     surface_points_cloud_ = boost::make_shared<LabeledCloud>();
     surface_points_.setInputCloud(surface_points_cloud_);
 }
@@ -126,7 +126,6 @@ void CollectPoints::surfaces_within(const Eigen::Affine3f &center, const Eigen::
 }
 
 void CollectPoints::add_surface(const CollectPoints::PointCloud &points, uint32_t label) {
-    auto removed_voxels = 0;
     for (auto &pt : points.points) {
         LabeledPoint lpt;
         lpt.x = pt.x;
@@ -143,12 +142,21 @@ void CollectPoints::add_surface(const CollectPoints::PointCloud &points, uint32_
     for (const auto &point : pending_pts) {
         if (inside_any_surface(point)) {
             pending_points_.deleteVoxelAtPoint(point);
-            removed_voxels++;
         }
     }
-
-    ROS_DEBUG_STREAM("Removed " << removed_voxels << " voxels from pending cloud for surface " << label);
 }
 
-
-
+void CollectPoints::remove_surface(uint32_t label) {
+    // Find and remove all the points with label `label`
+    // Note: don't just remove voxels, because that may delete more than it should
+    auto n_removed = 0;
+    for (auto lit = surface_points_.leaf_begin(); lit != surface_points_.leaf_end(); ++lit) {
+        auto &leaf_indices = lit.getLeafContainer().getPointIndicesVector();
+        auto remove_posn = std::remove_if(leaf_indices.begin(), leaf_indices.end(), [=](const int &idx) {
+            return surface_points_cloud_->points[idx].label == label;
+        });
+        n_removed += std::distance(remove_posn, leaf_indices.end());
+        leaf_indices.erase(remove_posn, leaf_indices.end());
+    }
+    ROS_DEBUG_STREAM("Removed " << n_removed << " points with label " << label << " from the surfaces octree");
+}

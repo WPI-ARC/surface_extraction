@@ -17,6 +17,8 @@
 
 #include <pcl/common/transforms.h>
 #include <pcl/common/time.h>
+#include <pcl/common/common.h>
+#include <surface_utils/geom_utils.hpp>
 
 // Get the source vertex of an edge (templated so it works on both types of iterators)
 template <typename T>
@@ -46,7 +48,7 @@ BuildSurface::BuildSurface(double perpendicular_distance, double alpha, float ex
     : perpendicular_distance_(perpendicular_distance), alpha_(alpha), extrude_distance_(extrude_distance), next_id_(1),
       color_gen_(0.5, 0.99) {}
 
-void BuildSurface::build_updated_surface(const Surface &old_surface, ProgressListener &p,
+void BuildSurface::build_updated_surface(const Surface &old_surface, const SurfaceVisualizationController &p,
                                          const std::function<void(BuildSurface::Surface)> callback) {
     pcl::ScopeTime st("BuildSurface::build_updated_surface");
 
@@ -56,30 +58,31 @@ void BuildSurface::build_updated_surface(const Surface &old_surface, ProgressLis
     updated_surface.id = old_surface.id;
     updated_surface.color = old_surface.color;
 
-    ROS_INFO("%c[38;2;%d;%d;%dmBuilding updated surface: %d", 0x1B, static_cast<int>(old_surface.color.r * 256),
-             static_cast<int>(old_surface.color.g * 256), static_cast<int>(old_surface.color.b * 256), old_surface.id);
+    ROS_INFO_STREAM(updated_surface.print_color() << "Building updated surface: " << old_surface.id);
 
     // Inliers was already updated
     updated_surface.inliers = old_surface.inliers;
 
     // The rest needs to be computed
     updated_surface.model = find_model_for_inliers(updated_surface.inliers, old_surface.model);
-    ROS_INFO_STREAM("Updated model from: " << std::fixed << std::setprecision(3) << old_surface.model.values[0] << ", "
-                                           << old_surface.model.values[1] << ", " << old_surface.model.values[2] << ", "
-                                           << old_surface.model.values[3]);
-    ROS_INFO_STREAM("                to: " << std::fixed << std::setprecision(3) << updated_surface.model.values[0]
-                                           << ", " << updated_surface.model.values[1] << ", "
-                                           << updated_surface.model.values[2] << ", "
-                                           << updated_surface.model.values[3]);
+    //    ROS_INFO_STREAM("Updated model from: " << std::fixed << std::setprecision(3) << old_surface.model.values[0] <<
+    //    ", "
+    //                                           << old_surface.model.values[1] << ", " << old_surface.model.values[2]
+    //                                           << ", "
+    //                                           << old_surface.model.values[3]);
+    //    ROS_INFO_STREAM("                to: " << std::fixed << std::setprecision(3) <<
+    //    updated_surface.model.values[0]
+    //                                           << ", " << updated_surface.model.values[1] << ", "
+    //                                           << updated_surface.model.values[2] << ", "
+    //                                           << updated_surface.model.values[3]);
 
-//    updated_surface.pose = adjust_pose_to_model(old_surface.pose, updated_surface.model);
-    updated_surface.pose = old_surface.pose;
+    updated_surface.pose = adjust_pose_to_model(old_surface.pose, updated_surface.model);
     auto pose_float = updated_surface.pose.cast<float>();
 
-    ROS_INFO_STREAM("Updated transform from: " << std::fixed << std::setprecision(3)
-                                               << PrettyPrint::PrettyPrint(old_surface.pose));
-    ROS_INFO_STREAM("                    to: " << std::fixed << std::setprecision(3)
-                                               << PrettyPrint::PrettyPrint(updated_surface.pose));
+    //    ROS_INFO_STREAM("Updated transform from: " << std::fixed << std::setprecision(3)
+    //                                               << PrettyPrint::PrettyPrint(old_surface.pose));
+    //    ROS_INFO_STREAM("                    to: " << std::fixed << std::setprecision(3)
+    //                                               << PrettyPrint::PrettyPrint(updated_surface.pose));
 
     auto cgal_points = get_cgal_2d_points(updated_surface.inliers, pose_float);
     std::tie(updated_surface.boundary, updated_surface.polygons) =
@@ -92,68 +95,55 @@ void BuildSurface::build_updated_surface(const Surface &old_surface, ProgressLis
 
     // Ensure the polygon simplification only removed vertices, didn't reorder the ones that weren't removed
     // NOTE this has a bug where the assert is triggered because the simplified polygon is explicitly closed
-//    for (std::size_t i = 0; i < updated_surface.polygons.size(); i++) {
-//        auto simplified_vertices = updated_surface.polygons[i].vertices;
-//        auto unsimplified_vertices = un_simplified_polygons[i].vertices;
-//
-//        auto curr_pos = unsimplified_vertices.begin();
-//        for (auto &index : simplified_vertices) {
-//            // Find the next occurrence of the simplified index in the unsimplified list
-//            curr_pos = std::find(curr_pos, unsimplified_vertices.end(), index);
-//            if (curr_pos == unsimplified_vertices.end()) {
-//                ROS_ERROR("Got changed vertices order: ");
-//                std::copy(unsimplified_vertices.begin(), unsimplified_vertices.end(),
-//                          std::ostream_iterator<uint32_t>(std::cout, ", "));
-//                std::cout << std::endl;
-//                std::copy(simplified_vertices.begin(), simplified_vertices.end(),
-//                          std::ostream_iterator<uint32_t>(std::cout, ", "));
-//                std::cout << std::endl;
-//            }
-//            assert(curr_pos != unsimplified_vertices.end() && "Simplifying polygons changed the vertices' order");
-//        }
-//    }
+    //    for (std::size_t i = 0; i < updated_surface.polygons.size(); i++) {
+    //        auto simplified_vertices = updated_surface.polygons[i].vertices;
+    //        auto unsimplified_vertices = un_simplified_polygons[i].vertices;
+    //
+    //        auto curr_pos = unsimplified_vertices.begin();
+    //        for (auto &index : simplified_vertices) {
+    //            // Find the next occurrence of the simplified index in the unsimplified list
+    //            curr_pos = std::find(curr_pos, unsimplified_vertices.end(), index);
+    //            if (curr_pos == unsimplified_vertices.end()) {
+    //                ROS_ERROR("Got changed vertices order: ");
+    //                std::copy(unsimplified_vertices.begin(), unsimplified_vertices.end(),
+    //                          std::ostream_iterator<uint32_t>(std::cout, ", "));
+    //                std::cout << std::endl;
+    //                std::copy(simplified_vertices.begin(), simplified_vertices.end(),
+    //                          std::ostream_iterator<uint32_t>(std::cout, ", "));
+    //                std::cout << std::endl;
+    //            }
+    //            assert(curr_pos != unsimplified_vertices.end() && "Simplifying polygons changed the vertices' order");
+    //        }
+    //    }
 
-    p.polygons("polygons", updated_surface);
+    //    p.polygons("polygons", updated_surface);
     updated_surface.mesh = create_trimesh(triangulation, pose_float);
-    p.mesh("mesh", updated_surface);
+    //    p.mesh("mesh", updated_surface);
 
     callback(updated_surface);
 }
 
-void BuildSurface::build_new_surface(PointCloud inliers, pcl::ModelCoefficients model, Eigen::Affine3d pose,
-                                     ProgressListener &p, std::function<void(Surface)> callback) {
+void BuildSurface::build_new_surface(PointCloud inliers, pcl::ModelCoefficients model, Eigen::Affine3f pose,
+                                     const SurfaceVisualizationController &p, std::function<void(Surface)> callback) {
     pcl::ScopeTime st("BuildSurface::build_new_surface");
-    Surface new_surface;
+    Surface new_surface = new_partial_surface(inliers, model, pose);
 
-    // ID and color are set using class attributes
-    // NOTE if this function is parallelized, these need to be put behind a memory barrier
-    new_surface.id = next_id_++;
-    new_surface.color.a = 1;
-    std::tie(new_surface.color.r, new_surface.color.g, new_surface.color.b) = color_gen_.rgb();
-
-    ROS_INFO("%c[38;2;%d;%d;%dmBuilding new surface: %d", 0x1B, static_cast<int>(new_surface.color.r * 256),
-             static_cast<int>(new_surface.color.g * 256), static_cast<int>(new_surface.color.b * 256), new_surface.id);
-
-    // inliers, model, and pose are given
-    new_surface.inliers = inliers;
-    new_surface.model = model;
-    new_surface.pose = pose;
-    auto pose_float = new_surface.pose.cast<float>();
+    ROS_INFO_STREAM(new_surface.print_color() << "Building new surface: " << new_surface.id);
 
     p.pose("surface_pose", new_surface);
     p.plane_normal("surface_normal", new_surface);
 
     // boundary, polygons, and mesh are computed with CGAL
-    auto cgal_points = get_cgal_2d_points(new_surface.inliers, pose_float);
+    auto cgal_points = get_cgal_2d_points(new_surface.inliers, pose);
     std::tie(new_surface.boundary, new_surface.polygons) =
-        find_boundary_and_polygons(new_surface.inliers, cgal_points, pose_float, p);
+        find_boundary_and_polygons(new_surface.inliers, cgal_points, pose, p);
     p.points<Point>("boundary_points", new_surface.boundary.makeShared());
     auto triangulation = get_simplified_triangulation(cgal_points, new_surface.polygons);
 
     new_surface.polygons = simplify_polygons(triangulation);
-    p.polygons("polygons", new_surface);
-    new_surface.mesh = create_trimesh(triangulation, pose_float);
-    p.mesh("mesh", new_surface);
+    //    p.polygons("polygons", new_surface);
+    new_surface.mesh = create_trimesh(triangulation, pose);
+    //    p.mesh("mesh", new_surface);
 
     callback(new_surface);
 }
@@ -165,17 +155,18 @@ pcl::ModelCoefficients BuildSurface::optimize_model_for_inliers(const PointCloud
 
     Eigen::VectorXf coefficients(4), old_co(4);
     old_co << model.values[0], model.values[1], model.values[2], model.values[3];
+
     sacmodel.optimizeModelCoefficients(surfaces_pcl_utils::all_indices(inliers), old_co, coefficients);
 
     auto points_outside = inliers.size() - sacmodel.countWithinDistance(coefficients, perpendicular_distance_);
 
     if (points_outside > 0.05 * inliers.size()) {
         ROS_ERROR_STREAM("New model excludes " << static_cast<double>(points_outside) / inliers.size() * 100
-                                               << "% of points (" << points_outside << " / " << inliers.size());
+                                               << "% of points (" << points_outside << " / " << inliers.size() << ")");
         return pcl::ModelCoefficients();
     } else if (points_outside > 0) {
         ROS_WARN_STREAM("New model excludes " << static_cast<double>(points_outside) / inliers.size() * 100
-                                              << "% of points (" << points_outside << " / " << inliers.size());
+                                              << "% of points (" << points_outside << " / " << inliers.size() << ")");
     }
 
     pcl::ModelCoefficients ret;
@@ -202,30 +193,50 @@ pcl::ModelCoefficients BuildSurface::find_model_for_inliers(const PointCloud &cl
     return new_model;
 }
 
-Eigen::Affine3d BuildSurface::adjust_pose_to_model(Eigen::Affine3d old_pose, pcl::ModelCoefficients model) {
+Eigen::Affine3d BuildSurface::adjust_pose_to_model(Eigen::Affine3d pose, pcl::ModelCoefficients model) {
     ROS_WARN_STREAM("adjust_pose_to_model has not been tested yet");
     // Promote all the floats coming from model to doubles
     const auto plane_normal = Eigen::Map<Eigen::Vector3f>(model.values.data()).cast<double>();
     const auto plane_distance = static_cast<double>(model.values[3]);
+    assert(std::abs(plane_normal.norm() - 1) < 1e-1 && "Plane normal from model was not a unit vector");
 
-    // Projection vector obtained by multiplying the point-to-plane distance (from the dot product) by the plane_normal
-    const auto projection_translate = (old_pose.translation().dot(plane_normal) + plane_distance) * plane_normal;
-    ROS_DEBUG_STREAM("translating by " << projection_translate);
+    // FORMULA TO COMPUTE ROTATION ANGLE TO ALIGN EACH AXIS TO THE PLANE
+    // e is the distance from transform origin to plane
+    // e = (pose * Eigen::Vector3f::Zero()).dot(plane_normal) + plane_distance;
+    // d is the distance from current x^ to target x^ (note plane_distance will cancel)
+    // d = (pose * Eigen::Vector3f::UnitX()).dot(plane_normal) + plane_distance - e;
+    // theta = std::sin(d);
+    const auto x_hat = pose.linear() * Eigen::Vector3d::UnitX();
 
-    // Using (X^ + Y^) as the reference point to compute the rotation
-    const auto p = Eigen::Vector3d::UnitX() + Eigen::Vector3d::UnitY();
+    // Note this e does NOT include the plane_distance term
+    const auto e_wo_dist = pose.translation().dot(plane_normal);
 
-    // Project p onto the plane
-    const auto p_ = old_pose.inverse() * (((old_pose * p).dot(plane_normal) + plane_distance) * plane_normal);
+    // 1. Rotate around (normal cross x^) to align x to be parallel to the plane
+    const auto x_theta = std::sin((pose * Eigen::Vector3d::UnitX()).dot(plane_normal) - e_wo_dist);
+    const auto rot_axis = plane_normal.cross(x_hat).normalized();
+    assert(std::abs(rot_axis.dot(plane_normal)) < 1e-2 && "Rotation axis was not perpendicular to the plane normal");
+    assert(std::abs(rot_axis.dot(x_hat)) < 1e-2 && "Rotation axis was not perpendicular to x axis");
+    pose.rotate(Eigen::AngleAxisd(x_theta, rot_axis));
 
-    ROS_DEBUG_STREAM("p  is: " << PrettyPrint::PrettyPrint(p));
-    ROS_DEBUG_STREAM("p_ is: " << PrettyPrint::PrettyPrint(p_));
+    // At this point, x^ should be pretty much perpendicular to the normal
+    assert(std::abs((pose.linear() * Eigen::Vector3d::UnitX()).dot(plane_normal)) < 1e-2 &&
+           "Didn't correctly orient the x axis to be perpendicular to the plane normal");
 
-    const auto rotation_angle = std::acos(p_.norm() / p.norm());
-    const auto rotation_axis = p.cross(p_).normalized();
-    ROS_DEBUG_STREAM("rotating by " << rotation_angle << " radians about axis " << rotation_axis);
+    // 2. Rotate around x to align y to be parallel to the plane
+    const auto y_theta = -std::sin((pose * Eigen::Vector3d::UnitY()).dot(plane_normal) - e_wo_dist);
+    pose.rotate(Eigen::AngleAxisd(y_theta, Eigen::Vector3d::UnitX()));
 
-    return old_pose.translate(projection_translate).rotate(Eigen::AngleAxisd(rotation_angle, rotation_axis));
+    // At this point, z axis should be pretty much identical to the plane normal
+    assert((pose.linear() * Eigen::Vector3d::UnitZ()).isApprox(plane_normal, 1e-2) &&
+           "Didn't correctly orient the transform's z axis to the plane normal");
+
+    // 3. Translate by e in the z^ direction to put the transform on the plane
+    pose.translate(-Eigen::Vector3d::UnitZ() * (e_wo_dist + plane_distance));
+
+    // At this point, the tf's origin should be on the plane
+    assert(std::abs(pose.translation().dot(plane_normal) + plane_distance) < 1e-2 &&
+           "Didn't correctly translate the pose to put origin on the plane");
+    return pose;
 }
 
 std::vector<CustomPoint> BuildSurface::get_cgal_2d_points(const PointCloud &cloud, const Eigen::Affine3f &transform) {
@@ -259,11 +270,14 @@ std::vector<CustomPoint> BuildSurface::get_cgal_2d_points(const PointCloud &clou
 
 std::tuple<BuildSurface::PointCloud, std::vector<pcl::Vertices>>
 BuildSurface::find_boundary_and_polygons(const PointCloud &cloud, const std::vector<CustomPoint> &cgal_points,
-                                         const Eigen::Affine3f &transform, ProgressListener &p) {
+                                         const Eigen::Affine3f &transform, const SurfaceVisualizationController &p) {
 
     // Create a regularized alpha shape with the alpha set to the user's provided alpha
     Alpha_shape_2 shape(cgal_points.begin(), cgal_points.end(), alpha_, Alpha_shape_2::REGULARIZED);
 
+    // For debug -- check that every edge has an even number of regular
+    for (auto start_edge = shape.alpha_shape_edges_begin(); start_edge != shape.alpha_shape_edges_end(); ++start_edge) {
+    }
     // Find the boundary indices
     BuildSurface::PointCloud boundary_points = get_boundary_from_alpha(shape, transform, p);
 
@@ -275,6 +289,7 @@ BuildSurface::find_boundary_and_polygons(const PointCloud &cloud, const std::vec
     double largest_polygon_area_x2 = 0;
     for (auto start_edge = shape.alpha_shape_edges_begin(); start_edge != shape.alpha_shape_edges_end(); ++start_edge) {
         assert(shape.classify(*start_edge) == Alpha_shape_2::REGULAR && "Polygon gave a non-regular edge");
+        assert(!shape.is_infinite(*start_edge) && "Alpha shape returned an infinite edge");
         // start_edge is an iterator to a pair <Face_handle, int>, where the int is an edge of the face
         if (!is_in(visited, start_edge)) {
             pcl::Vertices polygon;
@@ -289,11 +304,13 @@ BuildSurface::find_boundary_and_polygons(const PointCloud &cloud, const std::vec
 
             // Add vertices until the polygon is implicitly closed
             // (uses a do-while because .back() is invalid until at least one loop iteration)
+            Alpha_shape_2::Edge_circulator latest_added_edge; //! For debugging
             do {
                 Alpha_shape_2::Edge_circulator start_current_edge = current_edge;
                 // Find the first regular (boundary) incident edge which hasn't been visited, going counterclockwise
                 while (shape.classify(*current_edge) != Alpha_shape_2::REGULAR || is_in(visited, current_edge)) {
                     ++current_edge;
+                    assert(!shape.is_infinite(*current_edge) && "Alpha shape returned an infinite edge");
 
                     // FOR DEBUG
                     if (current_edge == start_current_edge) {
@@ -310,6 +327,56 @@ BuildSurface::find_boundary_and_polygons(const PointCloud &cloud, const std::vec
                         ROS_DEBUG_STREAM("So far, found " << polygon.vertices.size() << " vertices in this polgon and "
                                                           << polygons.size() << " other polygons");
                         ROS_FATAL("Went into an infinite loop while finding the next edge");
+
+                        // MAKE AND PUBLISH A MESSAGE WITH THE ALPHA SHAPE
+                        visualization_msgs::Marker msg;
+                        msg.ns = "alpha_shape_graph";
+                        msg.type = visualization_msgs::Marker::LINE_LIST;
+                        msg.action = visualization_msgs::Marker::ADD;
+                        msg.pose.orientation.w = 1;
+                        msg.scale.x = 0.02; // Line width
+                        for (auto edge = shape.edges_begin(); edge != shape.edges_begin(); ++edge) {
+                            Point start_pcl = cloud[edge_source(edge)->info().pcl_index];
+                            Point end_pcl = cloud[edge_target(edge)->info().pcl_index];
+                            geometry_msgs::Point start, end_pt;
+                            std::tie(start.x, start.y, start.z) = std::tie(start_pcl.x, start_pcl.y, start_pcl.z);
+                            std::tie(end_pt.x, end_pt.y, end_pt.z) = std::tie(end_pcl.x, end_pcl.y, end_pcl.z);
+
+                            msg.points.push_back(start);
+                            msg.points.push_back(end_pt);
+
+                            // Color key:
+                            // - magenta == currently considered edge
+                            // - green == start pt for this polygon
+                            // - blue == most recently added edge ("from" edge)
+                            // - red == visited
+                            // - white == in alpha shape but not visited
+                            // - gray == not in alpha shape
+                            std_msgs::ColorRGBA color;
+                            color.a = 1;
+                            if (*edge == *current_edge) {
+                                std::tie(color.r, color.g, color.b) = std::make_tuple(1, 1, 0);
+                            } else if (*edge == *start_edge) {
+                                std::tie(color.r, color.g, color.b) = std::make_tuple(0, 1, 0);
+                            } else if (*edge == *latest_added_edge) {
+                                std::tie(color.r, color.g, color.b) = std::make_tuple(0, 0, 1);
+                            } else if (is_in(visited, edge)) {
+                                std::tie(color.r, color.g, color.b) = std::make_tuple(1, 0, 0);
+                            } else if (shape.classify(*edge) == Alpha_shape_2::REGULAR) {
+                                std::tie(color.r, color.g, color.b) = std::make_tuple(1, 1, 1);
+                            } else {
+                                std::tie(color.r, color.g, color.b) = std::make_tuple(0.5, 0.5, 0.5);
+                            }
+
+                            msg.colors.push_back(color);
+                            // Lighten the target of the segment
+                            color.r = std::min(1.f, color.r + 0.2f);
+                            color.g = std::min(1.f, color.g + 0.2f);
+                            color.b = std::min(1.f, color.b + 0.2f);
+                            msg.colors.push_back(color);
+                        }
+                        p.marker(msg);
+                        ros::Duration(25).sleep();
                         assert(false);
                     }
                 }
@@ -317,6 +384,7 @@ BuildSurface::find_boundary_and_polygons(const PointCloud &cloud, const std::vec
                 // Add this edge's start vertex (aka source)
                 polygon.vertices.push_back(edge_source(current_edge)->info().pcl_index);
                 add_to(visited, current_edge);
+                latest_added_edge = current_edge;
 
                 // Calculate this segment's contribution to the polygon's area
                 // Formula from http://stackoverflow.com/a/1165943/522118
@@ -362,7 +430,7 @@ BuildSurface::find_boundary_and_polygons(const PointCloud &cloud, const std::vec
 
 BuildSurface::PointCloud BuildSurface::get_boundary_from_alpha(const Alpha_shape_2 &shape,
                                                                const Eigen::Affine3f &transform,
-                                                               ProgressListener &p) const {
+                                                               const SurfaceVisualizationController &p) const {
     PointCloud boundary_points;
     auto boundary_points_flat = boost::make_shared<pcl::PointCloud<pcl::PointXYZRGB>>();
     for (auto it = shape.alpha_shape_vertices_begin(); it != shape.alpha_shape_vertices_end(); ++it) {
@@ -389,7 +457,7 @@ BuildSurface::PointCloud BuildSurface::get_boundary_from_alpha(const Alpha_shape
 
 BuildSurface::PointCloud BuildSurface::get_boundary_from_alpha(const Alpha_shape_2 &shape,
                                                                const Eigen::Affine3f &transform) const {
-    ProgressListener p;
+    SurfaceVisualizationController p;
     return get_boundary_from_alpha(shape, transform, p);
 }
 
@@ -586,4 +654,50 @@ BuildSurface::PointCloud BuildSurface::find_surface_boundary(const BuildSurface:
     Alpha_shape_2 shape(cgal_points.begin(), cgal_points.end(), alpha_, Alpha_shape_2::REGULARIZED);
 
     return get_boundary_from_alpha(shape, transform);
+}
+
+BuildSurface::Surface BuildSurface::new_partial_surface(const BuildSurface::PointCloud &inliers,
+                                                        const pcl::ModelCoefficients &model,
+                                                        const Eigen::Affine3f &transform) {
+    Surface new_surface;
+
+    // ID and color are set using class attributes
+    // NOTE if this function is parallelized, these need to be put behind a memory barrier
+    new_surface.id = next_id_++;
+    new_surface.color.a = 1;
+    std::tie(new_surface.color.r, new_surface.color.g, new_surface.color.b) = color_gen_.rgb();
+
+    // inliers, model, and pose are given
+    new_surface.inliers = inliers;
+    new_surface.model = model;
+    new_surface.pose = transform.cast<double>();
+
+    return new_surface;
+}
+
+BuildSurface::PointCloud BuildSurface::tile_surface(const Surface &surface) {
+    PointCloud cloud;
+    PointCloud boundary_flat;
+    pcl::transformPointCloud(surface.inliers, boundary_flat, surface.pose.inverse());
+
+    assert(std::all_of(boundary_flat.begin(), boundary_flat.end(), [](Point p) { return p.z < .5 && p.z > -.5; }));
+
+    Point min, max;
+    pcl::getMinMax3D(boundary_flat, min, max);
+
+    double discretization = perpendicular_distance_ / 4.; // arbitrary
+    auto n = 0;
+    // Offset by discretization / 2 to avoid testing the minimum, which will by definition be outside
+    for (float y = static_cast<float>(min.y + discretization / 2.); y < max.y; y += discretization) {
+        // X is the widest axis so iterate x most rapidly (not sure if that makes any difference w/ this algorithm)
+        for (float x = static_cast<float>(min.x + discretization / 2.); x < max.x; x += discretization) {
+            // For each (x, y) pair, skip if it's outside, or if it's within perpendicular_distance_ of any edge
+            if (surface_geom_utils::is_xy_in_tiling(surface, boundary_flat, x, y, perpendicular_distance_)) {
+                cloud.push_back(pcl::transformPoint(Point(x, y, 0), surface.pose.cast<float>()));
+            }
+            n++;
+        }
+    }
+
+    return cloud;
 }

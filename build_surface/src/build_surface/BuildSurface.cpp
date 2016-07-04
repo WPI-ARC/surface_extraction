@@ -19,6 +19,7 @@
 #include <pcl/common/time.h>
 #include <pcl/common/common.h>
 #include <surface_utils/geom_utils.hpp>
+#include <pcl/search/kdtree.h>
 
 // Get the source vertex of an edge (templated so it works on both types of iterators)
 template <typename T>
@@ -44,21 +45,20 @@ inline bool add_to(std::set<std::pair<uint32_t, uint32_t>> &set, T &it) {
     return set.insert(std::minmax({edge_source(it)->info().pcl_index, edge_target(it)->info().pcl_index})).second;
 };
 
-BuildSurface::BuildSurface(double perpendicular_distance, double alpha, float extrude_distance)
-    : perpendicular_distance_(perpendicular_distance), alpha_(alpha), extrude_distance_(extrude_distance), next_id_(1),
-      color_gen_(0.5, 0.99) {}
+BuildSurface::BuildSurface(double perpendicular_distance, double parallel_distance, double alpha,
+                           float extrude_distance)
+    : perpendicular_distance_(perpendicular_distance), parallel_distance_(parallel_distance), alpha_(alpha),
+      extrude_distance_(extrude_distance), next_id_(1), color_gen_(0.5, 0.99) {}
 
 void BuildSurface::build_updated_surface(const Surface &old_surface, const SurfaceVisualizationController &p,
                                          const std::function<void(BuildSurface::Surface)> callback) {
-    pcl::ScopeTime st("BuildSurface::build_updated_surface");
+    // pcl::ScopeTime st("BuildSurface::build_updated_surface");
 
     Surface updated_surface;
 
     // ID and color don't change
     updated_surface.id = old_surface.id;
     updated_surface.color = old_surface.color;
-
-    ROS_INFO_STREAM(updated_surface.print_color() << "Building updated surface: " << old_surface.id);
 
     // Inliers was already updated
     updated_surface.inliers = old_surface.inliers;
@@ -76,7 +76,7 @@ void BuildSurface::build_updated_surface(const Surface &old_surface, const Surfa
     //                                           << updated_surface.model.values[2] << ", "
     //                                           << updated_surface.model.values[3]);
 
-    updated_surface.pose = adjust_pose_to_model(old_surface.pose, updated_surface.model);
+    updated_surface.pose = adjust_pose_to_model(old_surface.pose, updated_surface.model, p);
     auto pose_float = updated_surface.pose.cast<float>();
 
     //    ROS_INFO_STREAM("Updated transform from: " << std::fixed << std::setprecision(3)
@@ -125,7 +125,7 @@ void BuildSurface::build_updated_surface(const Surface &old_surface, const Surfa
 
 void BuildSurface::build_new_surface(PointCloud inliers, pcl::ModelCoefficients model, Eigen::Affine3f pose,
                                      const SurfaceVisualizationController &p, std::function<void(Surface)> callback) {
-    pcl::ScopeTime st("BuildSurface::build_new_surface");
+    // pcl::ScopeTime st("BuildSurface::build_new_surface");
     Surface new_surface = new_partial_surface(inliers, model, pose);
 
     ROS_INFO_STREAM(new_surface.print_color() << "Building new surface: " << new_surface.id);
@@ -150,21 +150,87 @@ void BuildSurface::build_new_surface(PointCloud inliers, pcl::ModelCoefficients 
 
 pcl::ModelCoefficients BuildSurface::optimize_model_for_inliers(const PointCloud &inliers,
                                                                 const pcl::ModelCoefficients &model) {
-    PointCloud::ConstPtr p(&inliers, null_deleter());
-    pcl::SampleConsensusModelPlane<Point> sacmodel(std::move(p));
+    auto weighted_inliers = boost::make_shared<PointCloud>();
+    std::vector<int> weighted_indices;
+    // Weight each point by its number of neighbors. This is a proxy for weighting it by its distance to the edge.
+    if (false) { //! TODO Add a config parameter for this
+        // TODO: Figure out when it's faster to use a pcl::search::BruteForce
+        pcl::search::KdTree<Point> search(false);
+        search.setInputCloud(boost::shared_ptr<const PointCloud>(&inliers, null_deleter()));
+        Eigen::ArrayXf weights(inliers.size());
+        Eigen::RowVector4f mean = Eigen::RowVector4f::Zero();
+        const auto radius = 2 * parallel_distance_;
+        for (int i = 0; i < inliers.size(); i++) {
+            std::vector<int> neighbors;
+            std::vector<float> neighbor_sqr_dist;
+            search.radiusSearch(i, radius, neighbors, neighbor_sqr_dist);
+            weights[i] = std::accumulate(neighbor_sqr_dist.begin(), neighbor_sqr_dist.end(), 0.f);
+
+            // Don't use zero-weighted points to optimize model
+            if (weights[i] != 0) {
+                weighted_indices.push_back(i);
+            } else {
+                ROS_DEBUG_STREAM("Index " << i << " weight was zero");
+            }
+
+            ROS_ERROR_STREAM_COND(std::isnan(weights[i]),
+                                  "Got a NaN weight " << i << ", n_neighbors: " << neighbors.size());
+
+            mean += inliers[i].getVector4fMap();
+
+            ROS_ERROR_STREAM_COND(mean.hasNaN(),
+                                  "Mean was NaN at " << i << ", pt " << inliers[i].getVector4fMap().transpose());
+        }
+        mean /= inliers.size();
+        weights /= weights.maxCoeff();
+
+        // Build the weighted vector
+        weighted_inliers->resize(inliers.size()); // Important, or the next line will be invalid
+        ROS_DEBUG_STREAM("Inliers size " << inliers.size() << " map size " << inliers.getMatrixXfMap().cols() <<
+                         " weights size " << weights.rows());
+        assert(inliers.getMatrixXfMap().cols() == weights.rows() && "Weighting vector constructed wrong");
+        // This line is all Eigen arrays (coefficient-wise ops) except the (1-w) * mean, which is the outer vector product
+        const auto weighted_pts = inliers.getMatrixXfMap().array().rowwise() * weights.transpose();
+        ROS_DEBUG_STREAM("weights: " << weights.rows() << "x" << weights.cols());
+        const auto subweights = 1 - weights;
+        ROS_DEBUG_STREAM("subweights: " << subweights.rows() << "x" << subweights.cols());
+        const auto subweightsm = subweights.matrix();
+        ROS_DEBUG_STREAM("subweightsm: " << subweightsm.rows() << "x" << subweightsm.cols());
+        const auto weightmean = subweightsm * mean;
+        ROS_DEBUG_STREAM("weightmean: " << weightmean.rows() << "x" << weightmean.cols());
+        const auto weightmeana = weightmean.array();
+        ROS_DEBUG_STREAM("weightmeana: " << weightmeana.rows() << "x" << weightmeana.cols());
+        const auto weighted_means = weightmeana.transpose();
+        ROS_DEBUG_STREAM("weighted_means: " << weighted_means.rows() << "x" << weighted_means.cols());
+        ROS_DEBUG_STREAM("Pts is " << weighted_pts.rows() << "x" << weighted_pts.cols() << ", means is " <<
+                         weighted_means.rows() << "x" << weighted_means.cols());
+        weighted_inliers->getMatrixXfMap() = weighted_pts + weighted_means;
+
+        assert(!weighted_inliers->getMatrixXfMap().hasNaN() && "Some of the inliers were NaN :/");
+    } else {
+        weighted_inliers = boost::make_shared<PointCloud>(inliers); // Makes a copy
+        weighted_indices = surfaces_pcl_utils::all_indices(inliers);
+    }
+    // Note that operations such as countWithinDistance on this sacmodel operate on the weighted cloud
+    pcl::SampleConsensusModelPlane<Point> sacmodel(weighted_inliers);
 
     Eigen::VectorXf coefficients(4), old_co(4);
     old_co << model.values[0], model.values[1], model.values[2], model.values[3];
 
-    sacmodel.optimizeModelCoefficients(surfaces_pcl_utils::all_indices(inliers), old_co, coefficients);
+    assert(!old_co.hasNaN() && "Previous coefficients had NaN");
+
+    sacmodel.optimizeModelCoefficients(weighted_indices, old_co, coefficients);
+
+    assert(!coefficients.hasNaN() && "Optimized coefficients had NaN");
 
     auto points_outside = inliers.size() - sacmodel.countWithinDistance(coefficients, perpendicular_distance_);
 
     if (points_outside > 0.05 * inliers.size()) {
         ROS_ERROR_STREAM("New model excludes " << static_cast<double>(points_outside) / inliers.size() * 100
                                                << "% of points (" << points_outside << " / " << inliers.size() << ")");
-        return pcl::ModelCoefficients();
-    } else if (points_outside > 0) {
+        // TODO Incorporate the idea that a surface construction can fail, and make it fail here
+        // (probably using exceptions)
+    } else if (points_outside > 0.01 * inliers.size()) {
         ROS_WARN_STREAM("New model excludes " << static_cast<double>(points_outside) / inliers.size() * 100
                                               << "% of points (" << points_outside << " / " << inliers.size() << ")");
     }
@@ -180,6 +246,9 @@ pcl::ModelCoefficients BuildSurface::find_model_for_inliers(const PointCloud &cl
                                                             const pcl::ModelCoefficients &prev_model) {
     auto new_model = optimize_model_for_inliers(cloud, prev_model);
 
+    assert(new_model.values.size() == 4 && "optimize_model_for_inliers gave an invalid model");
+    assert(prev_model.values.size() == 4 && "find_model_for_inliers recieved invalid prev_model");
+
     // STL way to get dot product (probably unrolled under -03 ?)
     auto d = std::inner_product(new_model.values.begin(), new_model.values.begin() + 3, prev_model.values.begin(), 0);
 
@@ -193,48 +262,47 @@ pcl::ModelCoefficients BuildSurface::find_model_for_inliers(const PointCloud &cl
     return new_model;
 }
 
-Eigen::Affine3d BuildSurface::adjust_pose_to_model(Eigen::Affine3d pose, pcl::ModelCoefficients model) {
+Eigen::Affine3d BuildSurface::adjust_pose_to_model(Eigen::Affine3d pose, pcl::ModelCoefficients model,
+                                                   const SurfaceVisualizationController &p) {
     // Promote all the floats coming from model to doubles
     const auto plane_normal = Eigen::Map<Eigen::Vector3f>(model.values.data()).cast<double>();
     const auto plane_distance = static_cast<double>(model.values[3]);
-    assert(std::abs(plane_normal.norm() - 1) < 1e-1 && "Plane normal from model was not a unit vector");
+    assert(std::abs(plane_normal.norm() - 1) < 1e-2 && "Plane normal from model was not a unit vector");
 
-    // FORMULA TO COMPUTE ROTATION ANGLE TO ALIGN EACH AXIS TO THE PLANE
-    // e is the distance from transform origin to plane
-    // e = (pose * Eigen::Vector3f::Zero()).dot(plane_normal) + plane_distance;
-    // d is the distance from current x^ to target x^ (note plane_distance will cancel)
-    // d = (pose * Eigen::Vector3f::UnitX()).dot(plane_normal) + plane_distance - e;
-    // theta = std::sin(d);
-    const auto x_hat = pose.linear() * Eigen::Vector3d::UnitX();
+    Eigen::Affine3d pose_before_inv(pose.inverse());
+    p.pose("pose_before", pose_before_inv * pose); // Yes, this is intentionally identity
 
-    // Note this e does NOT include the plane_distance term
-    const auto e_wo_dist = pose.translation().dot(plane_normal);
+    // 1. Rotate to align z^ with the plane normal
+    // (Rotate the pose by the same quaterion that aligns z^ with the plane normal, expressed relative to the pose)
+    const auto normal_relative_to_pose = pose.rotation().inverse() * plane_normal;
+    p.vector("normal", normal_relative_to_pose, Eigen::Vector3d::Zero());
+    auto quaternion = Eigen::Quaterniond::FromTwoVectors(Eigen::Vector3d::UnitZ(), normal_relative_to_pose);
+    pose.rotate(quaternion);
 
-    // 1. Rotate around (normal cross x^) to align x to be parallel to the plane
-    const auto x_theta = std::sin((pose * Eigen::Vector3d::UnitX()).dot(plane_normal) - e_wo_dist);
-    const auto rot_axis = plane_normal.cross(x_hat).normalized();
-    assert(std::abs(rot_axis.dot(plane_normal)) < 1e-2 && "Rotation axis was not perpendicular to the plane normal");
-    assert(std::abs(rot_axis.dot(x_hat)) < 1e-2 && "Rotation axis was not perpendicular to x axis");
-    pose.rotate(Eigen::AngleAxisd(x_theta, rot_axis));
+    geometry_msgs::Pose geom_pose;
+    tf::quaternionEigenToMsg(quaternion, geom_pose.orientation);
+    p.pose("rotation", geom_pose);
 
-    // At this point, x^ should be pretty much perpendicular to the normal
-    assert(std::abs((pose.linear() * Eigen::Vector3d::UnitX()).dot(plane_normal)) < 1e-2 &&
-           "Didn't correctly orient the x axis to be perpendicular to the plane normal");
+    p.pose("pose_after", pose_before_inv * pose);
 
-    // 2. Rotate around x to align y to be parallel to the plane
-    const auto y_theta = -std::sin((pose * Eigen::Vector3d::UnitY()).dot(plane_normal) - e_wo_dist);
-    pose.rotate(Eigen::AngleAxisd(y_theta, Eigen::Vector3d::UnitX()));
+    // At this point, z axis should be identical to the plane normal (within floating point error)
+    ROS_ERROR_STREAM_COND(!(pose.linear() * Eigen::Vector3d::UnitZ()).isApprox(plane_normal, 1e-06),
+                          "Pose z-axis is not identical to normal -- difference is "
+                              << ((pose.linear() * Eigen::Vector3d::UnitZ()) - plane_normal).transpose());
 
-    // At this point, z axis should be pretty much identical to the plane normal
-    assert((pose.linear() * Eigen::Vector3d::UnitZ()).isApprox(plane_normal, 1e-2) &&
+    assert((pose.linear() * Eigen::Vector3d::UnitZ()).isApprox(plane_normal, 1e-06) &&
            "Didn't correctly orient the transform's z axis to the plane normal");
 
-    // 3. Translate by e in the z^ direction to put the transform on the plane
-    pose.translate(-Eigen::Vector3d::UnitZ() * (e_wo_dist + plane_distance));
+    // 3. Translate by in the z^ direction by the negative signed point-plane distance to put pose's origin on the plane
+    pose.translate(Eigen::Vector3d::UnitZ() * -(pose.translation().dot(plane_normal) + plane_distance));
+
+    p.pose("pose_after_adjust_translation", pose);
 
     // At this point, the tf's origin should be on the plane
-    assert(std::abs(pose.translation().dot(plane_normal) + plane_distance) < 1e-2 &&
+    assert(std::abs(pose.translation().dot(plane_normal) + plane_distance) < 1e-5 &&
            "Didn't correctly translate the pose to put origin on the plane");
+
+    ROS_DEBUG("Successfully ran adjust_pose_to_model");
     return pose;
 }
 
@@ -335,11 +403,14 @@ BuildSurface::find_boundary_and_polygons(const PointCloud &cloud, const std::vec
                         msg.pose.orientation.w = 1;
                         msg.scale.x = 0.02; // Line width
                         for (auto edge = shape.edges_begin(); edge != shape.edges_begin(); ++edge) {
+                            ROS_DEBUG_STREAM("Visualising edge " << edge_source(edge)->info().pcl_index << "->"
+                                                                 << edge_target(edge)->info().pcl_index);
                             Point start_pcl = cloud[edge_source(edge)->info().pcl_index];
                             Point end_pcl = cloud[edge_target(edge)->info().pcl_index];
                             geometry_msgs::Point start, end_pt;
                             std::tie(start.x, start.y, start.z) = std::tie(start_pcl.x, start_pcl.y, start_pcl.z);
                             std::tie(end_pt.x, end_pt.y, end_pt.z) = std::tie(end_pcl.x, end_pcl.y, end_pcl.z);
+                            ROS_DEBUG_STREAM("Visualising edge");
 
                             msg.points.push_back(start);
                             msg.points.push_back(end_pt);

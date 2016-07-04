@@ -36,7 +36,7 @@ DetectSurfaces::DetectSurfaces(double perpendicular_dist, double parallel_dist, 
 
 void DetectSurfaces::detect_surfaces(const CloudIndexPair &input_pre_filtering, const SurfaceVisualizationController &p,
                                      std::function<void(Indices, Model, Eigen::Affine3f)> callback) {
-    pcl::ScopeTime st("DetectSurfaces::detect_surfaces");
+    //pcl::ScopeTime st("DetectSurfaces::detect_surfaces");
     auto input = radius_filter(input_pre_filtering);
     auto normals = get_normals(input);
     if (input.second.indices.size() != normals->size()) {

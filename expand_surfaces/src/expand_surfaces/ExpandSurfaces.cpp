@@ -93,7 +93,7 @@ pcl::PointIndices ExpandSurfaces::filterWithinModelDistance(const PointCloud::Co
 
 pcl::PointIndices ExpandSurfaces::expand_surfaces(const std::vector<Surface> &surfaces, const CloudIndexPair &input,
                                                   std::function<void(Surface)> callback) {
-    pcl::ScopeTime st("SurfaceDetection::detect_surfaces_within");
+    //pcl::ScopeTime st("SurfaceDetection::detect_surfaces_within");
     auto cloud = boost::shared_ptr<const PointCloud>(&input.first, null_deleter());
     auto indices = boost::shared_ptr<const pcl::PointIndices>(&input.second, null_deleter());
 
@@ -153,7 +153,8 @@ void ExpandSurfaces::expand_new_surface(const PointCloud &points, const pcl::sea
     // ADD NEW POINTS TO SURFACE
     //
     pcl::PointIndices indices;
-    indices.indices.reserve(radius_filtered.size());
+    indices.indices = inliers.indices;
+    indices.indices.reserve(indices.indices.size() + radius_filtered.size());
     std::copy(radius_filtered.begin(), radius_filtered.end(), std::back_inserter(indices.indices));
 
     callback(indices);

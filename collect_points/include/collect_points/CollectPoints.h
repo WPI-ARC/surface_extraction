@@ -48,8 +48,6 @@ protected:
     std::string target_frame_;
     std::string camera_frame_;
 
-    ros::Time silence_tf_warnings_until_;
-
     tf::TransformListener tf_listener_;
 
     SurfacePointsOctree surface_points_;

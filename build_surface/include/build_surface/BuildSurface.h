@@ -100,7 +100,7 @@ class BuildSurface {
     typedef surface_types::Surface Surface;
 
 public:
-    BuildSurface(double perpendicular_distance, double alpha, float extrude_distance);
+    BuildSurface(double perpendicular_distance, double parallel_distance, double alpha, float extrude_distance);
 
     void build_updated_surface(const Surface &old_surface, const SurfaceVisualizationController &p,
                                const std::function<void(BuildSurface::Surface)> callback);
@@ -119,6 +119,7 @@ public:
 
 protected:
     double perpendicular_distance_;
+    double parallel_distance_;
     double alpha_;
     float extrude_distance_;
 
@@ -130,7 +131,8 @@ private:
                                                       const pcl::ModelCoefficients &old_coeff);
     pcl::ModelCoefficients find_model_for_inliers(const PointCloud &cloud, const pcl::ModelCoefficients &prev_model);
 
-    Eigen::Affine3d adjust_pose_to_model(Eigen::Affine3d pose, pcl::ModelCoefficients model);
+    Eigen::Affine3d adjust_pose_to_model(Eigen::Affine3d pose, pcl::ModelCoefficients model,
+                                             const SurfaceVisualizationController &p);
 
     std::tuple<BuildSurface::PointCloud, std::vector<pcl::Vertices>>
     find_boundary_and_polygons(const PointCloud &cloud, const std::vector<CustomPoint> &cgal_points,

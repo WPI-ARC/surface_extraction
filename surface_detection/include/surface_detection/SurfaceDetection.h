@@ -41,12 +41,16 @@ public:
     Surfaces detect_surfaces_within(const Eigen::Affine3f &center, const Eigen::Vector3f &extents,
                                     const SurfaceVisualizationController &p);
 
+    void add_start_surface(double discretization, double start_surface_extent_x,
+                           double start_surface_extent_y, const SurfaceVisualizationController &p);
+
 private:
     // Configuration
     std::string target_frame_;
     double parallel_distance_;
     double perpendicular_distance_;
     double sqr_perpendicular_distance_;
+    unsigned int min_pts_in_surface_;
 
     // State
     std::map<int, Surface> surfaces_;

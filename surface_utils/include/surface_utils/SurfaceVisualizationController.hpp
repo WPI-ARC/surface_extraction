@@ -132,24 +132,33 @@ public:
         });
     }
 
-    void pose(std::string name, geometry_msgs::PoseStamped &p) const {
+    void vector(std::string name, Eigen::Vector3d direction, Eigen::Vector3d origin) const {
+        geometry_msgs::Pose p;
+        tf::pointEigenToMsg(origin, p.position);
+        // Rviz's pose display puts an arrow on the x axis, so use the x axis to compute quaternion
+        const auto q = Eigen::Quaterniond::FromTwoVectors(Eigen::Vector3d::UnitX(), direction);
+        tf::quaternionEigenToMsg(q, p.orientation);
+        pose(name, p);
+    }
+
+    void pose(std::string name, const geometry_msgs::PoseStamped &p) const {
         with_publisher<geometry_msgs::PoseStamped>(name, [=](const ros::Publisher &pub) { pub.publish(p); });
     }
 
-    void pose(std::string name, geometry_msgs::Pose &p) const {
+    void pose(std::string name, const geometry_msgs::Pose &p) const {
         geometry_msgs::PoseStamped ps;
         ps.header.frame_id = frame_;
         ps.pose = p;
         this->pose(name, ps);
     }
 
-    void pose(std::string name, Eigen::Affine3d &e) const {
+    void pose(std::string name, const Eigen::Affine3d &e) const {
         geometry_msgs::Pose p;
         tf::poseEigenToMsg(e, p);
         this->pose(name, p);
     }
 
-    void pose(std::string name, Eigen::Affine3f &e) const {
+    void pose(std::string name, const Eigen::Affine3f &e) const {
         geometry_msgs::Pose p;
         tf::poseEigenToMsg(e.cast<double>(), p);
         this->pose(name, p);
@@ -337,6 +346,78 @@ public:
             marker.points.back().z = unity[2];
 
             pub.publish(marker);
+        });
+    }
+
+    void bounding_box(const Eigen::Affine3f &center, const Eigen::Vector3f &extents) {
+        with_marker_publisher([=](const ros::Publisher &pub) {
+            visualization_msgs::Marker m;
+            m.header.frame_id = frame_;
+            m.header.stamp = ros::Time();
+            m.ns = "bounding_box";
+            m.id = 0;
+            m.type = visualization_msgs::Marker::LINE_LIST;
+            m.action = visualization_msgs::Marker::ADD;
+            tf::poseEigenToMsg(center.cast<double>(), m.pose);
+            m.scale.x = 0.01;
+            // m.scale otherwise not needed
+            m.color.r = 1;
+            m.color.g = 1;
+            m.color.b = 1;
+            m.color.a = 1;
+
+            geometry_msgs::Point pt;
+            pt.x = extents[0];
+            pt.y = extents[1];
+            pt.z = extents[2];
+
+            // Top  4 lines
+            m.points.push_back(pt);
+            pt.y *= -1;
+            m.points.push_back(pt);
+            m.points.push_back(pt);
+            pt.x *= -1;
+            m.points.push_back(pt);
+            m.points.push_back(pt);
+            pt.y *= -1;
+            m.points.push_back(pt);
+            m.points.push_back(pt);
+            pt.x *= -1;
+            m.points.push_back(pt);
+
+            // Bottom 4 lines
+            pt.z *= -1;
+            m.points.push_back(pt);
+            pt.y *= -1;
+            m.points.push_back(pt);
+            m.points.push_back(pt);
+            pt.x *= -1;
+            m.points.push_back(pt);
+            m.points.push_back(pt);
+            pt.y *= -1;
+            m.points.push_back(pt);
+            m.points.push_back(pt);
+            pt.x *= -1;
+            m.points.push_back(pt);
+
+            // Side 4 lines
+            m.points.push_back(pt);
+            pt.z *= -1;
+            m.points.push_back(pt);
+            pt.y *= -1;
+            m.points.push_back(pt);
+            pt.z *= -1;
+            m.points.push_back(pt);
+            pt.x *= -1;
+            m.points.push_back(pt);
+            pt.z *= -1;
+            m.points.push_back(pt);
+            pt.y *= -1;
+            m.points.push_back(pt);
+            pt.z *= -1;
+            m.points.push_back(pt);
+
+            pub.publish(m);
         });
     }
 

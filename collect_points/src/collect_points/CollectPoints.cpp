@@ -23,8 +23,7 @@ using surface_utils::toLabeledPoint;
 CollectPoints::CollectPoints(double discretization, double perpendicular_dist, std::string target_frame,
                              std::string camera_frame)
     : perpendicular_dist_(perpendicular_dist), target_frame_(target_frame), camera_frame_(camera_frame),
-      silence_tf_warnings_until_(ros::Time::now() + ros::Duration(5)), tf_listener_(), surface_points_(discretization),
-      pending_points_(discretization) {
+      tf_listener_(), surface_points_(discretization), pending_points_(discretization) {
     pending_points_cloud_ = boost::make_shared<PointCloud>();
     pending_points_.setInputCloud(pending_points_cloud_);
 
@@ -47,9 +46,9 @@ CollectPoints::PointCloud CollectPoints::get_pending_points() {
     try {
         tf_listener_.lookupTransform(target_frame_, camera_frame_, ros::Time(0), transform);
     } catch (tf2::TransformException ex) {
-        if (ros::Time::now() > silence_tf_warnings_until_) {
-            ROS_WARN_STREAM("Failed to get camera viewpoint: " << ex.what());
-        }
+        // I don't really want this throttled, but the only way I can get it to not warn within a few seconds of
+        // starting up is to use DELAYED_THROTTLE, and it's probably fine if it is throttled
+        ROS_WARN_STREAM_DELAYED_THROTTLE(5, "Failed to get camera viewpoint: " << ex.what());
         return cloud; // Return an empty cloud
     }
     pending_points_.getVoxelCentroids(cloud.points);
@@ -76,15 +75,10 @@ bool CollectPoints::inside_any_surface(const Point &point) const {
 
 CollectPoints::CloudIndexPair CollectPoints::pending_points_within(const Eigen::Affine3f &center,
                                                                    const Eigen::Vector3f &extents) {
-    pcl::ScopeTime st("CollectPoints::pending_points_within");
+    //pcl::ScopeTime st("CollectPoints::pending_points_within");
     auto result = std::make_pair(get_pending_points(), pcl::PointIndices());
     Eigen::Vector3f xyz, rpy;
     pcl::getTranslationAndEulerAngles(center, xyz[0], xyz[1], xyz[2], rpy[0], rpy[1], rpy[2]);
-    ROS_DEBUG_STREAM("translation: " << PrettyPrint::PrettyPrint(xyz) << ", rotation: " << PrettyPrint::PrettyPrint(rpy)
-                                     << ", size: " << PrettyPrint::PrettyPrint(extents));
-    ROS_DEBUG_STREAM("Pending points have sensor origin <"
-                     << result.first.sensor_origin_[0] << ", " << result.first.sensor_origin_[1] << ", "
-                     << result.first.sensor_origin_[2] << ", " << result.first.sensor_origin_[3] << ">");
 
     pcl::CropBox<Point> crop;
 

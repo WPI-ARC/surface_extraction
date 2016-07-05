@@ -30,7 +30,7 @@ public:
     typedef surface_types::Surface Surface;
     typedef surface_types::Surfaces Surfaces;
 
-    SurfaceDetection(double discretization, double perpendicular_dist, double parallel_dist, double mls_radius,
+    SurfaceDetection(double discretization, double perpendicular_dist, double parallel_dist, double point_inside_threshold, double mls_radius,
                      unsigned int min_pts_in_surface, double min_plane_width, double alpha, float extrusion_distance,
                      std::string target_frame, std::string camera_frame);
 

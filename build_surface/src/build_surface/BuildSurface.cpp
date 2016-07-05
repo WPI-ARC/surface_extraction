@@ -554,7 +554,7 @@ CT BuildSurface::get_simplified_triangulation(const std::vector<CustomPoint> &cg
     }
 
     // TODO should alpha be re-used for this?
-    simplify(ct, SimplificationCost(), SimplificationStop(alpha_));
+    simplify(ct, SimplificationCost(), SimplificationStop(alpha_ * alpha_));
     return ct;
 }
 

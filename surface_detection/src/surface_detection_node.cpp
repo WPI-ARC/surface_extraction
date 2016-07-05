@@ -29,6 +29,7 @@ std::string camera_frame = "/left_camera_frame";
 const double discretization = 0.03;
 const double perpendicular_distance = 0.01;
 const double parallel_distance = 0.05;
+const double point_inside_threshold = 0.03;
 const double mls_radius = 0.10;
 const unsigned int min_points_per_surface = 50;
 const double min_plane_width = 0.15;
@@ -41,7 +42,7 @@ int main(int argc, char **argv) {
     // Setup
     ros::init(argc, argv, "surface_detection");
     ros::NodeHandle n;
-    SurfaceDetection surface_detection(discretization, perpendicular_distance, parallel_distance, mls_radius,
+    SurfaceDetection surface_detection(discretization, perpendicular_distance, parallel_distance, point_inside_threshold, mls_radius,
                                        min_points_per_surface, min_plane_width, alpha, extrusion_distance, target_frame,
                                        camera_frame);
 

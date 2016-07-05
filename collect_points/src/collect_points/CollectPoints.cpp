@@ -20,9 +20,9 @@
 
 using surface_utils::toLabeledPoint;
 
-CollectPoints::CollectPoints(double discretization, double perpendicular_dist, std::string target_frame,
+CollectPoints::CollectPoints(double discretization, double perpendicular_dist, double point_inside_threshold, std::string target_frame,
                              std::string camera_frame)
-    : perpendicular_dist_(perpendicular_dist), target_frame_(target_frame), camera_frame_(camera_frame),
+    : perpendicular_dist_(perpendicular_dist), point_inside_threshold_(point_inside_threshold), target_frame_(target_frame), camera_frame_(camera_frame),
       tf_listener_(), surface_points_(discretization), pending_points_(discretization) {
     pending_points_cloud_ = boost::make_shared<PointCloud>();
     pending_points_.setInputCloud(pending_points_cloud_);
@@ -70,7 +70,7 @@ bool CollectPoints::inside_any_surface(const Point &point) const {
     std::vector<int> neighbors;
     std::vector<float> distances;
 
-    return surface_points_.radiusSearch(toLabeledPoint(point), perpendicular_dist_, neighbors, distances, 1) > 0;
+    return surface_points_.radiusSearch(toLabeledPoint(point), point_inside_threshold_, neighbors, distances, 1) > 0;
 }
 
 CollectPoints::CloudIndexPair CollectPoints::pending_points_within(const Eigen::Affine3f &center,

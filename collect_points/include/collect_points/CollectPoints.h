@@ -27,7 +27,7 @@ class CollectPoints {
     typedef std::pair<PointCloud, pcl::PointIndices> CloudIndexPair;
 
 public:
-    CollectPoints(double discretization, double perpendicular_dist, std::string target_frame, std::string camera_frame);
+    CollectPoints(double discretization, double perpendicular_dist, double point_inside_threshold, std::string target_frame, std::string camera_frame);
 
     void add_points(const PointCloud::ConstPtr &points);
 
@@ -45,11 +45,12 @@ public:
 
 protected:
     double perpendicular_dist_;
+    double point_inside_threshold_;
     std::string target_frame_;
+
     std::string camera_frame_;
 
     tf::TransformListener tf_listener_;
-
     SurfacePointsOctree surface_points_;
     PendingPointsOctree pending_points_;
     SurfacePointsOctree::PointCloud::Ptr surface_points_cloud_;

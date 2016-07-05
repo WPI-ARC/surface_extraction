@@ -13,7 +13,7 @@
 
 namespace surface_detection {
 
-SurfaceDetection::SurfaceDetection(double discretization, double perpendicular_dist, double parallel_dist,
+SurfaceDetection::SurfaceDetection(double discretization, double perpendicular_dist, double parallel_dist, double point_inside_threshold,
                                    double mls_radius, unsigned int min_pts_in_surface, double min_plane_width,
                                    double alpha, float extrusion_distance, std::string target_frame,
                                    std::string camera_frame)
@@ -22,7 +22,7 @@ SurfaceDetection::SurfaceDetection(double discretization, double perpendicular_d
       // State
       surfaces_(),
       // Implementation
-      collect_points_(discretization, perpendicular_dist, target_frame, camera_frame),
+      collect_points_(discretization, perpendicular_dist, point_inside_threshold, target_frame, camera_frame),
       expand_surfaces_(perpendicular_dist, parallel_dist),
       detect_surfaces_(perpendicular_dist, parallel_dist, mls_radius, min_pts_in_surface, min_plane_width),
       build_surface_(perpendicular_dist, parallel_dist, alpha, extrusion_distance) {}

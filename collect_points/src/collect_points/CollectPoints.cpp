@@ -20,10 +20,11 @@
 
 using surface_utils::toLabeledPoint;
 
-CollectPoints::CollectPoints(double discretization, double perpendicular_dist, double point_inside_threshold, std::string target_frame,
-                             std::string camera_frame)
-    : perpendicular_dist_(perpendicular_dist), point_inside_threshold_(point_inside_threshold), target_frame_(target_frame), camera_frame_(camera_frame),
-      tf_listener_(), surface_points_(discretization), pending_points_(discretization) {
+CollectPoints::CollectPoints(double discretization, double perpendicular_dist, double point_inside_threshold,
+                             std::string target_frame, std::string camera_frame)
+    : perpendicular_dist_(perpendicular_dist), point_inside_threshold_(point_inside_threshold),
+      target_frame_(target_frame), camera_frame_(camera_frame), tf_listener_(), surface_points_(discretization),
+      pending_points_(discretization) {
     pending_points_cloud_ = boost::make_shared<PointCloud>();
     pending_points_.setInputCloud(pending_points_cloud_);
 
@@ -32,11 +33,14 @@ CollectPoints::CollectPoints(double discretization, double perpendicular_dist, d
 }
 
 void CollectPoints::add_points(const PointCloud::ConstPtr &points) {
+    ROS_INFO_STREAM_ONCE("Recieved first point cloud (" << points->size() << ")");
+    ROS_INFO_NAMED("add_points", "Starting add_points");
     for (const auto &point : *points) {
         if (!inside_any_surface(point)) {
             pending_points_.addPointToCloud(point, pending_points_cloud_);
         }
     }
+    ROS_INFO_NAMED("add_points", "Finished add_points");
 }
 
 CollectPoints::PointCloud CollectPoints::get_pending_points() {
@@ -51,7 +55,6 @@ CollectPoints::PointCloud CollectPoints::get_pending_points() {
         ROS_WARN_STREAM_DELAYED_THROTTLE(5, "Failed to get camera viewpoint: " << ex.what());
         return cloud; // Return an empty cloud
     }
-    pending_points_.getVoxelCentroids(cloud.points);
     // Populate the sensor origin
     cloud.sensor_origin_[0] = static_cast<float>(transform.getOrigin().x());
     cloud.sensor_origin_[1] = static_cast<float>(transform.getOrigin().y());
@@ -63,6 +66,12 @@ CollectPoints::PointCloud CollectPoints::get_pending_points() {
     Eigen::Quaterniond eigen_quat;
     tf::quaternionMsgToEigen(quat, eigen_quat);
     cloud.sensor_orientation_ = eigen_quat.cast<float>();
+
+    // Octree has a bug where getVoxelCentroids segfaults when there are no voxels
+    if (pending_points_.leaf_begin() == pending_points_.leaf_end()) {
+        return cloud; // Return an empty cloud
+    }
+    pending_points_.getVoxelCentroids(cloud.points);
     return cloud;
 }
 
@@ -73,9 +82,10 @@ bool CollectPoints::inside_any_surface(const Point &point) const {
     return surface_points_.radiusSearch(toLabeledPoint(point), point_inside_threshold_, neighbors, distances, 1) > 0;
 }
 
-CollectPoints::CloudIndexPair CollectPoints::pending_points_within(const Eigen::Affine3f &center,
-                                                                   const Eigen::Vector3f &extents) {
-    //pcl::ScopeTime st("CollectPoints::pending_points_within");
+// TODO refactor and/or rename to reflect the fact that this removes points within the extents, but not the padding
+std::tuple<CollectPoints::CloudIndexPair, std::vector<int>>
+CollectPoints::pending_points_within(const Eigen::Affine3f &center, const Eigen::Vector3f &extents, double padding) {
+    // pcl::ScopeTime st("CollectPoints::pending_points_within");
     auto result = std::make_pair(get_pending_points(), pcl::PointIndices());
     Eigen::Vector3f xyz, rpy;
     pcl::getTranslationAndEulerAngles(center, xyz[0], xyz[1], xyz[2], rpy[0], rpy[1], rpy[2]);
@@ -83,13 +93,18 @@ CollectPoints::CloudIndexPair CollectPoints::pending_points_within(const Eigen::
     pcl::CropBox<Point> crop;
 
     crop.setInputCloud(boost::shared_ptr<PointCloud>(&result.first, null_deleter()));
-    crop.setMax({extents[0], extents[1], extents[2], 1});
-    crop.setMin({-extents[0], -extents[1], -extents[2], 1});
+    crop.setMax({extents[0] + padding, extents[1] + padding, extents[2] + padding, 1});
+    crop.setMin({-(extents[0] + padding), -(extents[1] + padding), -(extents[2] + padding), 1});
     crop.setTranslation(xyz);
     crop.setRotation(rpy);
     crop.filter(result.second.indices);
 
-    return result;
+    std::vector<int> pts_to_remove;
+    crop.setMax({extents[0], extents[1], extents[2], 1});
+    crop.setMin({-extents[0], -extents[1], -extents[2], 1});
+    crop.filter(pts_to_remove);
+
+    return std::make_tuple(result, pts_to_remove);
 }
 
 void CollectPoints::surfaces_within(const Eigen::Affine3f &center, const Eigen::Vector3f &extents,
@@ -153,4 +168,13 @@ void CollectPoints::remove_surface(uint32_t label) {
         leaf_indices.erase(remove_posn, leaf_indices.end());
     }
     ROS_DEBUG_STREAM("Removed " << n_removed << " points with label " << label << " from the surfaces octree");
+}
+
+void CollectPoints::remove_voxels_at_points(const PointCloud &points, std::vector<int> &indices) {
+    for (const std::size_t i : indices) {
+        // use .at for bounds check
+        if (pending_points_.isVoxelOccupiedAtPoint(points.at(i))) {
+            pending_points_.deleteVoxelAtPoint(points.at(i));
+        }
+    }
 }

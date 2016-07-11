@@ -30,6 +30,8 @@ public:
     typedef surface_types::Surface Surface;
     typedef surface_types::Surfaces Surfaces;
 
+    typedef std::pair<PointCloud, pcl::PointIndices> CloudIndexPair;
+
     SurfaceDetection(double discretization, double perpendicular_dist, double parallel_dist, double point_inside_threshold, double mls_radius,
                      unsigned int min_pts_in_surface, double min_plane_width, double alpha, float extrusion_distance,
                      std::string target_frame, std::string camera_frame);
@@ -49,6 +51,7 @@ private:
     std::string target_frame_;
     double parallel_distance_;
     double perpendicular_distance_;
+    double min_width_;
     double sqr_perpendicular_distance_;
     unsigned int min_pts_in_surface_;
 
@@ -60,6 +63,9 @@ private:
     ExpandSurfaces expand_surfaces_;
     DetectSurfaces detect_surfaces_;
     BuildSurface build_surface_;
+
+    std::future<void> cleanup_done_;
+    std::set<uint32_t> expansion_skipped_;
 
     // Private methods
     void add_or_update_surface(Surface &updated_surface, const SurfaceVisualizationController &p);
@@ -77,6 +83,7 @@ private:
                     const std::function<void(Maybe::Maybe<Surface>)> &callback);
 
     Surface get_surface(uint32_t surface_id) const;
+
 };
 }
 #endif // PROJECT_SURFACEDETECTION_H

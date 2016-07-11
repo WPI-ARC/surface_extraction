@@ -100,7 +100,7 @@ class BuildSurface {
     typedef surface_types::Surface Surface;
 
 public:
-    BuildSurface(double perpendicular_distance, double parallel_distance, double alpha, float extrude_distance);
+    BuildSurface(double perpendicular_distance, double parallel_distance, double point_inside_d, double alpha, float extrude_distance);
 
     void build_updated_surface(const Surface &old_surface, const SurfaceVisualizationController &p,
                                const std::function<void(BuildSurface::Surface)> callback);
@@ -120,6 +120,7 @@ public:
 protected:
     double perpendicular_distance_;
     double parallel_distance_;
+    double point_inside_threshold_;
     double alpha_;
     float extrude_distance_;
 
@@ -153,6 +154,7 @@ private:
                                        const SurfaceVisualizationController &p) const;
 
     PointCloud get_boundary_from_alpha(const Alpha_shape_2 &shape, const Eigen::Affine3f &transform) const;
+
 };
 
 #endif // PROJECT_BuildSurfaces_H

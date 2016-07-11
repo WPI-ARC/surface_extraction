@@ -35,6 +35,9 @@ struct Surface {
     std::vector<pcl::Vertices> polygons;
     shape_msgs::Mesh mesh;
 
+    // Not part of the message
+    std::size_t inliers_at_last_computation_ = 0;
+
 public:
     Surface() : id(0), color(), inliers(), model(), pose(), boundary(), polygons(), mesh() {}
 
@@ -109,8 +112,9 @@ public:
 
         assert(boundary.size() == 0 && "Attempted to validate a partial surface with non-empty boundary");
         assert(polygons.size() == 0 && "Attempted to validate a partial surface with non-empty polygons");
-        assert(mesh.vertices.size() == 0 && "Attempted to validate a partial surface with non-empty mesh (vertices)");
-        assert(mesh.triangles.size() == 0 && "Attempted to validate a partial surface with non-empty mesh (triangles)");
+        // NOTE I now allow meshes in partial surfaces because of mesh re-use
+//        assert(mesh.vertices.size() == 0 && "Attempted to validate a partial surface with non-empty mesh (vertices)");
+//        assert(mesh.triangles.size() == 0 && "Attempted to validate a partial surface with non-empty mesh (triangles)");
     }
 
     bool is_complete() const {

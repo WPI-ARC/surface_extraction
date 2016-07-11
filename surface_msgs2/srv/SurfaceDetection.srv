@@ -2,3 +2,4 @@ geometry_msgs/Pose center
 geometry_msgs/Vector3 extents
 ---
 surface_msgs2/Surface[] surfaces
+duration computation_time

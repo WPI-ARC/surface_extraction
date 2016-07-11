@@ -14,6 +14,8 @@ namespace pcl {
     class PointIndices;
 }
 
+#include <pcl/octree/impl/octree_base.hpp>
+
 class CollectPoints {
     typedef pcl::PointXYZ Point;
     typedef pcl::PointCloud<Point> PointCloud;
@@ -35,13 +37,16 @@ public:
 
     bool inside_any_surface(const Point &point) const;
 
-    CloudIndexPair pending_points_within(const Eigen::Affine3f &center, const Eigen::Vector3f &extents);
+    std::tuple<CloudIndexPair, std::vector<int>> pending_points_within(const Eigen::Affine3f &center,
+                                                                       const Eigen::Vector3f &extents, double padding);
 
     void surfaces_within(const Eigen::Affine3f &center, const Eigen::Vector3f &extents, const std::function<void(uint32_t)> callback);
 
     void add_surface(const PointCloud &points, uint32_t label);
 
     void remove_surface(uint32_t label);
+
+    void remove_voxels_at_points(const PointCloud &points, std::vector<int> &indices);
 
 protected:
     double perpendicular_dist_;

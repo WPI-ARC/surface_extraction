@@ -45,7 +45,8 @@ public:
 
     template <typename Message, typename Func>
     void with_publisher(std::string name, Func function) const {
-        if (!nh_ptr_) return;
+        // Note nh_ptr is a smart pointer to a raw pointer; the smart pointer always exist but check the inner pointer
+        if (!*nh_ptr_) return;
 
         std::map<std::string, ros::Publisher>::iterator pub_it = pubs_->find(name);
 
@@ -200,7 +201,7 @@ public:
         this->poses(name, ps);
     }
 
-    void polygons(std::string name, surface_types::Surface &surface) const {
+    void polygons(std::string name, const surface_types::Surface &surface) const {
         with_marker_publisher([=](const ros::Publisher &pub) {
             visualization_msgs::Marker m;
             m.header.frame_id = frame_;
@@ -233,7 +234,7 @@ public:
         });
     }
 
-    void mesh(std::string name, surface_types::Surface &surface) const {
+    void mesh(std::string name, const surface_types::Surface &surface) const {
         with_marker_publisher([=](const ros::Publisher &pub) {
             visualization_msgs::Marker marker;
             marker.header.stamp = ros::Time::now();
@@ -288,7 +289,7 @@ public:
         });
     }
 
-    void pose(std::string name, surface_types::Surface &surface) const {
+    void pose(std::string name, const surface_types::Surface &surface) const {
         with_marker_publisher([=](const ros::Publisher &pub) {
             visualization_msgs::Marker marker;
             marker.header.stamp = ros::Time::now();

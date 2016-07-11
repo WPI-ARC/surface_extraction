@@ -34,8 +34,9 @@ DetectSurfaces::DetectSurfaces(double perpendicular_dist, double parallel_dist, 
     assert(min_points_per_surface_ >= 3);
 }
 
-void DetectSurfaces::detect_surfaces(const CloudIndexPair &input_pre_filtering, const SurfaceVisualizationController &p,
-                                     std::function<void(Indices, Model, Eigen::Affine3f)> callback) {
+std::vector<int> DetectSurfaces::detect_surfaces(const CloudIndexPair &input_pre_filtering,
+                                                 const SurfaceVisualizationController &p,
+                                                 std::function<void(Indices, Model, Eigen::Affine3f)> callback) {
     //pcl::ScopeTime st("DetectSurfaces::detect_surfaces");
     auto input = radius_filter(input_pre_filtering);
     auto normals = get_normals(input);
@@ -62,6 +63,8 @@ void DetectSurfaces::detect_surfaces(const CloudIndexPair &input_pre_filtering, 
 
     int n_regions = 0, n_planes = 0, n_euclidean = 0, n_filtered = 0;
 
+    std::vector<int> used_indices;
+
     // Welcome to callback hell!
     region_segmentation(normals, normal_search, [&, this](Indices region) {
         n_regions++;
@@ -81,7 +84,12 @@ void DetectSurfaces::detect_surfaces(const CloudIndexPair &input_pre_filtering, 
                                                                      << " points, but it had " << normals->size());
                         assert(false && "Normals cloud has the wrong number of points");
                     }
-                    callback(surfaces_pcl_utils::reindex(input.second, segment), model, transform);
+
+                    auto inlier_indices = surfaces_pcl_utils::reindex(input.second, segment);
+                    used_indices.reserve(used_indices.size() + inlier_indices.indices.size());
+                    std::copy(inlier_indices.indices.begin(), inlier_indices.indices.end(), std::back_inserter(used_indices));
+
+                    callback(inlier_indices, model, transform);
                 });
             });
         });
@@ -92,6 +100,8 @@ void DetectSurfaces::detect_surfaces(const CloudIndexPair &input_pre_filtering, 
 
     p.points<pcl::PointXYZRGB>("new_planes", make_segment_colored_cloud(normals, planes));
     p.poses("plane_transforms", tfs);
+
+    return used_indices;
 }
 
 DetectSurfaces::CloudIndexPair DetectSurfaces::radius_filter(const CloudIndexPair &input) {
@@ -277,27 +287,31 @@ void DetectSurfaces::find_transform_and_filter(NormalCloud::Ptr &normals, pcl::P
 
     auto tf_inverse = tf.inverse();
 
-    // Note: Don't start at zero, because if there aren't points around zero that incorrectly increases the spread
-    float max_y = std::numeric_limits<float>::min(), min_y = std::numeric_limits<float>::max();
-    float max_z = std::numeric_limits<float>::min(), min_z = std::numeric_limits<float>::max();
-    for (const int point_idx : inliers.indices) {
-        Normal pt = pcl::transformPoint((*normals)[point_idx], tf_inverse);
+    if (true) { // TODO: Configuration parameter to enable width check
+        // Note: Don't start at zero, because if there aren't points around zero that incorrectly increases the spread
+        float max_y = std::numeric_limits<float>::min(), min_y = std::numeric_limits<float>::max();
+        float max_z = std::numeric_limits<float>::min(), min_z = std::numeric_limits<float>::max();
+        for (const int point_idx : inliers.indices) {
+            Normal pt = pcl::transformPoint((*normals)[point_idx], tf_inverse);
 
-        max_y = std::max(max_y, pt.y);
-        min_y = std::min(min_y, pt.y);
-        max_z = std::max(max_z, pt.z);
-        min_z = std::min(min_z, pt.z);
-    }
+            max_y = std::max(max_y, pt.y);
+            min_y = std::min(min_y, pt.y);
+            max_z = std::max(max_z, pt.z);
+            min_z = std::min(min_z, pt.z);
+        }
 
-    assert((max_z - min_z) * perpendicular_distance_ && "Z-spread was not less than twice the perpendicular distance");
+        assert((max_z - min_z) * perpendicular_distance_ && "Z-spread was not less than twice the perpendicular distance");
 
-    if (max_y - min_y < min_plane_width_) {
-        return;
+        if (max_y - min_y < min_plane_width_) {
+            return;
+        }
     }
 
     // Make sure the orientation of the transform puts the sensor origin in +z direction
-    auto origin_tf = tf.inverse() * normals->sensor_origin_.head<3>();
+    Eigen::Vector3f origin_tf = tf * normals->sensor_origin_.head<3>();
+    ROS_DEBUG_STREAM("Sensor origin relative to plane: " << origin_tf.transpose());
     if (origin_tf[2] < 0) {
+        ROS_DEBUG_STREAM("Flippin' transform");
         // Rotate by pi around the y axis to flip the transform
         tf.rotate(Eigen::AngleAxisf(M_PI, Eigen::Vector3f::UnitY()));
     }

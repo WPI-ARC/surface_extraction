@@ -13,19 +13,19 @@
 
 namespace surface_detection {
 
-SurfaceDetection::SurfaceDetection(double discretization, double perpendicular_dist, double parallel_dist, double point_inside_threshold,
-                                   double mls_radius, unsigned int min_pts_in_surface, double min_plane_width,
-                                   double alpha, float extrusion_distance, std::string target_frame,
-                                   std::string camera_frame)
-    : target_frame_(target_frame), parallel_distance_(parallel_dist), perpendicular_distance_(perpendicular_dist),
+SurfaceDetection::SurfaceDetection(double discretization, double perpendicular_dist, double parallel_dist,
+                                   double point_inside_threshold, double mls_radius, unsigned int min_pts_in_surface,
+                                   double min_plane_width, double alpha, float extrusion_distance,
+                                   std::string target_frame, std::string camera_frame)
+    : target_frame_(target_frame), parallel_distance_(parallel_dist), perpendicular_distance_(perpendicular_dist), min_width_(min_plane_width),
       sqr_perpendicular_distance_(perpendicular_dist * perpendicular_dist), min_pts_in_surface_(min_pts_in_surface),
       // State
       surfaces_(),
       // Implementation
       collect_points_(discretization, perpendicular_dist, point_inside_threshold, target_frame, camera_frame),
-      expand_surfaces_(perpendicular_dist, parallel_dist),
+      expand_surfaces_(perpendicular_dist, parallel_dist, discretization),
       detect_surfaces_(perpendicular_dist, parallel_dist, mls_radius, min_pts_in_surface, min_plane_width),
-      build_surface_(perpendicular_dist, parallel_dist, alpha, extrusion_distance) {}
+      build_surface_(perpendicular_dist, parallel_dist, point_inside_threshold, alpha, extrusion_distance) {}
 
 void SurfaceDetection::add_start_surface(double discretization, double start_surface_extent_x,
                                          double start_surface_extent_y, const SurfaceVisualizationController &p) {
@@ -33,23 +33,26 @@ void SurfaceDetection::add_start_surface(double discretization, double start_sur
     coeff.values = {0, 0, 1, 0};
     Eigen::Affine3f pose = Eigen::Affine3f::Identity();
     PointCloud pts;
-    for (float x = -start_surface_extent_x; x < start_surface_extent_x; x += discretization) {
-        for (float y = -start_surface_extent_y; y < start_surface_extent_y; y += discretization) {
+    for (float x = -static_cast<float>(start_surface_extent_x); x < start_surface_extent_x; x += discretization) {
+        for (float y = -static_cast<float>(start_surface_extent_y); y < start_surface_extent_y; y += discretization) {
             Point pt;
             pt.x = x;
             pt.y = y;
             pts.push_back(pt);
         }
     }
-    build_surface_.build_new_surface(
-        std::move(pts), std::move(coeff), std::move(pose), p,
-        [&, this](Surface updated_surface) { this->add_or_update_surface(updated_surface, p); });
+    build_surface_.build_new_surface(std::move(pts), std::move(coeff), std::move(pose), p,
+                                     [&, this](Surface updated_surface) {
+                                         this->add_or_update_surface(updated_surface, p);
+                                         expansion_skipped_.insert(updated_surface.id);
+                                     });
 }
 
 SurfaceDetection::Surfaces SurfaceDetection::detect_surfaces_within(const Eigen::Affine3f &center,
                                                                     const Eigen::Vector3f &extents,
                                                                     const SurfaceVisualizationController &p) {
-    // pcl::ScopeTime st("SurfaceDetection::detect_surfaces_within");
+    pcl::ScopeTime st("SurfaceDetection::detect_surfaces_within");
+    bool optimistic = true;  // TODO parameter
 
     float roll, pitch, yaw;
     pcl::getEulerAngles(center, roll, pitch, yaw);
@@ -60,8 +63,20 @@ SurfaceDetection::Surfaces SurfaceDetection::detect_surfaces_within(const Eigen:
     Surfaces new_surfaces;
     new_surfaces.header.frame_id = target_frame_;
 
+    if (cleanup_done_.valid()) {
+        auto start = std::chrono::steady_clock::now();
+        cleanup_done_.wait();
+        auto time = std::chrono::steady_clock::now() - start;
+        //        if (time > std::chrono::milliseconds(50)) {
+        ROS_DEBUG_STREAM("Waited " << std::chrono::duration_cast<std::chrono::milliseconds>(time).count()
+                                   << "ms for the previous run's cleanup");
+        //        }
+    }
+
     // Get points to process
-    auto input = collect_points_.pending_points_within(center, extents);
+    CloudIndexPair input;
+    std::vector<int> indices_to_remove;
+    std::tie(input, indices_to_remove) = collect_points_.pending_points_within(center, extents, min_width_);
     ROS_DEBUG_STREAM("Processing " << input.second.indices.size() << " points");
     p.pair("input_to_detection", input);
 
@@ -69,28 +84,34 @@ SurfaceDetection::Surfaces SurfaceDetection::detect_surfaces_within(const Eigen:
     collect_points_.surfaces_within(center, extents, [&, this](uint32_t surface_id) {
         const auto existing_surface = get_surface(surface_id);
         existing_surface.validate();
-        this->find_merge(existing_surface, new_surfaces.surfaces, [&, this](Maybe::Maybe<Surface> merged) {
-            if (merged.Valid()) {
-                merged.Get().validate();
-                ROS_DEBUG_STREAM(merged.Get().print_color()
-                                 << "Merged existing surface " << merged.Get().id << " (" << merged.Get().inliers.size()
-                                 << " points) with existing surface " << existing_surface.print_color() << "surface "
-                                 << existing_surface.id << " (" << existing_surface.inliers.size() << " points)");
-                this->remove_surface(existing_surface, p);
-                ROS_WARN_STREAM(merged.Get().print_color()
-                                << "Found a merged surface before expanding or detecting -- is that expected?");
-                new_surfaces.update_surface(merged.Get());
-            } else {
-                ROS_DEBUG_STREAM(existing_surface.print_color() << "Added existing surface " << existing_surface.id);
+        //        this->find_merge(existing_surface, new_surfaces.surfaces, [&, this](Maybe::Maybe<Surface> merged) {
+        //            if (merged.Valid()) {
+        //                merged.Get().validate();
+        //                ROS_DEBUG_STREAM(merged.Get().print_color()
+        //                                 << "Merged existing surface " << merged.Get().id << " (" <<
+        //                                 merged.Get().inliers.size()
+        //                                 << " points) with existing surface " << existing_surface.print_color() <<
+        //                                 "surface "
+        //                                 << existing_surface.id << " (" << existing_surface.inliers.size() << "
+        //                                 points)");
+        //                this->remove_surface(existing_surface, p);
+        //                ROS_WARN_STREAM(merged.Get().print_color()
+        //                                << "Found a merged surface before expanding or detecting -- is that
+        //                                expected?");
+        //                new_surfaces.update_surface(merged.Get());
+        //            } else {
+        ROS_DEBUG_STREAM(existing_surface.print_color() << "Added existing surface " << existing_surface.id);
 
-                // Then this surface should be added with no modification
-                new_surfaces.add_surface(existing_surface);
-            }
-        });
+        // Then this surface should be added with no modification
+        new_surfaces.add_surface(existing_surface);
+        //            }
+        //        });
     });
     ROS_DEBUG_STREAM("Started with " << new_surfaces.surfaces.size() << " existing surfaces");
 
-    if (new_surfaces.surfaces.size() == 0) {
+    if (optimistic) {
+        ROS_DEBUG_STREAM("Optimistic mode does not require expanding existing surfaces");
+    } else if (new_surfaces.surfaces.size() == 0) {
         ROS_DEBUG_STREAM("Not doing expansion because there are no surfaces");
     } else if (input.second.indices.size() < 3) {
         ROS_DEBUG_STREAM("Not enough points to do expansion (" << input.second.indices.size() << ")");
@@ -98,7 +119,9 @@ SurfaceDetection::Surfaces SurfaceDetection::detect_surfaces_within(const Eigen:
         auto indices_before = input.second.indices.size();
         input.second = expand_surfaces_.expand_surfaces(new_surfaces.surfaces, input, [&, this](Surface s_expanded) {
             s_expanded.validate();
-            ROS_DEBUG_STREAM(s_expanded.print_color() << "Expanded existing surface " << s_expanded.id);
+            ROS_DEBUG_STREAM(s_expanded.print_color()
+                             << "Expanded existing surface " << s_expanded.id << " by "
+                             << s_expanded.inliers.size() - surfaces_[s_expanded.id].inliers.size() << " points");
             this->find_merge(s_expanded, new_surfaces.surfaces, [&, this](Maybe::Maybe<Surface> merged) {
                 if (merged.Valid()) {
                     merged.Get().validate();
@@ -119,47 +142,83 @@ SurfaceDetection::Surfaces SurfaceDetection::detect_surfaces_within(const Eigen:
                                                                            << input.second.indices.size());
     }
 
-    if (input.second.indices.size() < min_pts_in_surface_) {
-        ROS_DEBUG_STREAM("Not enough remaining indices do run detection (" << input.second.indices.size() << ")");
+    if (input.first.size() < 3) {
+        ROS_DEBUG_STREAM("Not enough points in the entire pending points cloud to expand new surfaces");
     } else {
-        // Build a search object for the input points
-        pcl::search::KdTree<Point> search(false);
-        search.setInputCloud(boost::shared_ptr<PointCloud>(&input.first, null_deleter()),
-                             boost::shared_ptr<std::vector<int>>(&input.second.indices, null_deleter()));
+        std::vector<Surface> surfaces_to_expand;
 
-        // Make some shorter names for the sake of formatting
-        using Indices = pcl::PointIndices;
+        if (!expansion_skipped_.empty()) {
+            for (const auto existing_surface : new_surfaces.surfaces) {
+                auto found = expansion_skipped_.find(existing_surface.id);
+                if (found != expansion_skipped_.end()) {
+                    surfaces_to_expand.push_back(existing_surface);
+                    expansion_skipped_.erase(found);
+                }
+            }
 
-        // Detect new surfaces
-        detect_surfaces_.detect_surfaces(
-            input, p, [&](Indices indices, pcl::ModelCoefficients model, Eigen::Affine3f tf) {
-                // Expect expand_new_surface to always find more points because of how detection works
-                expand_surfaces_.expand_new_surface(input.first, search, indices, tf, [&, this](pcl::PointIndices in) {
-                    PointCloud new_inliers_cloud(input.first, in.indices);
-                    assert(new_inliers_cloud.size() && "Got an empty cloud for some reason");
+            ROS_DEBUG_STREAM("Expanding " << surfaces_to_expand.size()
+                                          << " existing surfaces whose expansion was skipped");
+        }
 
-                    this->find_merge(
-                        new_inliers_cloud, model, new_surfaces.surfaces, [&, this](Maybe::Maybe<Surface> merged) {
-                            if (merged.Valid()) {
-                                merged.Get().validate();
-                                ROS_DEBUG_STREAM(merged.Get().print_color() << "Merged surface " << merged.Get().id
-                                                                            << " (" << merged.Get().inliers.size()
-                                                                            << " points) with un-numbered new surface ("
-                                                                            << new_inliers_cloud.size() << " points)");
-                                assert(merged.Get().model.values.size() == 4 &&
-                                       "Find merge returned a surface without a valid model");
-                                new_surfaces.update_surface(merged.Get());
-                            } else {
-                                Surface new_surface = build_surface_.new_partial_surface(new_inliers_cloud, model, tf);
-                                ROS_DEBUG_STREAM(new_surface.print_color() << "Got a brand new surface with id "
-                                                                           << new_surface.id);
-                                new_surfaces.add_surface(new_surface);
-                            }
-                        });
+        std::vector<int> used_points;
+        if (input.second.indices.size() < min_pts_in_surface_) {
+            ROS_DEBUG_STREAM("Not enough remaining indices to try to find new surfaces (" << input.second.indices.size() << ")");
+        } else {
+            // Make some shorter names for the sake of formatting
+            using Indices = pcl::PointIndices;
+            using Model = pcl::ModelCoefficients;
+
+            // Detect new surfaces
+            used_points =
+                detect_surfaces_.detect_surfaces(input, p, [&](Indices indices, Model model, Eigen::Affine3f tf) {
+                    PointCloud new_inliers_cloud(input.first, indices.indices);
+                    surfaces_to_expand.push_back(build_surface_.new_partial_surface(new_inliers_cloud, model, tf));
                 });
-            });
-        ROS_DEBUG_STREAM("Detected a total of " << new_surfaces.surfaces.size() << " surfaces");
+            ROS_DEBUG_STREAM("Detected a total of " << new_surfaces.surfaces.size() << " surfaces");
+        }
+
+        if (!surfaces_to_expand.empty()) {
+            // If optimistic, expand into all the points; otherwise, only the ones in the given bounding box
+            auto all_indices = optimistic ? surfaces_pcl_utils::all_indices(input.first) : input.second.indices;
+            std::sort(all_indices.begin(), all_indices.end());
+            std::sort(used_points.begin(), used_points.end());
+
+            std::vector<int> indices_for_expansion;
+            indices_for_expansion.reserve(all_indices.size() - used_points.size());
+            std::set_difference(all_indices.begin(), all_indices.end(), used_points.begin(), used_points.end(),
+                                std::back_inserter(indices_for_expansion));
+
+            // Build a search object for the input points
+            pcl::search::KdTree<Point> search(false);
+            search.setInputCloud(boost::shared_ptr<PointCloud>(&input.first, null_deleter()),
+                                 boost::shared_ptr<std::vector<int>>(&indices_for_expansion, null_deleter()));
+
+            // Expand new surfaces
+            for (auto ds : surfaces_to_expand) {
+                // Expect expand_new_surface to always find more points because of how detection works
+                expand_surfaces_.expand_new_surface(input.first, search, ds, [&, this](pcl::PointIndices in) {
+                    ds.inliers += PointCloud(input.first, in.indices);
+
+                    this->find_merge(ds, new_surfaces.surfaces, [&, this](Maybe::Maybe<Surface> merged) {
+                        if (merged.Valid()) {
+                            merged.Get().validate();
+                            ROS_DEBUG_STREAM(merged.Get().print_color()
+                                             << "Merged surface " << merged.Get().id << " ("
+                                             << merged.Get().inliers.size() << " points) with " << ds.print_color()
+                                             << "new surface " << ds.id << " (" << ds.inliers.size() << " points)");
+                            assert(merged.Get().model.values.size() == 4 &&
+                                   "Find merge returned a surface without a valid model");
+                            new_surfaces.update_surface(merged.Get());
+                        } else {
+                            ROS_DEBUG_STREAM(ds.print_color() << "Got a brand new surface with id " << ds.id);
+                            new_surfaces.add_surface(ds);
+                        }
+                    });
+                });
+            }
+        }
     }
+    std::vector<Surface> needs_update;
 
     // Final pass through surfaces to turn all partial surfaces into complete surfaces
     for (const auto &surface : new_surfaces.surfaces) {
@@ -167,11 +226,24 @@ SurfaceDetection::Surfaces SurfaceDetection::detect_surfaces_within(const Eigen:
             build_surface_.build_updated_surface(surface, p, [&, this](Surface updated_surface) {
                 ROS_DEBUG_STREAM(updated_surface.print_color() << "Built new or updated surface "
                                                                << updated_surface.id);
-                this->add_or_update_surface(updated_surface, p);
                 new_surfaces.update_surface(updated_surface);
+                needs_update.push_back(updated_surface);
             });
         }
     }
+
+    cleanup_done_ = std::async(
+        std::launch::async,
+        std::bind([this, &p](std::vector<Surface> &to_update, PointCloud &rm_pts, std::vector<int> &rm_indices) {
+            ROS_DEBUG_STREAM_NAMED("cleanup", "Running cleanup");
+            collect_points_.remove_voxels_at_points(rm_pts, rm_indices);
+            ROS_DEBUG_STREAM_NAMED("cleanup", "Removed voxels of points inside query box");
+            for (auto &surface : to_update) {
+                add_or_update_surface(surface, p);
+                ROS_DEBUG_STREAM_NAMED("cleanup", "Removed voxels of points inside surface " << surface.id);
+            }
+            ROS_DEBUG_STREAM_NAMED("cleanup", "Cleanup done");
+        }, std::move(needs_update), std::move(input.first), std::move(indices_to_remove)));
 
     return new_surfaces;
 }
@@ -190,17 +262,18 @@ void SurfaceDetection::find_merge(const PointCloud &inliers, const pcl::ModelCoe
     pcl::search::KdTree<Point> search(false);
     for (auto &surface : surfaces) {
         surface.validate();
+
         if (ignore_surface.Valid() && surface.id == ignore_surface.GetImmutable()) {
             continue;
         }
 
         auto candidate_normal = Eigen::Map<const Eigen::Vector3f>(surface.model.values.data());
-        if (std::abs(std::acos(test_normal.dot(candidate_normal))) > 0.1) {
-            // If the angle between the planes is greater than 1 radian, don't merge
+        if (std::abs(std::acos(test_normal.dot(candidate_normal))) > (5. * M_PI / 180.)) {
+            // If the angle between the planes is greater than a given angle, don't merge
             continue;
         }
 
-        if (std::abs(model.values[3] - surface.model.values[3]) > 2 * perpendicular_distance_) {
+        if (std::abs(model.values[3] - surface.model.values[3]) > perpendicular_distance_) {
             // If the surfaces are too far away, don't merge
             continue;
         }
@@ -226,6 +299,10 @@ void SurfaceDetection::find_merge(const PointCloud &inliers, const pcl::ModelCoe
                     new_surface.pose = surface.pose;   // Use the pose of the original
                     new_surface.inliers = surface.inliers;
                     new_surface.inliers += inliers;
+
+                    // TODO Integrate mesh-reuse much better
+                    new_surface.inliers_at_last_computation_ = surface.inliers_at_last_computation_;
+                    new_surface.mesh = surface.mesh;
 
                     //                    ROS_INFO_STREAM(surface.print_color() << "Merging surface " << surface.id << "
                     //                    with "
@@ -271,6 +348,7 @@ void SurfaceDetection::add_or_update_surface(Surface &updated_surface, const Sur
 
     bool is_new = surfaces_.find(updated_surface.id) == surfaces_.end();
     surfaces_[updated_surface.id] = updated_surface;
+
     auto tiling = build_surface_.tile_surface(updated_surface);
 
     if (!is_new) {
@@ -283,5 +361,6 @@ void SurfaceDetection::add_or_update_surface(Surface &updated_surface, const Sur
     p.mesh("mesh", updated_surface);
     p.polygons("polygons", updated_surface);
     p.pose("pose", updated_surface);
+    p.plane_normal("normal", updated_surface);
 }
 }

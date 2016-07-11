@@ -45,9 +45,9 @@ inline bool add_to(std::set<std::pair<uint32_t, uint32_t>> &set, T &it) {
     return set.insert(std::minmax({edge_source(it)->info().pcl_index, edge_target(it)->info().pcl_index})).second;
 };
 
-BuildSurface::BuildSurface(double perpendicular_distance, double parallel_distance, double alpha,
+BuildSurface::BuildSurface(double perpendicular_distance, double parallel_distance, double point_inside_d, double alpha,
                            float extrude_distance)
-    : perpendicular_distance_(perpendicular_distance), parallel_distance_(parallel_distance), alpha_(alpha),
+    : perpendicular_distance_(perpendicular_distance), parallel_distance_(parallel_distance), point_inside_threshold_(point_inside_d), alpha_(alpha),
       extrude_distance_(extrude_distance), next_id_(1), color_gen_(0.5, 0.99) {}
 
 void BuildSurface::build_updated_surface(const Surface &old_surface, const SurfaceVisualizationController &p,
@@ -62,6 +62,7 @@ void BuildSurface::build_updated_surface(const Surface &old_surface, const Surfa
 
     // Inliers was already updated
     updated_surface.inliers = old_surface.inliers;
+    updated_surface.inliers_at_last_computation_ = old_surface.inliers_at_last_computation_;
 
     // The rest needs to be computed
     updated_surface.model = find_model_for_inliers(updated_surface.inliers, old_surface.model);
@@ -117,7 +118,14 @@ void BuildSurface::build_updated_surface(const Surface &old_surface, const Surfa
     //    }
 
     //    p.polygons("polygons", updated_surface);
-    updated_surface.mesh = create_trimesh(triangulation, pose_float);
+    if (updated_surface.mesh.triangles.empty() || // TODO add param for this magic number
+            updated_surface.inliers.size() - updated_surface.inliers_at_last_computation_ > 100) {
+        updated_surface.mesh = create_trimesh(triangulation, pose_float);
+        updated_surface.inliers_at_last_computation_ = updated_surface.inliers.size();
+    } else {
+        updated_surface.mesh = old_surface.mesh;
+        ROS_DEBUG_STREAM("Re-using mesh because there have only been " << updated_surface.inliers.size() - updated_surface.inliers_at_last_computation_ << " new inliers");
+    }
     //    p.mesh("mesh", updated_surface);
 
     callback(updated_surface);
@@ -143,6 +151,7 @@ void BuildSurface::build_new_surface(PointCloud inliers, pcl::ModelCoefficients 
     new_surface.polygons = simplify_polygons(triangulation);
     //    p.polygons("polygons", new_surface);
     new_surface.mesh = create_trimesh(triangulation, pose);
+    new_surface.inliers_at_last_computation_ = new_surface.inliers.size();
     //    p.mesh("mesh", new_surface);
 
     callback(new_surface);
@@ -223,16 +232,18 @@ pcl::ModelCoefficients BuildSurface::optimize_model_for_inliers(const PointCloud
 
     assert(!coefficients.hasNaN() && "Optimized coefficients had NaN");
 
-    auto points_outside = inliers.size() - sacmodel.countWithinDistance(coefficients, perpendicular_distance_);
+    if (false) {
+        auto points_outside = inliers.size() - sacmodel.countWithinDistance(coefficients, perpendicular_distance_);
 
-    if (points_outside > 0.05 * inliers.size()) {
-        ROS_ERROR_STREAM("New model excludes " << static_cast<double>(points_outside) / inliers.size() * 100
-                                               << "% of points (" << points_outside << " / " << inliers.size() << ")");
-        // TODO Incorporate the idea that a surface construction can fail, and make it fail here
-        // (probably using exceptions)
-    } else if (points_outside > 0.01 * inliers.size()) {
-        ROS_WARN_STREAM("New model excludes " << static_cast<double>(points_outside) / inliers.size() * 100
-                                              << "% of points (" << points_outside << " / " << inliers.size() << ")");
+        if (points_outside > 0.05 * inliers.size()) {
+            ROS_ERROR_STREAM("New model excludes " << static_cast<double>(points_outside) / inliers.size() * 100
+                             << "% of points (" << points_outside << " / " << inliers.size() << ")");
+            // TODO Incorporate the idea that a surface construction can fail, and make it fail here
+            // (probably using exceptions)
+        } else if (points_outside > 0.01 * inliers.size()) {
+            ROS_WARN_STREAM("New model excludes " << static_cast<double>(points_outside) / inliers.size() * 100
+                            << "% of points (" << points_outside << " / " << inliers.size() << ")");
+        }
     }
 
     pcl::ModelCoefficients ret;
@@ -249,14 +260,15 @@ pcl::ModelCoefficients BuildSurface::find_model_for_inliers(const PointCloud &cl
     assert(new_model.values.size() == 4 && "optimize_model_for_inliers gave an invalid model");
     assert(prev_model.values.size() == 4 && "find_model_for_inliers recieved invalid prev_model");
 
-    // STL way to get dot product (probably unrolled under -03 ?)
-    auto d = std::inner_product(new_model.values.begin(), new_model.values.begin() + 3, prev_model.values.begin(), 0);
+    float d = Eigen::Map<const Eigen::Vector3f>(new_model.values.data()).dot(Eigen::Map<const Eigen::Vector3f>(prev_model.values.data()));
 
     // If dot product is less than 0, the vectors (which represent normal vectors) were more than 90deg apart
     if (d < 0) {
-        // Note reference type of loop variable
-        for (auto &val : new_model.values)
-            val *= -1;
+        ROS_DEBUG_STREAM("Flipping optimized plane normal");
+        new_model.values[0] *= -1;
+        new_model.values[1] *= -1;
+        new_model.values[2] *= -1;
+        new_model.values[3] *= -1;
     }
 
     return new_model;
@@ -755,14 +767,15 @@ BuildSurface::PointCloud BuildSurface::tile_surface(const Surface &surface) {
     Point min, max;
     pcl::getMinMax3D(boundary_flat, min, max);
 
-    double discretization = perpendicular_distance_ / 4.; // arbitrary
+    double discretization = perpendicular_distance_ / 2.; // arbitrary
     auto n = 0;
     // Offset by discretization / 2 to avoid testing the minimum, which will by definition be outside
     for (float y = static_cast<float>(min.y + discretization / 2.); y < max.y; y += discretization) {
         // X is the widest axis so iterate x most rapidly (not sure if that makes any difference w/ this algorithm)
         for (float x = static_cast<float>(min.x + discretization / 2.); x < max.x; x += discretization) {
-            // For each (x, y) pair, skip if it's outside, or if it's within perpendicular_distance_ of any edge
-            if (surface_geom_utils::is_xy_in_tiling(surface, boundary_flat, x, y, perpendicular_distance_)) {
+            // For each (x, y) pair, skip if it's outside, or if it's within perpendicular_distance_ plus the maximum
+            // possible discretization error of any edge
+            if (surface_geom_utils::is_xy_in_tiling(surface, boundary_flat, x, y, point_inside_threshold_ + discretization)) {
                 cloud.push_back(pcl::transformPoint(Point(x, y, 0), surface.pose.cast<float>()));
             }
             n++;

@@ -36,14 +36,13 @@ class ExpandSurfaces {
     typedef std::pair<PointCloud, pcl::PointIndices> CloudIndexPair;
 
 public:
-    ExpandSurfaces(double perpendicular_dist, double parallel_dist);
+    ExpandSurfaces(double perpendicular_dist, double parallel_dist, double disc);
 
     pcl::PointIndices expand_surfaces(const std::vector<Surface> &surfaces, const CloudIndexPair &input,
                                       std::function<void(Surface)> callback);
 
     void expand_new_surface(const PointCloud &points, const pcl::search::Search<Point> &search,
-                            const pcl::PointIndices &inliers, const Eigen::Affine3f &transform,
-                            std::function<void(pcl::PointIndices)> callback);
+                                const Surface &new_surface, std::function<void(pcl::PointIndices)> callback);
 
 private:
     std::set<int> filterWithinRadiusConnected(const PointCloud &cloud, const Search &search,
@@ -59,6 +58,7 @@ private:
 protected:
     double perpendicular_distance_;
     double parallel_distance_;
+    double discretization_;
 };
 
 #endif // PROJECT_EXPANDSURFACES_HPP

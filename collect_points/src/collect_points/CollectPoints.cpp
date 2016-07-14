@@ -10,6 +10,7 @@
 #include <pcl/octree/octree_impl.h>
 #include <pcl/filters/crop_box.h>
 #include <pcl/common/eigen.h>
+#include <pcl/filters/passthrough.h>
 
 // Utils
 #include <arc_utilities/pretty_print.hpp>
@@ -84,9 +85,9 @@ bool CollectPoints::inside_any_surface(const Point &point) const {
 
 // TODO refactor and/or rename to reflect the fact that this removes points within the extents, but not the padding
 std::tuple<CollectPoints::CloudIndexPair, std::vector<int>>
-CollectPoints::pending_points_within(const Eigen::Affine3f &center, const Eigen::Vector3f &extents, double padding) {
+CollectPoints::pending_points_within(const Eigen::Affine3f &center, const Eigen::Vector3f &extents, float padding) {
     // pcl::ScopeTime st("CollectPoints::pending_points_within");
-    auto result = std::make_pair(get_pending_points(), pcl::PointIndices());
+    auto result = std::make_pair(get_pending_points(), std::vector<int>());
     Eigen::Vector3f xyz, rpy;
     pcl::getTranslationAndEulerAngles(center, xyz[0], xyz[1], xyz[2], rpy[0], rpy[1], rpy[2]);
 
@@ -97,9 +98,11 @@ CollectPoints::pending_points_within(const Eigen::Affine3f &center, const Eigen:
     crop.setMin({-(extents[0] + padding), -(extents[1] + padding), -(extents[2] + padding), 1});
     crop.setTranslation(xyz);
     crop.setRotation(rpy);
-    crop.filter(result.second.indices);
+    crop.filter(result.second);
 
     std::vector<int> pts_to_remove;
+    // query box with padding is always a superset of query box without padding
+    crop.setIndices(boost_fake_shared(result.second));
     crop.setMax({extents[0], extents[1], extents[2], 1});
     crop.setMin({-extents[0], -extents[1], -extents[2], 1});
     crop.filter(pts_to_remove);
@@ -109,32 +112,41 @@ CollectPoints::pending_points_within(const Eigen::Affine3f &center, const Eigen:
 
 void CollectPoints::surfaces_within(const Eigen::Affine3f &center, const Eigen::Vector3f &extents,
                                     const std::function<void(uint32_t)> callback) {
+    // Easy optimization: if no surfaces exist, don't call the callback at all
+    if (highest_label_ < 0) {
+        return;
+    }
+
     // First limit to within the radius
-    LabeledPoint search_pt;
-    search_pt.x = center.translation()[0];
-    search_pt.y = center.translation()[1];
-    search_pt.z = center.translation()[2];
+    auto search_pt = surface_utils::pointFromVector<LabeledPoint>(center.translation());
     std::vector<int> indices;
     std::vector<float> sqr_distances_unused;
     // The largest diagonal of the bounding box happens to be equal to the l2 norm
-    surface_points_.radiusSearch(search_pt, extents.norm(), indices, sqr_distances_unused);
+    int n_in_radius = surface_points_.radiusSearch(search_pt, extents.norm(), indices, sqr_distances_unused);
+
+    if (n_in_radius == 0) {
+        return;
+    }
+
+    const auto pts = surface_points_.getInputCloud()->points;
+    const auto tf = center.inverse();
 
     // Make sure each point is unique and within the transform
-    std::set<uint32_t> seen_labels;
-    const auto pts = surface_points_.getInputCloud()->points;
-    auto tf = center.inverse();
+    std::vector<bool> seen_labels(static_cast<std::size_t>(highest_label_) + 1, false);
     for (auto &i : indices) {
-        if (seen_labels.find(pts[i].label) != seen_labels.end()) continue;
+        if (seen_labels[pts[i].label]) continue;
 
         LabeledPoint pt = pcl::transformPoint(pts[i], tf);
         if (std::abs(pt.x) <= extents[0] && std::abs(pt.y) <= extents[1] && std::abs(pt.z) <= extents[2]) {
-            seen_labels.insert(pt.label);
+            seen_labels[pts[i].label] = true;
             callback(pt.label);
         }
     }
 }
 
 void CollectPoints::add_surface(const CollectPoints::PointCloud &points, uint32_t label) {
+    highest_label_ = std::max<int>(highest_label_, label);
+
     for (auto &pt : points.points) {
         LabeledPoint lpt;
         lpt.x = pt.x;
@@ -171,10 +183,24 @@ void CollectPoints::remove_surface(uint32_t label) {
 }
 
 void CollectPoints::remove_voxels_at_points(const PointCloud &points, std::vector<int> &indices) {
-    for (const std::size_t i : indices) {
-        // use .at for bounds check
-        if (pending_points_.isVoxelOccupiedAtPoint(points.at(i))) {
-            pending_points_.deleteVoxelAtPoint(points.at(i));
-        }
-    }
+    // Technically this does do what it says, but not in the way you would expect.
+    // It also has a surprising requirement that points must contain every point currently in the octree
+    auto new_pending_points_cloud = boost::make_shared<PendingPointsOctree::PointCloud>();
+    pcl::PassThrough<Point> filter;
+    filter.setNegative(true);
+    filter.setInputCloud(boost::shared_ptr<const PointCloud>(&points, null_deleter()));
+    filter.setIndices(boost::shared_ptr<std::vector<int>>(&indices, null_deleter()));
+    filter.filter(*new_pending_points_cloud);
+
+    pending_points_cloud_ = new_pending_points_cloud;
+    pending_points_ = PendingPointsOctree(pending_points_.getResolution());
+    pending_points_.setInputCloud(new_pending_points_cloud);
+    pending_points_.addPointsFromInputCloud();
 }
+
+size_t CollectPoints::num_pending_points() {
+    // The VoxelCentroid octree returns one point for each extant leaf
+    return pending_points_.getLeafCount();
+}
+
+

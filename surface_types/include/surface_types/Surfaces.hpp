@@ -2,7 +2,7 @@
 #define surface_types_HPP
 
 #include <pcl/PCLHeader.h>
-#include "Surface.hpp"
+#include "SurfaceData.hpp"
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <surface_msgs2/Surfaces.h>
@@ -16,16 +16,16 @@ struct Surfaces {
 
     pcl::PCLHeader header;
 
-    std::vector<Surface> surfaces;
+    std::vector<SurfaceData> surfaces;
 
 public:
-    void add_surface(const Surface &s) {
+    void add_surface(const SurfaceData &s) {
         s.validate();
 
         surfaces.push_back(s);
     }
 
-    void update_surface(const Surface &s) {
+    void update_surface(const SurfaceData &s) {
         s.validate();
 
         auto posn = find_id(s.id);
@@ -33,9 +33,9 @@ public:
         (*posn) = s;
     }
 
-    std::vector<Surface>::iterator find_id(uint32_t surface_id) {
+    std::vector<SurfaceData>::iterator find_id(uint32_t surface_id) {
         return std::find_if(surfaces.begin(), surfaces.end(),
-                            [&surface_id](const Surface &s) { return s.id == surface_id; });
+                            [&surface_id](const SurfaceData &s) { return s.id == surface_id; });
     }
 
     operator surface_msgs2::Surfaces() const {

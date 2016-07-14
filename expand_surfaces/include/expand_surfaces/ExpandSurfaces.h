@@ -14,7 +14,6 @@
 // Forward declarations
 namespace pcl {
 struct PointXYZ;
-class PointIndices;
 class ModelCoefficients;
 namespace search {
 template <typename PointT>
@@ -22,43 +21,37 @@ class Search;
 }
 }
 
-namespace surface_types {
 class Surface;
-}
 
 class ExpandSurfaces {
     typedef pcl::PointXYZ Point;
     typedef pcl::PointCloud<Point> PointCloud;
-    typedef surface_types::Surface Surface;
 
     typedef pcl::search::Search<Point> Search;
-
-    typedef std::pair<PointCloud, pcl::PointIndices> CloudIndexPair;
 
 public:
     ExpandSurfaces(double perpendicular_dist, double parallel_dist, double disc);
 
-    pcl::PointIndices expand_surfaces(const std::vector<Surface> &surfaces, const CloudIndexPair &input,
-                                      std::function<void(Surface)> callback);
+    void expand_surfaces(const std::vector<Surface> &surfaces, const PointCloud &cloud, std::vector<int> &indices,
+                             std::function<void(Surface)> callback);
 
-    void expand_new_surface(const PointCloud &points, const pcl::search::Search<Point> &search,
-                                const Surface &new_surface, std::function<void(pcl::PointIndices)> callback);
+    void expand_surface(const PointCloud &points, const pcl::search::Search<Point> &search,
+                        const Surface &input_surface, std::function<void(std::vector<int>)> callback);
 
 private:
-    std::set<int> filterWithinRadiusConnected(const PointCloud &cloud, const Search &search,
-                                              const PointCloud &edge_points, const Eigen::Affine3f &tf) const;
-
-    pcl::PointIndices filterWithinRadiusConnected(const PointCloud &cloud, const Search &search,
-                                                  const PointCloud &edge_points, const Eigen::Affine3f &tf,
-                                                  const pcl::PointIndices &remaining_indices) const;
-
-    pcl::PointIndices filterWithinModelDistance(const PointCloud::ConstPtr &input, const pcl::PointIndices &indices,
-                                                const pcl::ModelCoefficients &coeff);
+    std::vector<int> expandAlongPlane(const PointCloud &cloud, const Search &search,
+                                      const PointCloud &edge_points, const Eigen::Affine3f &tf) const;
 
 protected:
     double perpendicular_distance_;
     double parallel_distance_;
     double discretization_;
+
+    std::vector<int> expandAlongPlane(const ExpandSurfaces::PointCloud &cloud,
+                                          const ExpandSurfaces::Search &search,
+                                          const ExpandSurfaces::PointCloud &edge_points,
+                                          const Eigen::Affine3f &tf, std::vector<int> &processed,
+                                          const uint32_t label) const;
 };
 
 #endif // PROJECT_EXPANDSURFACES_HPP

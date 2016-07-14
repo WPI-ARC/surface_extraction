@@ -26,7 +26,7 @@ class CollectPoints {
     typedef pcl::octree::OctreePointCloudSearch<LabeledPoint> SurfacePointsOctree;
     typedef pcl::octree::OctreePointCloudVoxelCentroid<Point> PendingPointsOctree;
 
-    typedef std::pair<PointCloud, pcl::PointIndices> CloudIndexPair;
+    typedef std::pair<PointCloud, std::vector<int>> CloudIndexPair;
 
 public:
     CollectPoints(double discretization, double perpendicular_dist, double point_inside_threshold, std::string target_frame, std::string camera_frame);
@@ -38,7 +38,7 @@ public:
     bool inside_any_surface(const Point &point) const;
 
     std::tuple<CloudIndexPair, std::vector<int>> pending_points_within(const Eigen::Affine3f &center,
-                                                                       const Eigen::Vector3f &extents, double padding);
+                                                                       const Eigen::Vector3f &extents, float padding);
 
     void surfaces_within(const Eigen::Affine3f &center, const Eigen::Vector3f &extents, const std::function<void(uint32_t)> callback);
 
@@ -47,6 +47,8 @@ public:
     void remove_surface(uint32_t label);
 
     void remove_voxels_at_points(const PointCloud &points, std::vector<int> &indices);
+
+    size_t num_pending_points();
 
 protected:
     double perpendicular_dist_;
@@ -60,6 +62,7 @@ protected:
     PendingPointsOctree pending_points_;
     SurfacePointsOctree::PointCloud::Ptr surface_points_cloud_;
     PendingPointsOctree::PointCloud::Ptr pending_points_cloud_;
+    int highest_label_ = -1;
 };
 
 #endif // PROJECT_COLLECTPOINTS_H

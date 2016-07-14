@@ -5,7 +5,7 @@
 #ifndef PROJECT_GEOM_UTILS_HPP
 #define PROJECT_GEOM_UTILS_HPP
 
-#include <surface_types/Surface.hpp>
+#include <surface_types/SurfaceData.hpp>
 
 namespace surface_geom_utils {
 using namespace surface_types;
@@ -22,8 +22,8 @@ bool is_xy_in_tiling(const Surface &surface, const PointCloud &pts, float x, flo
     // For each (x, y) pair, skip if it's outside, or if it's within perpendicular_distance_ of any edge
     bool is_inside = false;
     // PiP algorithm: count segments that cross the ray from the test point along the +x axis
-    // Inside if there is an odd number, outside if there is an even number
-    for (auto &polygon : surface.polygons) {
+    // Inside if there is an odd number, outside if there is an even number (incl. 0)
+    for (auto &polygon : surface.polygons()) {
         auto prev_vertex = polygon.vertices.back();
         for (auto &vertex : polygon.vertices) {
             if (prev_vertex == vertex) continue; // This way it handles explicitly and implicitly closed polygons

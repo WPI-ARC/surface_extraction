@@ -7,7 +7,7 @@
 
 #include <ros/ros.h>
 #include <pcl/point_types.h>
-#include "Surface.hpp"
+#include "SurfaceData.hpp"
 #include <surface_msgs2/SurfaceStamped.h>
 
 namespace surface_types {
@@ -19,7 +19,7 @@ namespace surface_types {
         {}
 
         ::pcl::PCLHeader header;
-        ::surface_types::Surface surface;
+        ::surface_types::SurfaceData surface;
 
 
     public:

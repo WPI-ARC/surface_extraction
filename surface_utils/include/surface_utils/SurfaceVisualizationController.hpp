@@ -82,6 +82,12 @@ public:
             pub.publish(points);
         });
     }
+    template <typename PointT>
+    void points(std::string name, const typename pcl::PointCloud<PointT> &pts, const std::vector<int> &ind) const {
+        if (!nh_ptr_) return; // Avoid possibly-costly point construction if it's not needed
+
+        points<PointT>(name, boost::make_shared<pcl::PointCloud<PointT>>(pts, ind));
+    }
 
     template <typename PointT>
     void pair(std::string name, typename std::pair<pcl::PointCloud<PointT>, pcl::PointIndices> pair) const {
@@ -201,27 +207,27 @@ public:
         this->poses(name, ps);
     }
 
-    void polygons(std::string name, const surface_types::Surface &surface) const {
+    void polygons(std::string name, const Surface &surface) const {
         with_marker_publisher([=](const ros::Publisher &pub) {
             visualization_msgs::Marker m;
             m.header.frame_id = frame_;
             m.header.stamp = ros::Time();
             m.ns = name;
-            m.id = surface.id;
+            m.id = surface.id();
             m.type = visualization_msgs::Marker::LINE_LIST;
             m.action = visualization_msgs::Marker::ADD;
             // m.pose not needed
             m.scale.x = 0.005;
             // m.scale otherwise not needed
-            m.color = surface.color;
-            for (auto polygon : surface.polygons) {
+            m.color = surface.color();
+            for (auto polygon : surface.polygons()) {
                 auto first = m.points.size();
                 // First add two copies of each point
                 for (auto index : polygon.vertices) {
                     geometry_msgs::Point p;
-                    p.x = surface.inliers[index].x;
-                    p.y = surface.inliers[index].y;
-                    p.z = surface.inliers[index].z;
+                    p.x = surface.inliers()[index].x;
+                    p.y = surface.inliers()[index].y;
+                    p.z = surface.inliers()[index].z;
                     m.points.push_back(p);
                     m.points.push_back(p);
                 }
@@ -234,83 +240,83 @@ public:
         });
     }
 
-    void mesh(std::string name, const surface_types::Surface &surface) const {
+    void mesh(std::string name, const Surface &surface) const {
         with_marker_publisher([=](const ros::Publisher &pub) {
             visualization_msgs::Marker marker;
             marker.header.stamp = ros::Time::now();
             marker.header.frame_id = frame_;
             marker.ns = name;
-            marker.id = surface.id;
+            marker.id = surface.id();
             marker.type = visualization_msgs::Marker::TRIANGLE_LIST;
             marker.action = visualization_msgs::Marker::MODIFY;
             // perimeter.pose not needed
             marker.scale.x = 1;
             marker.scale.y = 1;
             marker.scale.z = 1;
-            marker.color = surface.color;
+            marker.color = surface.color();
 
-            marker.points.reserve(surface.mesh.triangles.size() * 3);
-            for (const shape_msgs::MeshTriangle &triangle : surface.mesh.triangles) {
-                marker.points.push_back(surface.mesh.vertices[triangle.vertex_indices[0]]);
-                marker.points.push_back(surface.mesh.vertices[triangle.vertex_indices[1]]);
-                marker.points.push_back(surface.mesh.vertices[triangle.vertex_indices[2]]);
+            marker.points.reserve(surface.mesh().triangles.size() * 3);
+            for (const shape_msgs::MeshTriangle &triangle : surface.mesh().triangles) {
+                marker.points.push_back(surface.mesh().vertices[triangle.vertex_indices[0]]);
+                marker.points.push_back(surface.mesh().vertices[triangle.vertex_indices[1]]);
+                marker.points.push_back(surface.mesh().vertices[triangle.vertex_indices[2]]);
             }
 
             pub.publish(marker);
         });
     }
 
-    void plane_normal(std::string name, surface_types::Surface &surface) const {
+    void plane_normal(std::string name, Surface &surface) const {
         with_marker_publisher([=](const ros::Publisher &pub) {
             visualization_msgs::Marker marker;
             marker.header.stamp = ros::Time::now();
             marker.header.frame_id = frame_;
             marker.ns = name;
-            marker.id = surface.id;
+            marker.id = surface.id();
             marker.type = visualization_msgs::Marker::ARROW;
             marker.action = visualization_msgs::Marker::MODIFY;
             // perimeter.pose not needed
             marker.scale.x = 0.05; // Shaft diameter
             marker.scale.y = 0.1;  // Head diameter
             marker.scale.z = 0;    // Head length, or 0 for default
-            marker.color = surface.color;
+            marker.color = surface.color();
 
             marker.points.resize(2);
             // Start point: d distance along the normal direction
-            marker.points.front().x = -surface.model.values[3] * surface.model.values[0];
-            marker.points.front().y = -surface.model.values[3] * surface.model.values[1];
-            marker.points.front().z = -surface.model.values[3] * surface.model.values[2];
+            marker.points.front().x = -surface.model().values[3] * surface.model().values[0];
+            marker.points.front().y = -surface.model().values[3] * surface.model().values[1];
+            marker.points.front().z = -surface.model().values[3] * surface.model().values[2];
             // End point: d + 0.1 distance along the normal direction
-            marker.points.back().x = (-surface.model.values[3] + 0.5) * surface.model.values[0];
-            marker.points.back().y = (-surface.model.values[3] + 0.5) * surface.model.values[1];
-            marker.points.back().z = (-surface.model.values[3] + 0.5) * surface.model.values[2];
+            marker.points.back().x = (-surface.model().values[3] + 0.5) * surface.model().values[0];
+            marker.points.back().y = (-surface.model().values[3] + 0.5) * surface.model().values[1];
+            marker.points.back().z = (-surface.model().values[3] + 0.5) * surface.model().values[2];
 
             pub.publish(marker);
         });
     }
 
-    void pose(std::string name, const surface_types::Surface &surface) const {
+    void pose(std::string name, const Surface &surface) const {
         with_marker_publisher([=](const ros::Publisher &pub) {
             visualization_msgs::Marker marker;
             marker.header.stamp = ros::Time::now();
             marker.header.frame_id = frame_;
             marker.ns = name;
-            marker.id = surface.id;
+            marker.id = surface.id();
             marker.type = visualization_msgs::Marker::ARROW;
             marker.action = visualization_msgs::Marker::MODIFY;
             // perimeter.pose not needed
             marker.scale.x = 0.05; // Shaft diameter
             marker.scale.y = 0.1;  // Head diameter
             marker.scale.z = 0;    // Head length, or 0 for default
-            marker.color = surface.color;
+            marker.color = surface.color();
 
             marker.points.resize(2);
             // Start point: d distance along the normal direction
-            marker.points.front().x = surface.pose.translation()[0];
-            marker.points.front().y = surface.pose.translation()[1];
-            marker.points.front().z = surface.pose.translation()[2];
+            marker.points.front().x = surface.pose().translation()[0];
+            marker.points.front().y = surface.pose().translation()[1];
+            marker.points.front().z = surface.pose().translation()[2];
             // End point: d + 0.1 distance along the normal direction
-            auto unit = surface.pose * Eigen::Vector3d(0, 0, 0.5);
+            auto unit = surface.pose() * Eigen::Vector3d(0, 0, 0.5);
             marker.points.back().x = unit[0];
             marker.points.back().y = unit[1];
             marker.points.back().z = unit[2];
@@ -327,7 +333,7 @@ public:
             marker.color.b = 0;
             marker.color.a = 1;
             // End point: d + 0.1 distance along the normal direction
-            auto unitx = surface.pose * Eigen::Vector3d(0.25, 0, 0);
+            auto unitx = surface.pose() * Eigen::Vector3d(0.25, 0, 0);
             marker.points.back().x = unitx[0];
             marker.points.back().y = unitx[1];
             marker.points.back().z = unitx[2];
@@ -341,7 +347,7 @@ public:
             marker.color.b = 0;
             marker.color.a = 1;
             // End point: d + 0.1 distance along the normal direction
-            auto unity = surface.pose * Eigen::Vector3d(0, 0.25, 0);
+            auto unity = surface.pose() * Eigen::Vector3d(0, 0.25, 0);
             marker.points.back().x = unity[0];
             marker.points.back().y = unity[1];
             marker.points.back().z = unity[2];

@@ -18,6 +18,14 @@ namespace surface_utils {
         return lpt;
     }
 
+    template <typename PointT, typename VectorT>
+    PointT pointFromVector(const VectorT &v) {
+        PointT p;
+        p.x = v[0];
+        p.y = v[1];
+        p.z = v[2];
+        return p;
+    };
 }
 
 #endif //PROJECT_CONVERSIONS_HPP

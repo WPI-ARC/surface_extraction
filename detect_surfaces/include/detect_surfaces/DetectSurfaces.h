@@ -23,7 +23,7 @@ class Search;
 class SurfaceVisualizationController;
 
 namespace surface_types {
-class Surface;
+class SurfaceData;
 }
 
 class DetectSurfaces {
@@ -37,20 +37,19 @@ class DetectSurfaces {
     typedef pcl::PointCloud<Normal> NormalCloud;
     typedef pcl::search::Search<Normal> NormalSearch;
 
-    typedef std::pair<PointCloud, pcl::PointIndices> CloudIndexPair;
+    typedef surface_types::SurfaceData Surface;
 
 public:
     DetectSurfaces(double perpendicular_dist, double parallel_dist, double mls_radius,
                    unsigned int min_points_per_surface, double min_plane_width);
 
-    std::vector<int> detect_surfaces(const CloudIndexPair &input, const SurfaceVisualizationController &p,
-                                std::function<void(pcl::PointIndices, pcl::ModelCoefficients,
-                                                   Eigen::Affine3f)> callback);
+    void detect_surfaces(const PointCloud &input, std::vector<int> &indices,
+                         const SurfaceVisualizationController &p, std::function<void(std::vector<int>, pcl::ModelCoefficients, Eigen::Affine3f)> callback);
 
 private:
-    CloudIndexPair radius_filter(const CloudIndexPair &input);
+    std::vector<int> radius_filter(const PointCloud &cloud, const std::vector<int> &indices);
 
-    NormalCloud::Ptr get_normals(const CloudIndexPair &input);
+    NormalCloud::Ptr get_normals(const PointCloud &cloud, const std::vector<int> &indices);
 
     unsigned long region_segmentation(NormalCloud::Ptr &normals, NormalSearch::Ptr &search,
                                       std::function<void(pcl::PointIndices)> callback);

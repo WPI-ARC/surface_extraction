@@ -15,7 +15,8 @@ set(CATKIN_PACKAGES
     shape_msgs
     roscpp
     surface_msgs2
-    eigen_conversions)
+    eigen_conversions
+    surface_utils)
 find_package(catkin REQUIRED COMPONENTS ${CATKIN_PACKAGES})
 
 ## System dependencies are found with CMake's conventions
@@ -148,7 +149,7 @@ include_directories(
 #    include/surface_types/PointClusters.hpp
 #    include/surface_types/Polygons.hpp
 #    include/surface_types/Segment.hpp
-#    include/surface_types/Surface.hpp
+#    include/surface_types/SurfaceData.hpp
 #    include/surface_types/SurfaceMesh.hpp
 #    include/surface_types/SurfaceMeshStamped.hpp
 #    include/surface_types/Surfaces.hpp

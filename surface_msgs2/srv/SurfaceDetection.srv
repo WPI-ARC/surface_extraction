@@ -1,5 +1,28 @@
+# Constants to specify the level of detail of different components of the returned surfaces.
+# ALWAYS is the default, and means that component should always be computed and provided
+# IF_AVAILABLE means that the component should be provided if it has already been computed, otherwise it shouldn't
+# NEVER means that the component should never be provided, even if it has already been provided
+# Note that some components may be required, and neither IF_AVAILABLE or NEVER guarantee that the component will not
+# be computed
+uint32 ALWAYS=0
+uint32 IF_AVAILABLE=1
+uint32 NEVER=2
+
 geometry_msgs/Pose center
 geometry_msgs/Vector3 extents
+
+# Set this to NEVER to avoid sending inliers, which significantly reduces message size. For this option,
+# IF_AVAILABLE is identical to ALWAYS because inliers are always available.
+uint32 provide_inliers
+
+# Set this to NEVER to avoid sending boundary and polygons, which will slightly reduce message size.
+# Set this to NEVER or IF_AVAILABLE to avoid computing the boundary or polygons, which reduces computation time
+uint32 provide_shape
+
+# Set this to NEVER to avoid sending meshes, which will slightly reduce message size.
+# Set this to NEVER or IF_AVAILABLE to avoid computing the meshes, which reduces computation time
+uint32 provide_mesh
 ---
 surface_msgs2/Surface[] surfaces
+uint32[] deleted_surfaces
 duration computation_time

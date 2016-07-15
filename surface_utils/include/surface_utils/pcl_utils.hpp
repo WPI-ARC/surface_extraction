@@ -158,6 +158,10 @@ namespace surfaces_pcl_utils {
         reindexed.indices = reindex(indexer.indices, indices.indices);
         return reindexed;
     }
+
+    inline Eigen::Map<const Eigen::Vector3f> model_normal(const pcl::ModelCoefficients &model) {
+        return Eigen::Map<const Eigen::Vector3f>(model.values.data());
+    }
 }
 
 #endif //SURFACES_UTILS_HPP

@@ -48,7 +48,13 @@ public:
 
     void remove_voxels_at_points(const PointCloud &points, std::vector<int> &indices);
 
+    void remove_pending_points_near_surfaces();
+
     size_t num_pending_points();
+
+    void update_surfaces(LabeledCloud::Ptr cloud);
+
+    LabeledCloud get_surface_points();
 
 protected:
     double perpendicular_dist_;
@@ -63,6 +69,7 @@ protected:
     SurfacePointsOctree::PointCloud::Ptr surface_points_cloud_;
     PendingPointsOctree::PointCloud::Ptr pending_points_cloud_;
     int highest_label_ = -1;
+
 };
 
 #endif // PROJECT_COLLECTPOINTS_H

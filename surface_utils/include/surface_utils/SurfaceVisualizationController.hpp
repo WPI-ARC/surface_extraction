@@ -225,9 +225,9 @@ public:
                 // First add two copies of each point
                 for (auto index : polygon.vertices) {
                     geometry_msgs::Point p;
-                    p.x = surface.inliers()[index].x;
-                    p.y = surface.inliers()[index].y;
-                    p.z = surface.inliers()[index].z;
+                    p.x = surface.boundary()[index].x;
+                    p.y = surface.boundary()[index].y;
+                    p.z = surface.boundary()[index].z;
                     m.points.push_back(p);
                     m.points.push_back(p);
                 }
@@ -266,7 +266,7 @@ public:
         });
     }
 
-    void plane_normal(std::string name, Surface &surface) const {
+    void plane_normal(std::string name, const Surface &surface) const {
         with_marker_publisher([=](const ros::Publisher &pub) {
             visualization_msgs::Marker marker;
             marker.header.stamp = ros::Time::now();

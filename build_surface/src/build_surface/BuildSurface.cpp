@@ -22,13 +22,15 @@
 #include <pcl/search/kdtree.h>
 #include <build_surface/cgal_utils.hpp>
 
+using surfaces_pcl_utils::model_normal;
+
 BuildSurface::BuildSurface(double perpendicular_distance, double parallel_distance, double point_inside_d, double alpha,
                            float extrude_distance)
     : perpendicular_distance_(perpendicular_distance), parallel_distance_(parallel_distance),
       point_inside_threshold_(point_inside_d), alpha_(alpha), extrude_distance_(extrude_distance) {}
 
 std::tuple<pcl::ModelCoefficients, Eigen::Affine3d>
-BuildSurface::compute_model_pose(const Surface &surface, const SurfaceVisualizationController &v) const {
+BuildSurface::compute_plane(const Surface &surface, const SurfaceVisualizationController &v) const {
     auto model = find_model_for_inliers(surface.inliers(), surface.model_approx());
     auto pose = adjust_pose_to_model(surface.pose_approx(), model, v);
 
@@ -36,15 +38,20 @@ BuildSurface::compute_model_pose(const Surface &surface, const SurfaceVisualizat
 }
 
 std::tuple<BuildSurface::PointCloud, BuildSurface::Polygons>
-BuildSurface::compute_boundary_polygons(const Surface &surface, const SurfaceVisualizationController &v) const {
+BuildSurface::compute_shape(const Surface &surface, const SurfaceVisualizationController &v) const {
     auto cgal_points = get_cgal_2d_points(surface.inliers(), surface.pose_float());
-    auto pair = find_boundary_and_polygons(surface.inliers(), cgal_points, surface.pose_float(), v);
 
-    // Simplify the polygons
-    auto triangulation = get_simplified_triangulation(cgal_points, std::get<1>(pair));
-    std::get<1>(pair) = simplify_polygons(triangulation);
-
-    return pair;
+    PointCloud boundary;
+    Polygons polygons;
+    Reindexer reindexer;
+    std::tie(boundary, polygons, reindexer) =
+        compute_boundary_polygons(surface.inliers(), surface.pose_float(), cgal_points, v);
+    reindex_polygons(polygons, reindexer);
+    assert(std::all_of(polygons.begin(), polygons.end(), [&boundary](const pcl::Vertices &poly) {
+        return std::all_of(poly.vertices.begin(), poly.vertices.end(),
+                           boost::bind(std::less<uint32_t>(), _1, boundary.size()));
+    }) && "Reindexer gave an index outside of the boundary cloud");
+    return std::make_pair(boundary, polygons);
 }
 
 shape_msgs::Mesh BuildSurface::compute_mesh(const Surface &surface) const {
@@ -55,18 +62,38 @@ shape_msgs::Mesh BuildSurface::compute_mesh(const Surface &surface) const {
 
 std::tuple<pcl::ModelCoefficients, Eigen::Affine3d, BuildSurface::PointCloud, BuildSurface::Polygons, shape_msgs::Mesh>
 BuildSurface::compute_derived(Surface surface, const SurfaceVisualizationController &v) const {
-    auto plane = compute_model_pose(surface, v);
-    auto pose_float = std::get<1>(plane).cast<float>();
+    auto plane = compute_plane(surface, v);
+    auto shape_and_mesh = compute_shape_and_mesh(surface, std::get<1>(plane).cast<float>(), v);
 
-    auto cgal_points = get_cgal_2d_points(surface.inliers(), pose_float);
-    auto shape = compute_boundary_polygons(surface.inliers(), pose_float, cgal_points, v);
-
-    auto mesh = std::make_tuple(compute_mesh(cgal_points, std::get<1>(shape), pose_float));
-
-    return std::tuple_cat(plane, shape, mesh);
+    return std::tuple_cat(plane, shape_and_mesh);
 }
 
-std::tuple<BuildSurface::PointCloud, BuildSurface::Polygons>
+std::tuple<BuildSurface::PointCloud, BuildSurface::Polygons, shape_msgs::Mesh>
+BuildSurface::compute_shape_and_mesh(Surface surface, const SurfaceVisualizationController &v) const {
+    return compute_shape_and_mesh(surface, surface.pose_float(), v);
+};
+
+std::tuple<BuildSurface::PointCloud, BuildSurface::Polygons, shape_msgs::Mesh>
+BuildSurface::compute_shape_and_mesh(Surface surface, const Eigen::Affine3f &pose_float,
+                                     const SurfaceVisualizationController &v) const {
+    auto cgal_points = get_cgal_2d_points(surface.inliers(), pose_float);
+    PointCloud boundary;
+    Polygons polygons;
+    Reindexer reindexer;
+    std::tie(boundary, polygons, reindexer) = compute_boundary_polygons(surface.inliers(), pose_float, cgal_points, v);
+
+    auto mesh = compute_mesh(cgal_points, polygons, pose_float);
+
+    reindex_polygons(polygons, reindexer);
+    assert(std::all_of(polygons.begin(), polygons.end(), [&boundary](const pcl::Vertices &poly) {
+        return std::all_of(poly.vertices.begin(), poly.vertices.end(),
+                           boost::bind(std::less<uint32_t>(), _1, boundary.size()));
+    }) && "Reindexer gave an index outside of the boundary cloud");
+
+    return std::make_tuple(boundary, polygons, mesh);
+};
+
+std::tuple<BuildSurface::PointCloud, BuildSurface::Polygons, BuildSurface::Reindexer>
 BuildSurface::compute_boundary_polygons(const PointCloud &cloud, const Eigen::Affine3f &pose,
                                         const std::vector<CustomPoint> &cgal_points,
                                         const SurfaceVisualizationController &v) const {
@@ -88,66 +115,67 @@ pcl::ModelCoefficients BuildSurface::optimize_model_for_inliers(const PointCloud
                                                                 const pcl::ModelCoefficients &model) const {
     auto weighted_inliers = boost::make_shared<PointCloud>();
     std::vector<int> weighted_indices;
+//! TODO Add a config parameter for whether to use weighted PCA (currently disabled because it might be broken)
+#ifdef USE_WEIGHTED_PCA
     // Weight each point by its number of neighbors. This is a proxy for weighting it by its distance to the edge.
-    if (false) { //! TODO Add a config parameter for this
-        // TODO: Figure out when it's faster to use a pcl::search::BruteForce
-        pcl::search::KdTree<Point> search(false);
-        search.setInputCloud(boost::shared_ptr<const PointCloud>(&inliers, null_deleter()));
-        Eigen::ArrayXf weights(inliers.size());
-        Eigen::RowVector4f mean = Eigen::RowVector4f::Zero();
-        const auto radius = 2 * parallel_distance_;
-        for (std::size_t i = 0; i < inliers.size(); i++) {
-            std::vector<int> neighbors;
-            std::vector<float> neighbor_sqr_dist;
-            search.radiusSearch(static_cast<int>(i), radius, neighbors, neighbor_sqr_dist);
-            weights[i] = std::accumulate(neighbor_sqr_dist.begin(), neighbor_sqr_dist.end(), 0.f);
+    // TODO: Figure out when it's faster to use a pcl::search::BruteForce
+    pcl::search::KdTree<Point> search(false);
+    search.setInputCloud(boost::shared_ptr<const PointCloud>(&inliers, null_deleter()));
+    Eigen::ArrayXf weights(inliers.size());
+    Eigen::RowVector4f mean = Eigen::RowVector4f::Zero();
+    const auto radius = 2 * parallel_distance_;
+    for (std::size_t i = 0; i < inliers.size(); i++) {
+        std::vector<int> neighbors;
+        std::vector<float> neighbor_sqr_dist;
+        search.radiusSearch(static_cast<int>(i), radius, neighbors, neighbor_sqr_dist);
+        weights[i] = std::accumulate(neighbor_sqr_dist.begin(), neighbor_sqr_dist.end(), 0.f);
 
-            // Don't use zero-weighted points to optimize model
-            if (weights[i] != 0) {
-                weighted_indices.push_back(static_cast<int>(i));
-            } else {
-                ROS_DEBUG_STREAM("Index " << i << " weight was zero");
-            }
-
-            ROS_ERROR_STREAM_COND(std::isnan(weights[i]), "Got a NaN weight " << i
-                                                                              << ", n_neighbors: " << neighbors.size());
-
-            mean += inliers[i].getVector4fMap();
-
-            ROS_ERROR_STREAM_COND(mean.hasNaN(), "Mean was NaN at " << i << ", pt "
-                                                                    << inliers[i].getVector4fMap().transpose());
+        // Don't use zero-weighted points to optimize model
+        if (weights[i] != 0) {
+            weighted_indices.push_back(static_cast<int>(i));
+        } else {
+            ROS_DEBUG_STREAM("Index " << i << " weight was zero");
         }
-        mean /= inliers.size();
-        weights /= weights.maxCoeff();
 
-        // Build the weighted vector
-        weighted_inliers->resize(inliers.size()); // Important, or the next line will be invalid
-        ROS_DEBUG_STREAM("Inliers size " << inliers.size() << " map size " << inliers.getMatrixXfMap().cols()
-                                         << " weights size " << weights.rows());
-        assert(inliers.getMatrixXfMap().cols() == weights.rows() && "Weighting vector constructed wrong");
-        // This line is all Eigen arrays (coefficient-wise ops) except the (1-w) * mean, which is the outer vector
-        // product
-        const auto weighted_pts = inliers.getMatrixXfMap().array().rowwise() * weights.transpose();
-        ROS_DEBUG_STREAM("weights: " << weights.rows() << "x" << weights.cols());
-        const auto subweights = 1 - weights;
-        ROS_DEBUG_STREAM("subweights: " << subweights.rows() << "x" << subweights.cols());
-        const auto subweightsm = subweights.matrix();
-        ROS_DEBUG_STREAM("subweightsm: " << subweightsm.rows() << "x" << subweightsm.cols());
-        const auto weightmean = subweightsm * mean;
-        ROS_DEBUG_STREAM("weightmean: " << weightmean.rows() << "x" << weightmean.cols());
-        const auto weightmeana = weightmean.array();
-        ROS_DEBUG_STREAM("weightmeana: " << weightmeana.rows() << "x" << weightmeana.cols());
-        const auto weighted_means = weightmeana.transpose();
-        ROS_DEBUG_STREAM("weighted_means: " << weighted_means.rows() << "x" << weighted_means.cols());
-        ROS_DEBUG_STREAM("Pts is " << weighted_pts.rows() << "x" << weighted_pts.cols() << ", means is "
-                                   << weighted_means.rows() << "x" << weighted_means.cols());
-        weighted_inliers->getMatrixXfMap() = weighted_pts + weighted_means;
+        ROS_ERROR_STREAM_COND(std::isnan(weights[i]), "Got a NaN weight " << i
+                                                                          << ", n_neighbors: " << neighbors.size());
 
-        assert(!weighted_inliers->getMatrixXfMap().hasNaN() && "Some of the inliers were NaN :/");
-    } else {
-        weighted_inliers = boost::make_shared<PointCloud>(inliers); // Makes a copy
-        weighted_indices = surfaces_pcl_utils::all_indices(inliers);
+        mean += inliers[i].getVector4fMap();
+
+        ROS_ERROR_STREAM_COND(mean.hasNaN(), "Mean was NaN at " << i << ", pt "
+                                                                << inliers[i].getVector4fMap().transpose());
     }
+    mean /= inliers.size();
+    weights /= weights.maxCoeff();
+
+    // Build the weighted vector
+    weighted_inliers->resize(inliers.size()); // Important, or the next line will be invalid
+    ROS_DEBUG_STREAM("Inliers size " << inliers.size() << " map size " << inliers.getMatrixXfMap().cols()
+                                     << " weights size " << weights.rows());
+    assert(inliers.getMatrixXfMap().cols() == weights.rows() && "Weighting vector constructed wrong");
+    // This line is all Eigen arrays (coefficient-wise ops) except the (1-w) * mean, which is the outer vector
+    // product
+    const auto weighted_pts = inliers.getMatrixXfMap().array().rowwise() * weights.transpose();
+    ROS_DEBUG_STREAM("weights: " << weights.rows() << "x" << weights.cols());
+    const auto subweights = 1 - weights;
+    ROS_DEBUG_STREAM("subweights: " << subweights.rows() << "x" << subweights.cols());
+    const auto subweightsm = subweights.matrix();
+    ROS_DEBUG_STREAM("subweightsm: " << subweightsm.rows() << "x" << subweightsm.cols());
+    const auto weightmean = subweightsm * mean;
+    ROS_DEBUG_STREAM("weightmean: " << weightmean.rows() << "x" << weightmean.cols());
+    const auto weightmeana = weightmean.array();
+    ROS_DEBUG_STREAM("weightmeana: " << weightmeana.rows() << "x" << weightmeana.cols());
+    const auto weighted_means = weightmeana.transpose();
+    ROS_DEBUG_STREAM("weighted_means: " << weighted_means.rows() << "x" << weighted_means.cols());
+    ROS_DEBUG_STREAM("Pts is " << weighted_pts.rows() << "x" << weighted_pts.cols() << ", means is "
+                               << weighted_means.rows() << "x" << weighted_means.cols());
+    weighted_inliers->getMatrixXfMap() = weighted_pts + weighted_means;
+
+    assert(!weighted_inliers->getMatrixXfMap().hasNaN() && "Some of the inliers were NaN :/");
+#else
+    weighted_inliers = boost::make_shared<PointCloud>(inliers); // Makes a copy
+    weighted_indices = surfaces_pcl_utils::all_indices(inliers);
+#endif
     // Note that operations such as countWithinDistance on this sacmodel operate on the weighted cloud
     pcl::SampleConsensusModelPlane<Point> sacmodel(weighted_inliers);
 
@@ -190,8 +218,7 @@ pcl::ModelCoefficients BuildSurface::find_model_for_inliers(const PointCloud &cl
     assert(new_model.values.size() == 4 && "optimize_model_for_inliers gave an invalid model");
     assert(prev_model.values.size() == 4 && "find_model_for_inliers recieved invalid prev_model");
 
-    float d = Eigen::Map<const Eigen::Vector3f>(new_model.values.data())
-                  .dot(Eigen::Map<const Eigen::Vector3f>(prev_model.values.data()));
+    float d = model_normal(new_model).dot(model_normal(prev_model));
 
     // If dot product is less than 0, the vectors (which represent normal vectors) were more than 90deg apart
     if (d < 0) {
@@ -279,7 +306,7 @@ std::vector<CustomPoint> BuildSurface::get_cgal_2d_points(const PointCloud &clou
     return cgal_points;
 }
 
-std::tuple<BuildSurface::PointCloud, BuildSurface::Polygons>
+std::tuple<BuildSurface::PointCloud, BuildSurface::Polygons, BuildSurface::Reindexer>
 BuildSurface::find_boundary_and_polygons(const PointCloud &cloud, const std::vector<CustomPoint> &cgal_points,
                                          const Eigen::Affine3f &transform,
                                          const SurfaceVisualizationController &p) const {
@@ -291,7 +318,9 @@ BuildSurface::find_boundary_and_polygons(const PointCloud &cloud, const std::vec
     for (auto start_edge = shape.alpha_shape_edges_begin(); start_edge != shape.alpha_shape_edges_end(); ++start_edge) {
     }
     // Find the boundary indices
-    BuildSurface::PointCloud boundary_points = get_boundary_from_alpha(shape, transform, p);
+    BuildSurface::PointCloud boundary_points;
+    Reindexer reindexer;
+    std::tie(boundary_points, reindexer) = get_boundary_from_alpha(shape, transform);
 
     std::set<std::pair<uint32_t, uint32_t>> visited;
 
@@ -373,27 +402,22 @@ BuildSurface::find_boundary_and_polygons(const PointCloud &cloud, const std::vec
         std::iter_swap(polygons.begin(), polygons.begin() + largest_polygon_id);
     }
 
-    return std::make_tuple(boundary_points, polygons);
+    return std::make_tuple(boundary_points, polygons, reindexer);
 }
 
-BuildSurface::PointCloud BuildSurface::get_boundary_from_alpha(const Alpha_shape_2 &shape,
-                                                               const Eigen::Affine3f &transform,
-                                                               const SurfaceVisualizationController &p) const {
+std::tuple<BuildSurface::PointCloud, BuildSurface::Reindexer>
+BuildSurface::get_boundary_from_alpha(const Alpha_shape_2 &shape, const Eigen::Affine3f &transform) const {
     PointCloud boundary_points;
+    Reindexer reindex_map;
     assert(shape.get_mode() == Alpha_shape_2::REGULARIZED &&
            "get_boundary_from_alpha assumes shape will be regularized");
     for (auto it = shape.alpha_shape_vertices_begin(); it != shape.alpha_shape_vertices_end(); ++it) {
         Point pt((*it)->point().x(), (*it)->point().y(), 0);
+        reindex_map[(*it)->info().pcl_index] = boundary_points.size();
         boundary_points.push_back(transformPoint(pt, transform));
     }
 
-    return boundary_points;
-}
-
-BuildSurface::PointCloud BuildSurface::get_boundary_from_alpha(const Alpha_shape_2 &shape,
-                                                               const Eigen::Affine3f &transform) const {
-    SurfaceVisualizationController p;
-    return get_boundary_from_alpha(shape, transform, p);
+    return std::make_tuple(boundary_points, reindex_map);
 }
 
 CT BuildSurface::get_simplified_triangulation(const std::vector<CustomPoint> &cgal_points,
@@ -403,19 +427,25 @@ CT BuildSurface::get_simplified_triangulation(const std::vector<CustomPoint> &cg
         auto i_to_pt = [&cgal_points](uint32_t i) { return cgal_points[i].first; };
         // I'm very smudge about correctly using tranform iterators
         // This overload of insert_constraint inserts a closed (if closed=true) polyline
-        // IMPORTANT: The last boolean tells ct to close the polygon (it's implicitly closed)
+        auto close = pcl_polygon.vertices.front() != pcl_polygon.vertices.back();
         auto cid =
             ct.insert_constraint(boost::iterators::make_transform_iterator(pcl_polygon.vertices.begin(), i_to_pt),
-                                 boost::iterators::make_transform_iterator(pcl_polygon.vertices.end(), i_to_pt), true);
+                                 boost::iterators::make_transform_iterator(pcl_polygon.vertices.end(), i_to_pt), close);
 
         // Can't pass in info to insert_constraint for some reason, so set it after
         auto it = ct.vertices_in_constraint_begin(cid);
         for (auto &index : pcl_polygon.vertices) {
-            assert(it != ct.vertices_in_constraint_end(cid));
-            assert((*it)->point() == cgal_points[index].first);
+            assert(it != ct.vertices_in_constraint_end(cid) && "Polygon was larger than the constraint");
+            assert((*it)->point() == cgal_points[index].first && "Polygon indices out of sync with cgal points vector");
             (*it)->info() = cgal_points[index].second;
             ++it;
         }
+        if (close) {
+            assert((*it)->point() == cgal_points[pcl_polygon.vertices.front()].first &&
+                   "Constraint was not closed correctly (last Point does not equal first pPoint)");
+            ++it;
+        }
+        assert(it == ct.vertices_in_constraint_end(cid) && "Polygon was shorter than the constraint");
     }
 
     // TODO should alpha be re-used for this?
@@ -538,19 +568,10 @@ void BuildSurface::add_mesh_face(shape_msgs::Mesh &mesh, const Eigen::Affine3f &
     }
 }
 
-BuildSurface::PointCloud BuildSurface::find_surface_boundary(const BuildSurface::PointCloud &inliers,
-                                                             const Eigen::Affine3f &transform) const {
-    auto cgal_points = get_cgal_2d_points(inliers, transform);
-
-    Alpha_shape_2 shape(cgal_points.begin(), cgal_points.end(), alpha_, Alpha_shape_2::REGULARIZED);
-
-    return get_boundary_from_alpha(shape, transform);
-}
-
-BuildSurface::PointCloud BuildSurface::tile_surface(const Surface &surface) const {
-    PointCloud cloud, cloud_out;
+BuildSurface::LabeledCloud BuildSurface::tile_surface(const Surface &surface) const {
+    LabeledCloud cloud, cloud_out;
     PointCloud boundary_flat;
-    pcl::transformPointCloud(surface.inliers(), boundary_flat, surface.pose().inverse());
+    pcl::transformPointCloud(surface.boundary(), boundary_flat, surface.pose().inverse());
 
     assert(std::all_of(boundary_flat.begin(), boundary_flat.end(), [](Point p) { return p.z < .5 && p.z > -.5; }));
 
@@ -558,7 +579,6 @@ BuildSurface::PointCloud BuildSurface::tile_surface(const Surface &surface) cons
     pcl::getMinMax3D(boundary_flat, min, max);
 
     double discretization = perpendicular_distance_ / 2.; // arbitrary
-    auto n = 0;
     // Offset by discretization / 2 to avoid testing the minimum, which will by definition be outside
     for (float y = static_cast<float>(min.y + discretization / 2.); y < max.y; y += discretization) {
         // X is the widest axis so iterate x most rapidly (not sure if that makes any difference w/ this algorithm)
@@ -567,12 +587,25 @@ BuildSurface::PointCloud BuildSurface::tile_surface(const Surface &surface) cons
             // possible discretization error of any edge
             if (surface_geom_utils::is_xy_in_tiling(surface, boundary_flat, x, y,
                                                     point_inside_threshold_ + discretization)) {
-                cloud.push_back(Point(x, y, 0));
+                LabeledPoint pt;
+                pt.x = x;
+                pt.y = y;
+                pt.z = 0;
+                pt.label = surface.id();
+                cloud.push_back(pt);
             }
-            n++;
         }
     }
 
     pcl::transformPointCloud(cloud, cloud_out, surface.pose_float());
     return cloud_out;
+}
+
+void BuildSurface::reindex_polygons(Polygons &polygons, const Reindexer &reindexer) const {
+    // Reindex the polygon to point to boundary instead of cloud
+    for (auto &polygon : polygons) {
+        for (std::size_t i = 0; i < polygon.vertices.size(); i++) {
+            polygon.vertices[i] = reindexer.at(polygon.vertices[i]);
+        }
+    }
 }

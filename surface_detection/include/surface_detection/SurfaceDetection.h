@@ -27,20 +27,28 @@ public:
     typedef pcl::PointXYZ Point;
     typedef pcl::PointCloud<Point> PointCloud;
 
+    typedef pcl::PointXYZRGB PointRGB;
+    typedef pcl::PointCloud<PointRGB> RGBCloud;
+
     typedef surface_types::Surfaces Surfaces;
 
     typedef std::pair<PointCloud, pcl::PointIndices> CloudIndexPair;
 
-    SurfaceDetection(double discretization, double perpendicular_dist, double parallel_dist, double point_inside_threshold, double mls_radius,
-                     unsigned int min_pts_in_surface, double min_plane_width, double alpha, float extrusion_distance, bool optimistic,
+    SurfaceDetection(double discretization, double perpendicular_dist, double parallel_dist,
+                     double point_inside_threshold, double mls_radius, unsigned int min_pts_in_surface,
+                     double min_plane_width, double alpha, float extrusion_distance, bool optimistic,
                      std::string target_frame, std::string camera_frame);
 
     void add_points(const PointCloud::ConstPtr &points) { collect_points_.add_points(points); }
 
     PointCloud get_pending_points() { return collect_points_.get_pending_points(); }
+    RGBCloud get_surface_points();
 
     Surfaces detect_surfaces_within(const Eigen::Affine3f &center, const Eigen::Vector3f &extents,
-                                    const SurfaceVisualizationController &v);
+                                                      const Surface::ProvideLevel provide_inliers,
+                                                      const Surface::ProvideLevel provide_shape,
+                                                      const Surface::ProvideLevel provide_mesh,
+                                                      const SurfaceVisualizationController &v);
 
     void add_start_surface(float start_surface_extent_x, float start_surface_extent_y,
                            const SurfaceVisualizationController &p);
@@ -70,9 +78,7 @@ private:
     std::future<void> cleanup_done_;
     std::set<uint32_t> expansion_skipped_;
 
-    // Private methods
-    void add_or_update_surface(Surface &updated_surface, const SurfaceVisualizationController &p);
-    void remove_surface(const Surface &surface, const SurfaceVisualizationController &p);
+    void remove_surface(const Surface &surface);
 
     // This is the delegated-to one that does the work
     void find_merge(const PointCloud &inliers, const pcl::ModelCoefficients &model,
@@ -88,6 +94,16 @@ private:
     Surface get_surface(uint32_t surface_id) const;
 
     void wait_for_cleanup() const;
+
+    void publish_deleted_surfaces(const std::vector<uint32_t> &ids, const SurfaceVisualizationController &v) const;
+    void publish_updated_surfaces(const std::vector<uint32_t> &ids, const SurfaceVisualizationController &v) const;
+
+    void update_collector_surfaces();
+
+    void cleanup(PointCloud &processed_pts, std::vector<uint32_t> &deleted, std::vector<int> &rm_indices,
+                 std::vector<int> labels, const SurfaceVisualizationController &v);
+
+    void add_surface(Surface surface);
 };
 }
 #endif // PROJECT_SURFACEDETECTION_H

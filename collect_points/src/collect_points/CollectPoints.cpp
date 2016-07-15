@@ -155,10 +155,10 @@ void CollectPoints::add_surface(const CollectPoints::PointCloud &points, uint32_
         lpt.label = label;
         surface_points_.addPointToCloud(lpt, surface_points_cloud_);
     }
+}
 
-    // Find and remove all the points inside the newly added surface
-    // (actually checks all surfaces, but only newly added should return true)
-    PointCloud pending_pts; // I only need the array but I don't want to risk doing an eigen aligned array wrong
+void CollectPoints::remove_pending_points_near_surfaces() {
+    PointCloud pending_pts;
     pending_points_.getVoxelCentroids(pending_pts.points);
     for (const auto &point : pending_pts) {
         if (inside_any_surface(point)) {
@@ -201,6 +201,17 @@ void CollectPoints::remove_voxels_at_points(const PointCloud &points, std::vecto
 size_t CollectPoints::num_pending_points() {
     // The VoxelCentroid octree returns one point for each extant leaf
     return pending_points_.getLeafCount();
+}
+
+void CollectPoints::update_surfaces(LabeledCloud::Ptr cloud) {
+    surface_points_cloud_ = std::move(cloud);
+    surface_points_ = SurfacePointsOctree(surface_points_.getResolution());
+    surface_points_.setInputCloud(surface_points_cloud_);
+    surface_points_.addPointsFromInputCloud();
+}
+
+CollectPoints::LabeledCloud CollectPoints::get_surface_points() {
+    return *surface_points_cloud_;
 }
 
 

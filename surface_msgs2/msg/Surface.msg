@@ -7,9 +7,6 @@ std_msgs/ColorRGBA color
 # Describes the plane using a plane equation in the for ax + by + cz + d = 0, where ||<a, b, c>|| = 1
 pcl_msgs/ModelCoefficients model
 
-# A point cloud containing all the points on the plane
-sensor_msgs/PointCloud2 inliers
-
 # The surface pose. The position is always in the surface plane (but not necessarily inside the polygon). The x and y
 # axes are always on the plane. The pose begins with the position in the center (mean) of the polygon and with the x
 # axis aligned to the polygon's largest dimension. When new area is added to the surface, the plane equation is re-
@@ -17,6 +14,9 @@ sensor_msgs/PointCloud2 inliers
 # surface pose will always be on the surface and have as high a probability as possible of remaining valid for their
 # original purpose
 geometry_msgs/Pose pose
+
+# A point cloud containing all the points on the plane
+sensor_msgs/PointCloud2 inliers
 
 # A list of boundary points, where the largest gap between points is controlled by a parameter to the surface detection
 sensor_msgs/PointCloud2 boundary

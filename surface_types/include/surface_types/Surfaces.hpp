@@ -12,11 +12,14 @@ namespace surface_types {
 
 // Defined similarly to pcl::PointIndices
 struct Surfaces {
-    Surfaces() : header(), surfaces() {}
+    Surfaces() : header(), surfaces(), deleted_surfaces(), unchanged_surfaces() {}
 
     pcl::PCLHeader header;
 
     std::vector<SurfaceData> surfaces;
+
+    std::vector<uint32_t> deleted_surfaces;
+    std::vector<uint32_t> unchanged_surfaces;
 
 public:
     void add_surface(const SurfaceData &s) {
@@ -52,6 +55,8 @@ public:
 
         ros_surfaces.surfaces.reserve(surfaces.size());
         std::copy(surfaces.begin(), surfaces.end(), std::back_inserter(ros_surfaces.surfaces));
+        ros_surfaces.deleted_surfaces = deleted_surfaces;
+        ros_surfaces.unchanged_surfaces = unchanged_surfaces;
 
         return ros_surfaces;
     }

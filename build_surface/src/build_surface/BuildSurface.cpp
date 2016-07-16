@@ -39,23 +39,27 @@ BuildSurface::compute_plane(const Surface &surface, const SurfaceVisualizationCo
 
 std::tuple<BuildSurface::PointCloud, BuildSurface::Polygons>
 BuildSurface::compute_shape(const Surface &surface, const SurfaceVisualizationController &v) const {
+    // Always call get_cgal_2d_points with whichever cloud the polygons refer to. These polygons will refer to inliers.
     auto cgal_points = get_cgal_2d_points(surface.inliers(), surface.pose_float());
 
     PointCloud boundary;
     Polygons polygons;
     Reindexer reindexer;
-    std::tie(boundary, polygons, reindexer) =
-        compute_boundary_polygons(surface.inliers(), surface.pose_float(), cgal_points, v);
+
+    std::tie(boundary, polygons, reindexer) = compute_boundary_polygons(surface.inliers(), surface.pose_float(), cgal_points, v);
     reindex_polygons(polygons, reindexer);
+
     assert(std::all_of(polygons.begin(), polygons.end(), [&boundary](const pcl::Vertices &poly) {
         return std::all_of(poly.vertices.begin(), poly.vertices.end(),
                            boost::bind(std::less<uint32_t>(), _1, boundary.size()));
     }) && "Reindexer gave an index outside of the boundary cloud");
+
     return std::make_pair(boundary, polygons);
 }
 
 shape_msgs::Mesh BuildSurface::compute_mesh(const Surface &surface) const {
-    auto cgal_points = get_cgal_2d_points(surface.inliers(), surface.pose_float());
+    // Always call get_cgal_2d_points with whichever cloud the polygons refer to. These polygons refer to boundary.
+    auto cgal_points = get_cgal_2d_points(surface.boundary(), surface.pose_float());
     auto ct = get_simplified_triangulation(cgal_points, surface.polygons());
     return create_trimesh(ct, surface.pose_float());
 }
@@ -76,6 +80,7 @@ BuildSurface::compute_shape_and_mesh(Surface surface, const SurfaceVisualization
 std::tuple<BuildSurface::PointCloud, BuildSurface::Polygons, shape_msgs::Mesh>
 BuildSurface::compute_shape_and_mesh(Surface surface, const Eigen::Affine3f &pose_float,
                                      const SurfaceVisualizationController &v) const {
+    // Always call get_cgal_2d_points with whichever cloud the polygons refer to. These polygons will refer to inliers.
     auto cgal_points = get_cgal_2d_points(surface.inliers(), pose_float);
     PointCloud boundary;
     Polygons polygons;
@@ -272,7 +277,6 @@ Eigen::Affine3d BuildSurface::adjust_pose_to_model(Eigen::Affine3d pose, pcl::Mo
     assert(std::abs(pose.translation().dot(plane_normal) + plane_distance) < 1e-5 &&
            "Didn't correctly translate the pose to put origin on the plane");
 
-    ROS_DEBUG("Successfully ran adjust_pose_to_model");
     return pose;
 }
 

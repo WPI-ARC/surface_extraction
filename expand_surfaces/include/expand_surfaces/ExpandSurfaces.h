@@ -38,6 +38,12 @@ public:
     void expand_surface(const PointCloud &points, const pcl::search::Search<Point> &search,
                         const Surface &input_surface, std::function<void(std::vector<int>)> callback);
 
+    std::vector<int> expandAlongPlane(const ExpandSurfaces::PointCloud &cloud,
+                                      const ExpandSurfaces::Search &search,
+                                      const ExpandSurfaces::PointCloud &edge_points,
+                                      const Eigen::Affine3f &tf, std::vector<int> &processed,
+                                      const uint32_t label) const;
+
 private:
     std::vector<int> expandAlongPlane(const PointCloud &cloud, const Search &search,
                                       const PointCloud &edge_points, const Eigen::Affine3f &tf) const;
@@ -46,12 +52,6 @@ protected:
     double perpendicular_distance_;
     double parallel_distance_;
     double discretization_;
-
-    std::vector<int> expandAlongPlane(const ExpandSurfaces::PointCloud &cloud,
-                                          const ExpandSurfaces::Search &search,
-                                          const ExpandSurfaces::PointCloud &edge_points,
-                                          const Eigen::Affine3f &tf, std::vector<int> &processed,
-                                          const uint32_t label) const;
 };
 
 #endif // PROJECT_EXPANDSURFACES_HPP

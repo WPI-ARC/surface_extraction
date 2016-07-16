@@ -106,7 +106,7 @@ int main(int argc, char **argv) {
     float start_surface;
     if (pn.getParam("initial_surface", start_surface)) {
         surface_detection.add_start_surface(start_surface, start_surface, getter.vis);
-        ROS_DEBUG_STREAM("Adding start surface with dimensions " << start_surface << "x" << start_surface);
+        ROS_DEBUG_STREAM("Added start surface with dimensions " << start_surface << "x" << start_surface);
     } else {
         ROS_DEBUG_STREAM("No start surface to add");
     }

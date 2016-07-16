@@ -52,7 +52,7 @@ public:
 
     size_t num_pending_points();
 
-    void update_surfaces(LabeledCloud::Ptr cloud);
+    void update_surfaces(LabeledCloud::Ptr cloud, const int highest_label);
 
     LabeledCloud get_surface_points();
 

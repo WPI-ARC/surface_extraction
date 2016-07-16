@@ -25,4 +25,5 @@ uint32 provide_mesh
 ---
 surface_msgs2/Surface[] surfaces
 uint32[] deleted_surfaces
+uint32[] unchanged_surfaces
 duration computation_time

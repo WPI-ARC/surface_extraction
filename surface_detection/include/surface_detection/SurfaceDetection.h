@@ -45,10 +45,9 @@ public:
     RGBCloud get_surface_points();
 
     Surfaces detect_surfaces_within(const Eigen::Affine3f &center, const Eigen::Vector3f &extents,
-                                                      const Surface::ProvideLevel provide_inliers,
-                                                      const Surface::ProvideLevel provide_shape,
-                                                      const Surface::ProvideLevel provide_mesh,
-                                                      const SurfaceVisualizationController &v);
+                                    const Surface::ProvideLevel provide_inliers,
+                                    const Surface::ProvideLevel provide_shape, const Surface::ProvideLevel provide_mesh,
+                                    const SurfaceVisualizationController &v);
 
     void add_start_surface(float start_surface_extent_x, float start_surface_extent_y,
                            const SurfaceVisualizationController &p);
@@ -91,17 +90,19 @@ private:
     void find_merge(const Surface &test_surf, const std::vector<Surface> &surfaces,
                     const std::function<void(Maybe::Maybe<Surface>)> &callback);
 
-    Surface get_surface(uint32_t surface_id) const;
+    const Surface &get_surface(uint32_t surface_id) const;
+    Surface &get_surface(uint32_t surface_id);
 
     void wait_for_cleanup() const;
 
-    void publish_deleted_surfaces(const std::vector<uint32_t> &ids, const SurfaceVisualizationController &v) const;
-    void publish_updated_surfaces(const std::vector<uint32_t> &ids, const SurfaceVisualizationController &v) const;
+    void publish_deleted_surfaces(const std::set<uint32_t> &ids, const SurfaceVisualizationController &v) const;
+    void publish_updated_surfaces(const std::set<uint32_t> &ids, const SurfaceVisualizationController &v) const;
 
-    void update_collector_surfaces();
+    void update_collector_surfaces(const SurfaceVisualizationController &v);
 
-    void cleanup(PointCloud &processed_pts, std::vector<uint32_t> &deleted, std::vector<int> &rm_indices,
-                 std::vector<int> labels, const SurfaceVisualizationController &v);
+    void cleanup(PointCloud &processed_pts, std::set<uint32_t> &updated, std::set<uint32_t> &deleted,
+                     std::vector<int> &rm_indices, std::vector<int> labels,
+                     const SurfaceVisualizationController &v);
 
     void add_surface(Surface surface);
 };

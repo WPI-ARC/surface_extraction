@@ -10,6 +10,7 @@
 // PCL
 #include <pcl/search/kdtree.h>
 #include <pcl/sample_consensus/sac_model_plane.h>
+#include <pcl/common/distances.h>
 
 // SurfaceData types
 #include <surface_types/Surface.hpp>
@@ -39,7 +40,6 @@ std::vector<int> ExpandSurfaces::expandAlongPlane(const ExpandSurfaces::PointClo
                                                   const ExpandSurfaces::PointCloud &edge_points,
                                                   const Eigen::Affine3f &tf, std::vector<int> &processed,
                                                   const uint32_t label) const {
-    pcl::ScopeTime st("expandAlongPlane");
     double set_time = 0, kdtree_time = 0, tf_time = 0, total_time = -ros::WallTime::now().toSec();
 
     // Note these are (or should be) cleared by radiusSearch on each loop iteration
@@ -55,19 +55,26 @@ std::vector<int> ExpandSurfaces::expandAlongPlane(const ExpandSurfaces::PointClo
     search.nearestKSearch(edge_points, {}, 1, neighbor_indices, sqrdistances);
     kdtree_time += ros::WallTime::now().toSec();
     for (std::size_t i = 0; i < edge_points.size(); i++) {
+        const auto cloud_idx = neighbor_indices[i][0];
         if (sqrdistances[i][0] > this->parallel_distance_ * this->parallel_distance_) {
             // Then there is no corresponding neighbor for this point
             continue;
-        } else if (processed[neighbor_indices[i][0]] >= 0) {
+        } else if (processed[cloud_idx] >= 0) {
             // Then the corresponding neighbor was already claimed by another surface
             continue;
         }
-        to_search.push_back(neighbor_indices[i][0]);
+        to_search.push_back(cloud_idx);
         set_time -= ros::WallTime::now().toSec();
-        processed[neighbor_indices[i][0]] = static_cast<int>(label);
+        processed[cloud_idx] = static_cast<int>(label);
         set_time += ros::WallTime::now().toSec();
+
+        assert(std::abs(pcl::squaredEuclideanDistance(edge_points[i], cloud[cloud_idx]) - sqrdistances[i][0]) < 1e-4 &&
+               "Points' reported square-distances were different to the actual square-distances; most likely "
+               "because indices were not handled correctly and the wrong points are being compared (1)");
     }
-    ROS_DEBUG_STREAM("1nn search in expandAlongPlane took " << (ros::WallTime::now() - nn_start).toSec() << "s");
+    ROS_DEBUG_STREAM("1nn search in expandAlongPlane took " << (ros::WallTime::now() - nn_start).toSec()
+                                                            << "s and found " << to_search.size()
+                                                            << " points to search");
 
     auto tfi = tf.inverse();
 
@@ -77,18 +84,38 @@ std::vector<int> ExpandSurfaces::expandAlongPlane(const ExpandSurfaces::PointClo
                                                    (this->perpendicular_distance_ / this->discretization_)));
 
     while (!to_search.empty()) {
+        ROS_DEBUG_STREAM("Running radiusSearch batch of size " << to_search.size());
+        assert(to_search.size() <= (search.getIndices() ? search.getIndices()->size() : cloud.size()) &&
+               "Tried to search for more points than there are");
+
         kdtree_time -= ros::WallTime::now().toSec();
         search.radiusSearch(cloud, to_search, this->parallel_distance_, neighbor_indices, sqrdistances);
         kdtree_time += ros::WallTime::now().toSec();
+        assert(neighbor_indices.size() == to_search.size() && "radiusSearch didn't properly resize neighbor_indices");
+        assert(sqrdistances.size() == to_search.size() && "radiusSearch didn't properly resize sqrdistances");
 
+#ifndef NDEBUG
+        // tmp_to_search is only needed in the assert statement
+        std::vector<int> tmp_to_search;
+        to_search.swap(tmp_to_search);
+#endif
         to_search.clear();
-        for (std::size_t i = 0; i < neighbor_indices.size(); i++) {
+        for (int i = 0; i < neighbor_indices.size(); i++) {
+            // This `i` indexes neighbor_indices, sqr_distances, and (in debug mode) tmp_to_search, which are parallel
+
+            for (int ii = 0; ii < neighbor_indices[i].size(); ii++) {
+                assert(std::abs(pcl::squaredEuclideanDistance(cloud[tmp_to_search[i]], cloud[neighbor_indices[i][ii]]) -
+                                sqrdistances[i][ii]) < 1e-4 &&
+                       "Points' reported square-distances were different to the actual square-distances; most likely "
+                       "because indices were not handled correctly and the wrong points are being compared (2)");
+            }
+
             // NOTE after this call, indices_end should be used instead of neighbor_indices.end()
             // (this avoids the need to call .erase(), since this container is reset by radiusSearch on the next
             // iteration)
             auto indices_end = std::remove_if(neighbor_indices[i].begin(), neighbor_indices[i].end(), [&](int idx) {
                 set_time -= ros::WallTime::now().toSec();
-                bool found = processed[idx] > 0;
+                bool found = processed[idx] >= 0;
                 set_time += ros::WallTime::now().toSec();
                 if (found) return found;
 
@@ -99,12 +126,12 @@ std::vector<int> ExpandSurfaces::expandAlongPlane(const ExpandSurfaces::PointClo
                 return outside;
             });
 
-            // If there aren't enough found points, that indicates we're following a very thin section, which is
-            // probably
-            // part of another surface, so don't add any of these neighbors
-            if (std::distance(neighbor_indices[i].begin(), indices_end) < req_no_points) {
-                continue;
-            }
+            // If there aren't enough found points, that indicates we're following a very thin section which is
+            // probably part of another surface, so don't add any of these neighbors
+            // DISABLED because it violates guarantee about all points being processed
+//            if (std::distance(neighbor_indices[i].begin(), indices_end) < req_no_points) {
+//                continue;
+//            }
 
             // In this loop, every element has already passed the bounds and duplicates check
             for (auto iter = neighbor_indices[i].begin(); iter != indices_end; ++iter) {
@@ -114,6 +141,12 @@ std::vector<int> ExpandSurfaces::expandAlongPlane(const ExpandSurfaces::PointClo
                 to_search.push_back(*iter);
             }
         }
+
+#ifndef NDEBUG
+        auto to_search_copy = to_search;
+        std::sort(to_search_copy.begin(), to_search_copy.end());
+        assert(std::unique(to_search_copy.begin(), to_search_copy.end()) == to_search_copy.end() && "to_search has some duplicates");
+#endif
     }
 
     total_time += ros::WallTime::now().toSec();
@@ -129,7 +162,6 @@ std::vector<int> ExpandSurfaces::expandAlongPlane(const ExpandSurfaces::PointClo
         }
     }
 
-    ROS_DEBUG_STREAM("got " << within_radius_indices.size() << " points (started with " << edge_points.size() << ")");
     return within_radius_indices;
 }
 
@@ -167,7 +199,7 @@ void ExpandSurfaces::expand_surfaces(const std::vector<Surface> &surfaces, const
 }
 
 void ExpandSurfaces::expand_surface(const PointCloud &points, const pcl::search::Search<Point> &search,
-                                        const Surface &prev_size, std::function<void(std::vector<int>)> callback) {
+                                    const Surface &prev_size, std::function<void(std::vector<int>)> callback) {
     auto new_indices = expandAlongPlane(points, search, prev_size.boundary_or_inliers(), prev_size.pose_float());
 
     callback(new_indices);

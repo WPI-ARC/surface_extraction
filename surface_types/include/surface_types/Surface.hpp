@@ -167,6 +167,12 @@ public:
         plane_upto_ = size();
     }
 
+    void update_plane(std::tuple<pcl::ModelCoefficients, Eigen::Affine3d> tup) {
+        data_.model = std::move(std::get<0>(tup));
+        data_.pose = std::move(std::get<1>(tup));
+        plane_upto_ = size();
+    }
+
     void update_shape(PointCloud boundary, std::vector<pcl::Vertices> polygons) {
         data_.boundary = std::move(boundary);
         data_.polygons = std::move(polygons);

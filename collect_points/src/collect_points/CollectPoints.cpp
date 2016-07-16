@@ -114,6 +114,7 @@ void CollectPoints::surfaces_within(const Eigen::Affine3f &center, const Eigen::
                                     const std::function<void(uint32_t)> callback) {
     // Easy optimization: if no surfaces exist, don't call the callback at all
     if (highest_label_ < 0) {
+        ROS_DEBUG_STREAM("Returning no surfaces because there are no surfaces");
         return;
     }
 
@@ -182,15 +183,33 @@ void CollectPoints::remove_surface(uint32_t label) {
     ROS_DEBUG_STREAM("Removed " << n_removed << " points with label " << label << " from the surfaces octree");
 }
 
+#include <pcl/filters/impl/passthrough.hpp>
+
 void CollectPoints::remove_voxels_at_points(const PointCloud &points, std::vector<int> &indices) {
+    if (indices.empty()) {
+        return;
+    }
+
     // Technically this does do what it says, but not in the way you would expect.
     // It also has a surprising requirement that points must contain every point currently in the octree
     auto new_pending_points_cloud = boost::make_shared<PendingPointsOctree::PointCloud>();
-    pcl::PassThrough<Point> filter;
-    filter.setNegative(true);
-    filter.setInputCloud(boost::shared_ptr<const PointCloud>(&points, null_deleter()));
-    filter.setIndices(boost::shared_ptr<std::vector<int>>(&indices, null_deleter()));
-    filter.filter(*new_pending_points_cloud);
+    std::sort(indices.begin(), indices.end());
+    // Instead of having specific logic for running off the end of indices, add a past-the-end index that it will
+    // never move past
+    indices.push_back(static_cast<int>(points.size()));
+    for (int point_i = 0, rm_i = 0; point_i < points.size(); point_i++) {
+        assert(rm_i < indices.size() && "Ran off the end of indices");
+        // indices[rm_i] is the next index to NOT copy
+        if (point_i < indices[rm_i]) {
+            // Then this index should be copied
+            new_pending_points_cloud->push_back(points[point_i]);
+        } else {
+            // Then advance to the next index to NOT copy
+            // Note that there may be duplicates in indices
+            while (indices[++rm_i] <= point_i);
+        }
+        assert(point_i < indices[rm_i] && "Loop allowed the next index to NOT copy to fall behind the current index");
+    }
 
     pending_points_cloud_ = new_pending_points_cloud;
     pending_points_ = PendingPointsOctree(pending_points_.getResolution());
@@ -203,15 +222,14 @@ size_t CollectPoints::num_pending_points() {
     return pending_points_.getLeafCount();
 }
 
-void CollectPoints::update_surfaces(LabeledCloud::Ptr cloud) {
+void CollectPoints::update_surfaces(LabeledCloud::Ptr cloud, const int highest_label) {
     surface_points_cloud_ = std::move(cloud);
     surface_points_ = SurfacePointsOctree(surface_points_.getResolution());
     surface_points_.setInputCloud(surface_points_cloud_);
     surface_points_.addPointsFromInputCloud();
+    highest_label_ = highest_label;
 }
 
 CollectPoints::LabeledCloud CollectPoints::get_surface_points() {
     return *surface_points_cloud_;
 }
-
-

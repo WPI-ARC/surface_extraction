@@ -1,12 +1,6 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(surface_detection)
 
-#set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/../CMake;${CMAKE_SOURCE_DIR}/CMake")
-#include(cotire)
-
-set(PCL_DIR "~/Desktop/pcl-1.8/install/usr/local/share/pcl-1.8")
-set(BOOST_ROOT "~/Desktop/boost_1_60_0")
-
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
@@ -25,7 +19,7 @@ find_package(catkin REQUIRED COMPONENTS
 )
 
 ## System dependencies are found with CMake's conventions
-find_package(Boost 1.6 REQUIRED COMPONENTS system)
+find_package(Boost REQUIRED COMPONENTS system)
 find_package(PCL 1.8 REQUIRED)
 
 

@@ -51,7 +51,7 @@ public:
         std::map<std::string, ros::Publisher>::iterator pub_it = pubs_->find(name);
 
         if (pub_it == pubs_->end()) {
-            pub_it = pubs_->insert(std::make_pair(name, (*nh_ptr_)->advertise<Message>(name, 10))).first;
+            pub_it = pubs_->insert(std::make_pair(name, (*nh_ptr_)->advertise<Message>(name, 10000))).first;
         }
 
         // Publishers are internally reference counted, making a copy here and on the next line is fine

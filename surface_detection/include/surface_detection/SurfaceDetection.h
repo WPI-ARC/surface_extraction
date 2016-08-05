@@ -100,9 +100,9 @@ private:
 
     void update_collector_surfaces(const SurfaceVisualizationController &v);
 
-    void cleanup(PointCloud &processed_pts, std::set<uint32_t> &updated, std::set<uint32_t> &deleted,
-                     std::vector<int> &rm_indices, std::vector<int> labels,
-                     const SurfaceVisualizationController &v);
+    void cleanup(const PointCloud &processed_pts, const std::set<uint32_t> &updated, const std::set<uint32_t> &deleted,
+                 std::vector<int> rm_indices, const std::vector<int> labels,
+                 const SurfaceVisualizationController &v);
 
     void add_surface(Surface surface);
 };

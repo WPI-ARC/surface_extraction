@@ -6,6 +6,7 @@
 
 // std and Boost
 #include <queue>
+#include <chrono>
 
 // PCL
 #include <pcl/search/kdtree.h>
@@ -20,6 +21,7 @@
 #include <pcl/common/time.h>
 #include <pcl/common/transforms.h>
 #include <pcl/segmentation/extract_clusters.h>
+#include <surface_utils/SurfaceVisualizationController.hpp>
 
 ExpandSurfaces::ExpandSurfaces(double perpendicular_dist, double parallel_dist, double disc)
     : perpendicular_distance_(perpendicular_dist), parallel_distance_(parallel_dist), discretization_(disc) {
@@ -27,180 +29,143 @@ ExpandSurfaces::ExpandSurfaces(double perpendicular_dist, double parallel_dist, 
     assert(parallel_distance_ > 0);
 }
 
-std::vector<int> ExpandSurfaces::expandAlongPlane(const PointCloud &cloud, const Search &search,
-                                                  const PointCloud &edge_points, const Eigen::Affine3f &tf) const {
-    // processed[i] indicates whether point i has been added to the queue
-    std::vector<int> processed(cloud.size(), -1);
-    // Don't have a label in this version, but only one label is ever used, so any arbitrary value works (here 0)
-    return expandAlongPlane(cloud, search, edge_points, tf, processed, 0);
-}
-
 std::vector<int> ExpandSurfaces::expandAlongPlane(const ExpandSurfaces::PointCloud &cloud,
-                                                  const ExpandSurfaces::Search &search,
-                                                  const ExpandSurfaces::PointCloud &edge_points,
-                                                  const Eigen::Affine3f &tf, std::vector<int> &processed,
-                                                  const uint32_t label) const {
-    double set_time = 0, kdtree_time = 0, tf_time = 0, total_time = -ros::WallTime::now().toSec();
-
+                                                  const ExpandSurfaces::PointCloud &edge_points_pre_tf,
+                                                  const pcl::ModelCoefficients &model, const Eigen::Affine3f &tf,
+                                                  std::vector<int> &processed,
+                                                  std::set<std::pair<uint32_t, uint32_t>> &merge_candidates,
+                                                  const uint32_t label, const SurfaceVisualizationController &v) const {
     // Note these are (or should be) cleared by radiusSearch on each loop iteration
-    std::vector<std::vector<int>> neighbor_indices;
-    std::vector<std::vector<float>> sqrdistances;
+    std::vector<int> neighbor_indices;
+    std::vector<float> sqrdistances;
+    std::vector<int> query_pts;
 
-    std::vector<int> to_search;
-
-    auto nn_start = ros::WallTime::now();
-    // Seed the search with the 1nn of every point in edge_points
-    // Setting processed[i] for each 1nn prevents considering every member of edge_points twice!
-    kdtree_time -= ros::WallTime::now().toSec();
-    search.nearestKSearch(edge_points, {}, 1, neighbor_indices, sqrdistances);
-    kdtree_time += ros::WallTime::now().toSec();
-    for (std::size_t i = 0; i < edge_points.size(); i++) {
-        const auto cloud_idx = neighbor_indices[i][0];
-        if (sqrdistances[i][0] > this->parallel_distance_ * this->parallel_distance_) {
-            // Then there is no corresponding neighbor for this point
+    auto tf_time_start = std::chrono::high_resolution_clock::now();
+    PointCloud cloud_in_plane;
+    pcl::transformPointCloud(cloud, cloud_in_plane, tf.inverse());
+    std::vector<int> near_plane;
+    std::vector<int> in_plane;
+    for (std::size_t i = 0; i < cloud_in_plane.size(); i++) {
+        if (std::abs(cloud_in_plane[i].z) > parallel_distance_) {
             continue;
-        } else if (processed[cloud_idx] >= 0) {
-            // Then the corresponding neighbor was already claimed by another surface
-            continue;
+        } else if (std::abs(cloud_in_plane[i].z) > perpendicular_distance_) {
+            near_plane.push_back(static_cast<int>(i));
+        } else if (processed[i] < 0) {
+            in_plane.push_back(static_cast<int>(i));
         }
-        to_search.push_back(cloud_idx);
-        set_time -= ros::WallTime::now().toSec();
-        processed[cloud_idx] = static_cast<int>(label);
-        set_time += ros::WallTime::now().toSec();
-
-        assert(std::abs(pcl::squaredEuclideanDistance(edge_points[i], cloud[cloud_idx]) - sqrdistances[i][0]) < 1e-4 &&
-               "Points' reported square-distances were different to the actual square-distances; most likely "
-               "because indices were not handled correctly and the wrong points are being compared (1)");
     }
-    ROS_DEBUG_STREAM("1nn search in expandAlongPlane took " << (ros::WallTime::now() - nn_start).toSec()
-                                                            << "s and found " << to_search.size()
-                                                            << " points to search");
 
-    auto tfi = tf.inverse();
+    if (in_plane.empty()) {
+        return query_pts;
+    }
 
-    // TODO: Come up with a more principled way to find this threshold
-    // (Maybe it should be that the spread along smallest axis other than the normal's axis is less than perp. dist?)
-    int req_no_points = static_cast<int>(std::ceil((this->parallel_distance_ / this->discretization_) *
-                                                   (this->perpendicular_distance_ / this->discretization_)));
+    pcl::search::KdTree<Point> in_plane_search(false);
+    in_plane_search.setInputCloud(boost_fake_shared(cloud_in_plane), boost_fake_shared(in_plane));
+    pcl::search::KdTree<Point> near_plane_search(false);
+    if (!near_plane.empty()) {
+        near_plane_search.setInputCloud(boost_fake_shared(cloud_in_plane), boost_fake_shared(near_plane));
+    }
 
-    while (!to_search.empty()) {
-        ROS_DEBUG_STREAM("Running radiusSearch batch of size " << to_search.size());
-        assert(to_search.size() <= (search.getIndices() ? search.getIndices()->size() : cloud.size()) &&
-               "Tried to search for more points than there are");
+    PointCloud edge_points;
+    pcl::transformPointCloud(edge_points_pre_tf, edge_points, tf.inverse());
 
-        kdtree_time -= ros::WallTime::now().toSec();
-        search.radiusSearch(cloud, to_search, this->parallel_distance_, neighbor_indices, sqrdistances);
-        kdtree_time += ros::WallTime::now().toSec();
-        assert(neighbor_indices.size() == to_search.size() && "radiusSearch didn't properly resize neighbor_indices");
-        assert(sqrdistances.size() == to_search.size() && "radiusSearch didn't properly resize sqrdistances");
+    ROS_DEBUG_STREAM("Took " << std::chrono::duration_cast<std::chrono::milliseconds>(
+                                    std::chrono::high_resolution_clock::now() - tf_time_start).count()
+                             << "ms to transform " << cloud.size() << " points and filter to " << in_plane.size()
+                             << " with " << near_plane.size() << " reject indicators");
 
-#ifndef NDEBUG
-        // tmp_to_search is only needed in the assert statement
-        std::vector<int> tmp_to_search;
-        to_search.swap(tmp_to_search);
-#endif
-        to_search.clear();
-        for (int i = 0; i < neighbor_indices.size(); i++) {
-            // This `i` indexes neighbor_indices, sqr_distances, and (in debug mode) tmp_to_search, which are parallel
-
-            for (int ii = 0; ii < neighbor_indices[i].size(); ii++) {
-                assert(std::abs(pcl::squaredEuclideanDistance(cloud[tmp_to_search[i]], cloud[neighbor_indices[i][ii]]) -
-                                sqrdistances[i][ii]) < 1e-4 &&
-                       "Points' reported square-distances were different to the actual square-distances; most likely "
-                       "because indices were not handled correctly and the wrong points are being compared (2)");
+    // Seed the in_plane_search with the 1nn of every point in edge_points
+    // Setting processed[i] for each 1nn prevents considering every member of edge_points twice
+    neighbor_indices.resize(1);
+    sqrdistances.resize(1);
+    auto sqr_parallel_distance = parallel_distance_ * parallel_distance_;
+    for (const auto edge_pt : edge_points) {
+        in_plane_search.nearestKSearch(edge_pt, 1, neighbor_indices, sqrdistances);
+        if (sqrdistances[0] <= sqr_parallel_distance) {
+            if (processed[neighbor_indices[0]] < 0) {
+                processed[neighbor_indices[0]] = static_cast<int>(label);
+                query_pts.push_back(neighbor_indices[0]);
+            } else if (processed[neighbor_indices[0]] != label) {
+                merge_candidates.insert(std::minmax(label, static_cast<uint32_t>(processed[neighbor_indices[0]])));
             }
+        }
+    }
+    ROS_DEBUG_STREAM("1nn in_plane_search in expandAlongPlane found " << query_pts.size()
+                                                                      << " points to in_plane_search");
 
-            // NOTE after this call, indices_end should be used instead of neighbor_indices.end()
-            // (this avoids the need to call .erase(), since this container is reset by radiusSearch on the next
-            // iteration)
-            auto indices_end = std::remove_if(neighbor_indices[i].begin(), neighbor_indices[i].end(), [&](int idx) {
-                set_time -= ros::WallTime::now().toSec();
-                bool found = processed[idx] >= 0;
-                set_time += ros::WallTime::now().toSec();
-                if (found) return found;
+    std::size_t current_query_pt = 0;
+    while (current_query_pt < query_pts.size()) {
+        // Don't just provide query_pts[current_query_pt] to searches -- it interprets that as an index into `in_plane`
+        Point query_pt = cloud_in_plane[query_pts[current_query_pt]];
+        query_pt.z = 0;
+        current_query_pt++;
 
-                tf_time -= ros::WallTime::now().toSec();
-                bool outside = std::abs(pcl::transformPoint(cloud[idx], tfi).z) > this->perpendicular_distance_;
-                tf_time += ros::WallTime::now().toSec();
-
-                return outside;
-            });
-
-            // If there aren't enough found points, that indicates we're following a very thin section which is
-            // probably part of another surface, so don't add any of these neighbors
-            // DISABLED because it violates guarantee about all points being processed
-//            if (std::distance(neighbor_indices[i].begin(), indices_end) < req_no_points) {
-//                continue;
-//            }
-
-            // In this loop, every element has already passed the bounds and duplicates check
-            for (auto iter = neighbor_indices[i].begin(); iter != indices_end; ++iter) {
-                set_time -= ros::WallTime::now().toSec();
-                processed[*iter] = static_cast<int>(label);
-                set_time += ros::WallTime::now().toSec();
-                to_search.push_back(*iter);
+        // Limit the radius to either parallel_distance OR whatever distance excludes the nearest reject indicator
+        double radius = parallel_distance_;
+        if (!near_plane.empty()) {
+            neighbor_indices.resize(1);
+            sqrdistances.resize(1);
+            near_plane_search.nearestKSearch(query_pt, 1, neighbor_indices, sqrdistances);
+            if (sqrdistances[0] <= sqr_parallel_distance) {
+                auto dx = query_pt.x - cloud_in_plane[neighbor_indices[0]].x;
+                auto dy = query_pt.y - cloud_in_plane[neighbor_indices[0]].y;
+                double projected_dist = std::sqrt(dx * dx + dy * dy);
+                radius = std::min(radius, projected_dist);
             }
         }
 
-#ifndef NDEBUG
-        auto to_search_copy = to_search;
-        std::sort(to_search_copy.begin(), to_search_copy.end());
-        assert(std::unique(to_search_copy.begin(), to_search_copy.end()) == to_search_copy.end() && "to_search has some duplicates");
-#endif
-    }
+        in_plane_search.radiusSearch(query_pt, radius, neighbor_indices, sqrdistances);
 
-    total_time += ros::WallTime::now().toSec();
+        // Remove indices which are already processed and ones which are too far away
+        // This breaks the association between neighbor_indices[i][j] and sqrdistances[i][j]
+        neighbor_indices.erase(std::remove_if(neighbor_indices.begin(), neighbor_indices.end(), [&](int idx) {
+            if (processed[idx] < 0) {
+                return false;
+            } else if (processed[idx] != label) {
+                merge_candidates.insert(std::minmax(label, static_cast<uint32_t>(processed[idx])));
+            }
+            return true;
+        }), neighbor_indices.end());
 
-    ROS_DEBUG_STREAM(std::fixed << std::setprecision(1) << "expandAlongPlane: " << set_time / 1000.
-                                << "ms set operations, " << kdtree_time / 1000. << "ms kd-tree search, "
-                                << tf_time / 1000. << "ms point transforms, " << total_time / 1000. << " total");
+        //        // Compute centroid
+        //        Eigen::Vector4f centroid;
+        //        pcl::compute3DCentroid(cloud_in_plane, neighbor_indices, centroid);
+        //
+        //        // Compute eigenvectors and eigenvalues
+        //        EIGEN_ALIGN16 Eigen::Matrix3f covariance_matrix;
+        //        pcl::computeCovarianceMatrix(cloud_in_plane, neighbor_indices, centroid, covariance_matrix);
+        //        EIGEN_ALIGN16 Eigen::Vector3f eigen_vector;
+        //        float eigen_value;
+        //        pcl::eigen33(covariance_matrix, eigen_value, eigen_vector);
+        //
+        //        if (pcl::getAngle3D(Eigen::Vector3f::UnitZ(), eigen_vector) > 0.2) {
+        //            normal_pts.clear();
+        //            // This is very definitely just for debugging purposes
+        //            for (auto idx : neighbor_indices) {
+        //                pcl::PointNormal npt;
+        //                npt.x = cloud_in_plane[idx].x;
+        //                npt.y = cloud_in_plane[idx].y;
+        //                npt.z = cloud_in_plane[idx].z;
+        //                npt.normal_x = eigen_vector[0];
+        //                npt.normal_y = eigen_vector[1];
+        //                npt.normal_z = eigen_vector[2];
+        //                normal_pts.push_back(npt);
+        //            }
+        //            auto normal_points_transformed = boost::make_shared<decltype(normal_pts)>();
+        //            pcl::transformPointCloudWithNormals(normal_pts, *normal_points_transformed, tf);
+        //            v.normal_vectors("rejected_expansions", normal_points_transformed);
+        //            v.points<pcl::PointNormal>("rejected_expansion_pts", normal_points_transformed);
+        //            ros::WallDuration(1).sleep();
+        //            continue;
+        //        }
 
-    std::vector<int> within_radius_indices;
-    for (std::size_t i = 0; i < processed.size(); i++) {
-        if (processed[i] == static_cast<int>(label)) {
-            within_radius_indices.push_back(static_cast<int>(i));
+        // In this loop, every element has already passed the bounds and duplicates check
+        for (auto idx : neighbor_indices) {
+            processed[idx] = static_cast<int>(label);
+            query_pts.push_back(idx);
         }
     }
 
-    return within_radius_indices;
-}
-
-void ExpandSurfaces::expand_surfaces(const std::vector<Surface> &surfaces, const PointCloud &cloud,
-                                     std::vector<int> &indices, std::function<void(Surface)> callback) {
-    // pcl::ScopeTime st("SurfaceDetection::detect_surfaces_within");
-
-    // If no points or no indices or no surfaces, then no work to do
-    if (cloud.empty() || indices.empty() || surfaces.empty()) {
-        return;
-    }
-
-    pcl::search::KdTree<Point> search(false);
-    search.setInputCloud(boost_fake_shared(cloud), boost_fake_shared(indices));
-
-    // This vector acts as a map from point index to the surface
-    std::vector<int> in_surface(cloud.size(), -1);
-
-    for (auto &old_surface : surfaces) {
-        // Get the new indices, while simultaneously updating in_surface
-        auto new_indices = expandAlongPlane(cloud, search, old_surface.boundary_or_inliers(), old_surface.pose_float(),
-                                            in_surface, old_surface.id());
-        if (new_indices.size() == 0) continue;
-
-        Surface new_surface = old_surface;
-        new_surface.add_inliers(cloud, indices);
-
-        callback(new_surface);
-    }
-
-    // Remove any points which were given to a surface to `indices`
-    indices.erase(std::remove_if(indices.begin(), indices.end(), [&in_surface](const int idx) {
-        return in_surface[idx] > 0;
-    }), indices.end());
-}
-
-void ExpandSurfaces::expand_surface(const PointCloud &points, const pcl::search::Search<Point> &search,
-                                    const Surface &prev_size, std::function<void(std::vector<int>)> callback) {
-    auto new_indices = expandAlongPlane(points, search, prev_size.boundary_or_inliers(), prev_size.pose_float());
-
-    callback(new_indices);
+    // query_pts is exactly equal to the set of points that was newly labeled with label
+    return query_pts;
 }

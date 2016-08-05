@@ -50,8 +50,10 @@ public:
         ros::WallDuration elapsed_time = ros::WallTime::now() - compute_start;
         // Can't send a WallDuration in a message
         resp.computation_time = ros::Duration(elapsed_time.sec, elapsed_time.nsec);
-        ROS_INFO_STREAM("Replying with " << resp.surfaces.size() << " surfaces after " << std::fixed
-                                         << std::setprecision(2) << resp.computation_time.toSec() << "s");
+        ROS_INFO_STREAM("Replying with " << resp.surfaces.size() << " new/updated surfaces, "
+                                         << resp.unchanged_surfaces.size() << " unchanged, and "
+                                         << resp.deleted_surfaces.size() << " ones after " << std::fixed
+                                         << std::setprecision(3) << resp.computation_time.toSec() << "s");
 
         return true;
     }
@@ -65,17 +67,22 @@ int main(int argc, char **argv) {
 
     const std::string target_frame = pn.param("target_frame", std::string("/world"));
 
+    // We want the alpha shape corresponding to a disc of diameter = parallel_distance.
+    // CGAL defines alpha as the square of the radius of the disc (different to the original definition in the paper)
+    auto parallel_distance = pn.param("parallel_distance", 0.06);
+    auto alpha = std::pow(parallel_distance / 2.0, 2);
+
     SurfaceDetection surface_detection(
-        pn.param("discretization", 0.02), pn.param("perpendicular_distance", 0.04), pn.param("parallel_distance", 0.06),
+        pn.param("discretization", 0.02), pn.param("perpendicular_distance", 0.04), parallel_distance,
         pn.param("point_inside_threshold", 0.1), pn.param("mls_radius", 0.12), pn.param("min_points_per_surface", 50),
-        pn.param("min_plane_width", 0.15), pn.param("polygon_alpha", 0.01), pn.param("extrusion_distance", 0.02f),
+        pn.param("min_plane_width", 0.15), alpha, pn.param("extrusion_distance", 0.02f),
         pn.param("optimistic", true), target_frame, pn.param("camera_frame", std::string("/left_camera_frame")));
 
     ROS_INFO_STREAM("Connected to ROS");
 
     // Make publishers
     auto pp_pub = n.advertise<SurfaceDetection::PointCloud>(
-            pn.param("unprocessed_points_topic", std::string("/pending_points")), 1);
+        pn.param("unprocessed_points_topic", std::string("/pending_points")), 1);
     auto sp_pub = n.advertise<pcl::PointCloud<pcl::PointXYZRGB>>("/surface_points", 1);
 
     // Make subscribers
@@ -124,6 +131,11 @@ int main(int argc, char **argv) {
     } else {
         ROS_INFO_STREAM("Not waiting for points");
     }
+
+    auto cloud = surface_detection.get_pending_points();
+    cloud.header.frame_id = target_frame;
+    pp_pub.publish(cloud);
+    pp_timer.stop();
 
     // Make service provider
     auto srv = n.advertiseService("get_surfaces", &get_surfaces::go, &getter);

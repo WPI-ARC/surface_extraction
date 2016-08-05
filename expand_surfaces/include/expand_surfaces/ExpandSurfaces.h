@@ -10,6 +10,7 @@
 #include <functional>
 #include <pcl/point_cloud.h>
 #include <set>
+#include <surface_utils/SurfaceVisualizationController.hpp>
 
 // Forward declarations
 namespace pcl {
@@ -32,21 +33,13 @@ class ExpandSurfaces {
 public:
     ExpandSurfaces(double perpendicular_dist, double parallel_dist, double disc);
 
-    void expand_surfaces(const std::vector<Surface> &surfaces, const PointCloud &cloud, std::vector<int> &indices,
-                             std::function<void(Surface)> callback);
-
-    void expand_surface(const PointCloud &points, const pcl::search::Search<Point> &search,
-                        const Surface &input_surface, std::function<void(std::vector<int>)> callback);
-
-    std::vector<int> expandAlongPlane(const ExpandSurfaces::PointCloud &cloud,
-                                      const ExpandSurfaces::Search &search,
-                                      const ExpandSurfaces::PointCloud &edge_points,
-                                      const Eigen::Affine3f &tf, std::vector<int> &processed,
-                                      const uint32_t label) const;
-
-private:
-    std::vector<int> expandAlongPlane(const PointCloud &cloud, const Search &search,
-                                      const PointCloud &edge_points, const Eigen::Affine3f &tf) const;
+    std::vector<int>
+    expandAlongPlane(const ExpandSurfaces::PointCloud &cloud,
+                         const ExpandSurfaces::PointCloud &edge_points,
+                         const pcl::ModelCoefficients &model, const Eigen::Affine3f &tf,
+                         std::vector<int> &processed,
+                         std::set<std::pair<uint32_t, uint32_t>> &merge_candidates,
+                         const uint32_t label, const SurfaceVisualizationController &v) const;
 
 protected:
     double perpendicular_distance_;

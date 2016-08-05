@@ -183,8 +183,6 @@ void CollectPoints::remove_surface(uint32_t label) {
     ROS_DEBUG_STREAM("Removed " << n_removed << " points with label " << label << " from the surfaces octree");
 }
 
-#include <pcl/filters/impl/passthrough.hpp>
-
 void CollectPoints::remove_voxels_at_points(const PointCloud &points, std::vector<int> &indices) {
     if (indices.empty()) {
         return;
@@ -230,6 +228,6 @@ void CollectPoints::update_surfaces(LabeledCloud::Ptr cloud, const int highest_l
     highest_label_ = highest_label;
 }
 
-CollectPoints::LabeledCloud CollectPoints::get_surface_points() {
-    return *surface_points_cloud_;
+CollectPoints::LabeledCloud::Ptr CollectPoints::get_surface_points() {
+    return surface_points_cloud_;
 }

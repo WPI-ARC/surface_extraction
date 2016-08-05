@@ -22,9 +22,7 @@ class Search;
 
 class SurfaceVisualizationController;
 
-namespace surface_types {
-class SurfaceData;
-}
+class Surface;
 
 class DetectSurfaces {
     typedef pcl::PointXYZ Point;
@@ -37,14 +35,13 @@ class DetectSurfaces {
     typedef pcl::PointCloud<Normal> NormalCloud;
     typedef pcl::search::Search<Normal> NormalSearch;
 
-    typedef surface_types::SurfaceData Surface;
-
 public:
     DetectSurfaces(double perpendicular_dist, double parallel_dist, double mls_radius,
                    unsigned int min_points_per_surface, double min_plane_width);
 
-    void detect_surfaces(const PointCloud &input, std::vector<int> &indices,
-                         const SurfaceVisualizationController &p, std::function<void(std::vector<int>, pcl::ModelCoefficients, Eigen::Affine3f)> callback);
+    void detect_surfaces(const PointCloud &input, const std::vector<int> &indices,
+                             std::vector<int> &new_labels, const SurfaceVisualizationController &v,
+                             std::function<void(Surface)> callback);
 
 private:
     std::vector<int> radius_filter(const PointCloud &cloud, const std::vector<int> &indices);
@@ -62,7 +59,7 @@ private:
                                 std::function<void(pcl::PointIndices)> callback);
 
     void find_transform_and_filter(NormalCloud::Ptr &normals, pcl::PointIndices &inliers,
-                                       std::function<void(Eigen::Affine3f)> callback);
+                                   std::function<void(Eigen::Affine3f)> callback);
 
     ColoredPointCloud::Ptr make_segment_colored_cloud(NormalCloud::Ptr &normals,
                                                       std::vector<pcl::PointIndices> &segments);

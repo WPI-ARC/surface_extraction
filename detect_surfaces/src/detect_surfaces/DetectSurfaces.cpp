@@ -36,10 +36,11 @@ DetectSurfaces::DetectSurfaces(double perpendicular_dist, double parallel_dist, 
     assert(min_points_per_surface_ >= 3);
 }
 
-void DetectSurfaces::detect_surfaces(const PointCloud &cloud, std::vector<int> &indices,
-                                     const SurfaceVisualizationController &p, std::function<void(std::vector<int>, pcl::ModelCoefficients, Eigen::Affine3f)> callback) {
-    // pcl::ScopeTime st("DetectSurfaces::detect_surfaces");
+void DetectSurfaces::detect_surfaces(const PointCloud &cloud, const std::vector<int> &indices,
+                                     std::vector<int> &new_labels, const SurfaceVisualizationController &v,
+                                     std::function<void(Surface)> callback) {
     std::vector<int> filtered_indices = radius_filter(cloud, indices);
+    ROS_DEBUG_STREAM("Radius filter reduced " << indices.size() << " indices to " << filtered_indices.size());
 
     if (filtered_indices.size() < min_points_per_surface_) {
         return;
@@ -49,25 +50,20 @@ void DetectSurfaces::detect_surfaces(const PointCloud &cloud, std::vector<int> &
     ROS_ERROR_STREAM_COND(filtered_indices.size() != normals->size(), "Expected normals to have "
                                                                           << filtered_indices.size()
                                                                           << " points, but it had " << normals->size());
-    assert(filtered_indices.size() != normals->size() && "Normals cloud has the wrong number of points");
+    assert(filtered_indices.size() == normals->size() && "Normals cloud has the wrong number of points");
 
     assert(cloud.sensor_origin_.isApprox(normals->sensor_origin_) && "Get normals did not preserve sensor origin");
     assert(cloud.sensor_orientation_.isApprox(normals->sensor_orientation_) &&
            "Get normals did not preserve sensor orientation");
 
-    p.points<Normal>("normals", normals);
-    p.normal_vectors("normal_vectors", normals);
+    v.points<Normal>("normals", normals);
+    v.normal_vectors("normal_vectors", normals);
 
     // Build a search object that can be shared among the algorithms
     NormalSearch::Ptr normal_search = boost::make_shared<pcl::search::KdTree<Normal>>();
     normal_search->setInputCloud(normals);
 
-    std::vector<Indices> planes;
-    std::vector<Eigen::Affine3f> tfs;
-
     int n_regions = 0, n_planes = 0, n_euclidean = 0, n_filtered = 0;
-
-    std::vector<bool> used_indices(cloud.size(), false);
 
     // Welcome to callback hell!
     region_segmentation(normals, normal_search, [&, this](Indices region) {
@@ -79,19 +75,17 @@ void DetectSurfaces::detect_surfaces(const PointCloud &cloud, std::vector<int> &
                 find_transform_and_filter(normals, segment, [&, this](Eigen::Affine3f transform) {
                     n_filtered++;
 
-                    planes.push_back(segment);
-                    tfs.push_back(transform);
-
                     // segment refers to normals, which is a subset of cloud, so it needs to be reindexed to
                     // refer to cloud before being returned
                     auto inlier_indices = surfaces_pcl_utils::reindex(filtered_indices, segment.indices);
+                    auto surface = Surface({cloud, inlier_indices}, model, transform.cast<double>());
 
-                    // Update used_indices (note used_indices[i] refers to cloud[i])
+                    // Update new_labels (note new_labels[i] refers to cloud[i])
                     for (auto &idx : inlier_indices) {
-                        used_indices[idx] = true;
+                        new_labels[idx] = static_cast<int>(surface.id());
                     }
 
-                    callback(inlier_indices, model, transform);
+                    callback(surface);
                 });
             });
         });
@@ -99,13 +93,6 @@ void DetectSurfaces::detect_surfaces(const PointCloud &cloud, std::vector<int> &
 
     ROS_DEBUG_STREAM("DetectSurfaces found " << n_regions << " regions, " << n_planes << " planes, " << n_euclidean
                                              << " euclidean segements, " << n_filtered << " surfaces after filtering");
-
-    p.points<pcl::PointXYZRGB>("new_planes", make_segment_colored_cloud(normals, planes));
-    p.poses("plane_transforms", tfs);
-
-    indices.erase(std::remove_if(indices.begin(), indices.end(), [&used_indices](const int idx) {
-        return used_indices[idx];
-    }), indices.end());
 }
 
 std::vector<int> DetectSurfaces::radius_filter(const PointCloud &cloud, const std::vector<int> &indices) {
@@ -136,8 +123,10 @@ DetectSurfaces::NormalCloud::Ptr DetectSurfaces::get_normals(const PointCloud &c
     auto normals = boost::make_shared<NormalCloud>();
     mls.process(*normals);
 
-    assert(normals->size() <= cloud.size() && "Normals size is greater than indices size");
-    assert(normals->size() >= cloud.size() && "Normals size is less than indices size");
+    ROS_ERROR_STREAM_COND(normals->size() != indices.size(),
+                          "Expected normals to have " << indices.size() << " points but it had " << normals->size());
+    assert(normals->size() <= indices.size() && "Normals size is greater than indices size");
+    assert(normals->size() >= indices.size() && "Normals size is less than indices size");
 
     normals->sensor_origin_ = cloud.sensor_origin_;
     normals->sensor_orientation_ = cloud.sensor_orientation_;

@@ -54,7 +54,7 @@ public:
 
     void update_surfaces(LabeledCloud::Ptr cloud, const int highest_label);
 
-    LabeledCloud get_surface_points();
+    LabeledCloud::Ptr get_surface_points();
 
 protected:
     double perpendicular_dist_;

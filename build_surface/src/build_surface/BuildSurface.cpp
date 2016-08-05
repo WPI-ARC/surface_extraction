@@ -46,7 +46,8 @@ BuildSurface::compute_shape(const Surface &surface, const SurfaceVisualizationCo
     Polygons polygons;
     Reindexer reindexer;
 
-    std::tie(boundary, polygons, reindexer) = compute_boundary_polygons(surface.inliers(), surface.pose_float(), cgal_points, v);
+    std::tie(boundary, polygons, reindexer) =
+        compute_boundary_polygons(surface.inliers(), surface.pose_float(), cgal_points, v);
     reindex_polygons(polygons, reindexer);
 
     assert(std::all_of(polygons.begin(), polygons.end(), [&boundary](const pcl::Vertices &poly) {
@@ -105,6 +106,7 @@ BuildSurface::compute_boundary_polygons(const PointCloud &cloud, const Eigen::Af
     auto tup = find_boundary_and_polygons(cloud, cgal_points, pose, v);
 
     auto triangulation = get_simplified_triangulation(cgal_points, std::get<1>(tup));
+
     std::get<1>(tup) = simplify_polygons(triangulation);
 
     return tup;
@@ -289,22 +291,17 @@ std::vector<CustomPoint> BuildSurface::get_cgal_2d_points(const PointCloud &clou
     // Copy the points into a CGAL data structure and simultaneously project
     std::vector<CustomPoint> cgal_points;
     const auto proj_warn_threshold = perpendicular_distance_ * 2;
-    auto proj_warn_n = 5;
+    auto proj_warn_n = 0;
     for (std::size_t i = 0; i < cloud_transformed->size(); i++) {
         auto pt = cloud_transformed->points[i];
         if (pt.z > proj_warn_threshold || pt.z < -proj_warn_threshold) {
-            if (proj_warn_n > 0) {
-                ROS_WARN_STREAM("Projected point is more than " << proj_warn_threshold << "m from zero (" << pt.z
-                                                                << "m)");
-            }
-            proj_warn_n--;
+            proj_warn_n++;
         }
         cgal_points.emplace_back(CGALPoint(pt.x, pt.y), CustomPointInfo(static_cast<uint32_t>(i)));
     }
 
     if (proj_warn_n < 0) {
-        ROS_WARN_STREAM("An additional " << -proj_warn_n << " points were more than " << proj_warn_threshold
-                                         << "m from zero");
+        ROS_WARN_STREAM(proj_warn_n << " points were more than " << proj_warn_threshold << "m from zero");
     }
 
     return cgal_points;
@@ -452,8 +449,8 @@ CT BuildSurface::get_simplified_triangulation(const std::vector<CustomPoint> &cg
         assert(it == ct.vertices_in_constraint_end(cid) && "Polygon was shorter than the constraint");
     }
 
-    // TODO should alpha be re-used for this?
-    simplify(ct, SimplificationCost(), SimplificationStop(alpha_ * alpha_));
+    // Allows max error of `perpendicular_distance_` (cost is error squared)
+    simplify(ct, SimplificationCost(), SimplificationStop(perpendicular_distance_ * perpendicular_distance_));
     return ct;
 }
 
@@ -582,7 +579,7 @@ BuildSurface::LabeledCloud BuildSurface::tile_surface(const Surface &surface) co
     Point min, max;
     pcl::getMinMax3D(boundary_flat, min, max);
 
-    double discretization = perpendicular_distance_ / 2.; // arbitrary
+    double discretization = point_inside_threshold_ / 4.; // arbitrary
     // Offset by discretization / 2 to avoid testing the minimum, which will by definition be outside
     for (float y = static_cast<float>(min.y + discretization / 2.); y < max.y; y += discretization) {
         // X is the widest axis so iterate x most rapidly (not sure if that makes any difference w/ this algorithm)

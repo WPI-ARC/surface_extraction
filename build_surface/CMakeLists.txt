@@ -9,6 +9,7 @@ set(CATKIN_PACKAGES
     surface_types
     surface_utils
     arc_utilities)
+
 find_package(catkin REQUIRED COMPONENTS
     ${CATKIN_PACKAGES}
 )

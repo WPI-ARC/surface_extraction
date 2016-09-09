@@ -10,6 +10,7 @@
 #include <surface_msgs2/SurfaceDetectionResponse.h>
 
 #include <arc_utilities/eigen_helpers_conversions.hpp>
+#include "surface_utils/eigen_helpers_conversions.hpp"
 #include "surface_detection/SurfaceDetection.h"
 #include "surface_utils/SurfaceVisualizationController.hpp"
 #include <arc_utilities/pretty_print.hpp>

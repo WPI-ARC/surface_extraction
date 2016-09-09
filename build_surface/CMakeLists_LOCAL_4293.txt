@@ -1,26 +1,25 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(surface_types)
+project(build_surface)
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 set(CATKIN_PACKAGES
-    pcl_conversions
-    pcl_msgs
-    pcl_ros
-    std_msgs
-    shape_msgs
     roscpp
-    surface_msgs2
-    eigen_conversions
-    surface_utils)
-find_package(catkin REQUIRED COMPONENTS ${CATKIN_PACKAGES})
+    surface_types
+    surface_utils
+    arc_utilities)
+find_package(catkin REQUIRED COMPONENTS
+    ${CATKIN_PACKAGES}
+)
 
 ## System dependencies are found with CMake's conventions
-# find_package(Boost REQUIRED COMPONENTS system)
-find_package(Boost 1.6 REQUIRED COMPONENTS system)
+find_package(Boost REQUIRED COMPONENTS system)
 find_package(PCL 1.8 REQUIRED)
-
+# NOTE the required minimum version of CGAL is 4.6, which is satisfied by the 16.04 default install but not the 14.04
+# default install. However, neither exports its version (bad CGAL), so the requirement can't be expressed to cmake
+find_package(CGAL REQUIRED COMPONENTS Core)
+include(${CGAL_USE_FILE})
 
 ## Uncomment this if the package has a setup.py. This macro ensures
 ## modules and global scripts declared therein get installed
@@ -75,7 +74,7 @@ find_package(PCL 1.8 REQUIRED)
 ## Generate added messages and services with any dependencies listed here
 # generate_messages(
 #   DEPENDENCIES
-#   surface_msgs
+#   std_msgs  # Or other packages containing msgs
 # )
 
 ################################################
@@ -109,9 +108,9 @@ find_package(PCL 1.8 REQUIRED)
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
   INCLUDE_DIRS include
-#  LIBRARIES surface_types
+  LIBRARIES build_surface
   CATKIN_DEPENDS ${CATKIN_PACKAGES}
-#  DEPENDS PCL boost
+  DEPENDS PCL CGAL
 )
 
 ###########
@@ -119,9 +118,7 @@ catkin_package(
 ###########
 #set(CMAKE_BUILD_TYPE Debug)
 
-#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O3 -std=c++11 -Wall -Wextra -Wno-unused-parameter")
-# Flags to make Clang ignore directories that Catkin should have marked as system imports
-#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Xclang -isystem-prefix -Xclang pcl/")
+include("../CMakeBuildFlags.cmake")
 
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
@@ -130,32 +127,37 @@ include_directories(
     include
     ${catkin_INCLUDE_DIRS}
 )
-#include_directories(SYSTEM
-#    ${Boost_INCLUDE_DIRS}
-#    ${PCL_INCLUDE_DIRS}
-#    ${Eigen3_INCLUDE_DIRS}
-#)
+include_directories(SYSTEM
+    ${Boost_INCLUDE_DIRS}
+    ${PCL_INCLUDE_DIRS}
+    ${Eigen3_INCLUDE_DIRS}
+    ${CGAL_INCLUDE_DIRS}
+    )
 
 ## Declare a C++ library
-#add_library(surface_types
-#    include/surface_types/pcl_shim/ModelCoefficients_Serialization.hpp
-#    include/surface_types/pcl_shim/PointIndices_Serialization.hpp
-#    include/surface_types/pcl_shim/PolygonMesh_Serialization.hpp
-#    include/surface_types/pcl_shim/Vertices_Serialization.hpp
-#
-#    include/surface_types/PointClusters.hpp
-#    include/surface_types/Polygons.hpp
-#    include/surface_types/Segment.hpp
-#    include/surface_types/SurfaceData.hpp
-#    include/surface_types/SurfaceMesh.hpp
-#    include/surface_types/SurfaceMeshStamped.hpp
-#    include/surface_types/Surfaces.hpp
-#    include/surface_types/SurfaceStamped.hpp
-#
-#    include/surface_types/utils.hpp)
-#SET_TARGET_PROPERTIES(surface_types PROPERTIES LINKER_LANGUAGE CXX)
-#add_dependencies(surface_types ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-#target_link_libraries(surface_types ${Boost_LIBRARIES} ${catkin_LIBRARIES} ${Eigen3_LIBRARIES} ${PCL_LIBRARIES})
+ add_library(build_surface
+   src/${PROJECT_NAME}/BuildSurface.cpp
+ )
+
+## Add cmake target dependencies of the library
+## as an example, code may need to be generated before libraries
+## either from message generation or dynamic reconfigure
+ add_dependencies(build_surface ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+
+target_link_libraries(build_surface
+    ${catkin_LIBRARIES} ${Boost_LIBRARIES} ${Eigen3_LIBRARIES} ${PCL_LIBRARIES} ${CGAL_LIBS}
+    )
+## Declare a C++ executable
+# add_executable(build_surface_node src/build_surface_node.cpp)
+
+## Add cmake target dependencies of the executable
+## same as for the library above
+# add_dependencies(build_surface_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+
+## Specify libraries to link a library or executable target against
+# target_link_libraries(build_surface_node
+#   ${catkin_LIBRARIES}
+# )
 
 #############
 ## Install ##
@@ -172,18 +174,18 @@ include_directories(
 # )
 
 ## Mark executables and/or libraries for installation
-# install(TARGETS surface_types surfaces_node
-#   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-#   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-#   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-# )
+ install(TARGETS build_surface
+   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+ )
 
 ## Mark cpp header files for installation
 install(DIRECTORY include/${PROJECT_NAME}/
     DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
     FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp"
     PATTERN ".svn" EXCLUDE
-)
+    )
 
 ## Mark other files for installation (e.g. launch and bag files, etc.)
 # install(FILES
@@ -197,7 +199,7 @@ install(DIRECTORY include/${PROJECT_NAME}/
 #############
 
 ## Add gtest based cpp test target and link libraries
-# catkin_add_gtest(${PROJECT_NAME}-test test/test_surfaces.cpp)
+# catkin_add_gtest(${PROJECT_NAME}-test test/test_build_surface.cpp)
 # if(TARGET ${PROJECT_NAME}-test)
 #   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
 # endif()

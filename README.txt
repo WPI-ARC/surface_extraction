@@ -1,10 +1,8 @@
-Surface Extraction
-==================
+# Surface Extraction
 
 This project is an on-demand surface extraction framework designed for humanoid locomotion planning. Its key feature is the ability to incrementally process the scene in order to waste unnecessary effort processing areas of the environment for which surface information is not required.
 
-Setup
------
+## Setup
 
 Surface Extraction runs on Ubuntu 16.04 and ROS Kinetic (http://wiki.ros.org/kinetic/Installation/Ubuntu)
 
@@ -14,7 +12,5 @@ Surface Extraction runs on Ubuntu 16.04 and ROS Kinetic (http://wiki.ros.org/kin
 4. Download `surface_extraction` and put it in your Catkin workspace
 5. Compile with `catkin_make`
 
-Usage
------
-
+## Usage
 

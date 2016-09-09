@@ -1,9 +1,6 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(build_surface)
 
-set(PCL_DIR "~/Desktop/pcl-1.8/install/usr/local/share/pcl-1.8")
-set(BOOST_ROOT "~/Desktop/boost_1_60_0")
-
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
@@ -12,6 +9,7 @@ set(CATKIN_PACKAGES
     surface_types
     surface_utils
     arc_utilities)
+
 find_package(catkin REQUIRED COMPONENTS
     ${CATKIN_PACKAGES}
 )
@@ -19,7 +17,7 @@ find_package(catkin REQUIRED COMPONENTS
 ## System dependencies are found with CMake's conventions
 find_package(Boost 1.6 REQUIRED COMPONENTS system)
 find_package(PCL 1.8 REQUIRED)
-find_package(CGAL 4.6 REQUIRED COMPONENTS Core)
+find_package(CGAL REQUIRED COMPONENTS Core)
 include(${CGAL_USE_FILE})
 
 ## Uncomment this if the package has a setup.py. This macro ensures

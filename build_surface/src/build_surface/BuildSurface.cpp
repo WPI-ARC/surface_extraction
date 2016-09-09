@@ -160,7 +160,7 @@ pcl::ModelCoefficients BuildSurface::optimize_model_for_inliers(const PointCloud
         Eigen::ArrayXf weights(inliers.size());
         Eigen::RowVector4f mean = Eigen::RowVector4f::Zero();
         const auto radius = 2 * parallel_distance_;
-        for (int i = 0; i < inliers.size(); i++) {
+        for (int i = 0; static_cast<std::size_t>(i) < inliers.size(); i++) {
             std::vector<int> neighbors;
             std::vector<float> neighbor_sqr_dist;
             search.radiusSearch(i, radius, neighbors, neighbor_sqr_dist);

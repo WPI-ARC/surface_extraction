@@ -19,7 +19,7 @@ find_package(catkin REQUIRED COMPONENTS
 ## System dependencies are found with CMake's conventions
 find_package(Boost REQUIRED COMPONENTS system)
 find_package(PCL 1.8 REQUIRED)
-find_package(Eigen REQUIRED)
+find_package(Eigen3 REQUIRED)
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -114,7 +114,7 @@ catkin_package(
   INCLUDE_DIRS include
 #  LIBRARIES surface_utils
   CATKIN_DEPENDS ${CATKIN_PACKAGES}
-  DEPENDS PCL Eigen
+  DEPENDS PCL Eigen3
 )
 
 ###########

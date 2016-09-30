@@ -16,7 +16,9 @@ find_package(catkin REQUIRED COMPONENTS
 ## System dependencies are found with CMake's conventions
 find_package(Boost REQUIRED COMPONENTS system)
 find_package(PCL 1.8 REQUIRED)
-find_package(CGAL 4.6 REQUIRED COMPONENTS Core)
+# NOTE the required minimum version of CGAL is 4.6, which is satisfied by the 16.04 default install but not the 14.04
+# default install. However, neither exports its version (bad CGAL), so the requirement can't be expressed to cmake
+find_package(CGAL REQUIRED COMPONENTS Core)
 include(${CGAL_USE_FILE})
 
 ## Uncomment this if the package has a setup.py. This macro ensures

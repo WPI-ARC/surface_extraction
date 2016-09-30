@@ -26,6 +26,10 @@ namespace surface_utils {
         p.z = v[2];
         return p;
     };
+
+    Eigen::Vector4f augment(const Eigen::Vector3f &v) {
+        return Eigen::Vector4f(v[0], v[1], v[2], 1);
+    }
 }
 
 #endif //PROJECT_CONVERSIONS_HPP

@@ -310,9 +310,9 @@ SurfaceDetection::Surfaces SurfaceDetection::detect_surfaces_within(const Eigen:
             second_surface.update_plane(build_surface_.compute_plane(second_surface, v));
         }
 
-        if (pcl::getAngle3D(first_surface.normal(), second_surface.normal()) > max_angle) {
+        if (pcl::getAngle3D(first_surface.normal4(), second_surface.normal4()) > max_angle) {
             ROS_DEBUG_STREAM("No merge because the angle between the normals is too large ("
-                             << pcl::getAngle3D(first_surface.normal(), second_surface.normal()) << ")");
+                             << pcl::getAngle3D(first_surface.normal4(), second_surface.normal4()) << ")");
             continue;
         }
 

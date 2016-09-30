@@ -64,6 +64,15 @@ public:
         return Eigen::Vector3f(model().values.data());
     }
 
+    Eigen::Vector4f normal4_approx() const {
+        auto normal3 = normal_approx();
+        return Eigen::Vector4f(normal3[0], normal3[1], normal3[2], 1);
+    }
+    Eigen::Vector4f normal4() const {
+        auto normal3 = normal();
+        return Eigen::Vector4f(normal3[0], normal3[1], normal3[2], 1);
+    }
+
     const Eigen::Affine3d &pose_approx() const {
         assert(has_plane_approx() && "Tried to get pose, but it has never been provided");
         return data_.pose;

@@ -149,7 +149,9 @@ public:
     }
 
     void pose(std::string name, const geometry_msgs::PoseStamped &p) const {
-        with_publisher<geometry_msgs::PoseStamped>(name, [=](const ros::Publisher &pub) { pub.publish(p); });
+        with_publisher<geometry_msgs::PoseStamped>(name, [=](const ros::Publisher &pub) {
+            pub.publish(p);
+        });
     }
 
     void pose(std::string name, const geometry_msgs::Pose &p) const {

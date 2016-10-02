@@ -262,6 +262,7 @@ SurfaceDetection::Surfaces SurfaceDetection::detect_surfaces_within(const Eigen:
                 }
 
                 surface.add_inliers(all_pts, new_ind);
+
                 ROS_DEBUG_STREAM(surface.print_color() << "Expanded new surface " << new_surface_id << " by "
                                                        << new_ind.size() << " points");
             }
@@ -270,81 +271,86 @@ SurfaceDetection::Surfaces SurfaceDetection::detect_surfaces_within(const Eigen:
     }
 
     ROS_DEBUG_STREAM("Found " << merge_candidates.size() << " merge candidates");
-    std::vector<int> merged(surfaces_.rbegin()->first + 1, -1);
-
     auto t_merge_start = high_resolution_clock::now();
-    auto max_angle = 2 * std::asin(2 * perpendicular_distance_ / min_width_);
-    for (const auto pair : merge_candidates) {
-        uint32_t first = pair.first, second = pair.second;
-        // Follow the possibly-multiple-step path from the original candidate to whichever surface that surface now
-        // belongs to.
-        while (merged[first] != -1) {
-            first = static_cast<uint32_t>(merged[first]);
-        }
-        while (merged[second] != -1) {
-            second = static_cast<uint32_t>(merged[second]);
-        }
+    if (!merge_candidates.empty()) {
+        // merged vector maps merged-away surface ids to the id of the surface they were merged into
+        // needs indices up to the highest id in surfaces_, which is the last item because maps sort their items
+        std::vector<int> merged(surfaces_.rbegin()->first + 1, -1);
 
-        if (first == second) {
-            ROS_DEBUG_STREAM("No merge between surface " << first << " and itself");
-            continue;
-        }
+        auto max_angle = 2 * std::asin(2 * perpendicular_distance_ / min_width_);
+        for (const auto pair : merge_candidates) {
+            uint32_t first = pair.first, second = pair.second;
+            // Follow the possibly-multiple-step path from the original candidate to whichever surface that surface now
+            // belongs to.
+            while (merged[first] != -1) {
+                first = static_cast<uint32_t>(merged[first]);
+            }
+            while (merged[second] != -1) {
+                second = static_cast<uint32_t>(merged[second]);
+            }
 
-        ROS_DEBUG_STREAM("Considering merge between " << first << " and " << second << " (originally " << pair.first
-                                                      << " and " << pair.second << ")");
+            if (first == second) {
+                ROS_DEBUG_STREAM("No merge between surface " << first << " and itself");
+                continue;
+            }
 
-        if ((pair.first != first || pair.second != second) &&
-            merge_candidates.find(std::minmax(first, second)) != merge_candidates.end()) {
-            // Don't check this pair twice (if it's in the set it either has been or will be checked)
-            ROS_DEBUG_STREAM("No merge because this pair was already in the list");
-            continue;
-        }
+            ROS_DEBUG_STREAM("Considering merge between " << first << " and " << second << " (originally " << pair.first
+                                                          << " and " << pair.second << ")");
 
-        Surface &first_surface = get_surface(first);
-        Surface &second_surface = get_surface(second);
+            if ((pair.first != first || pair.second != second) &&
+                merge_candidates.find(std::minmax(first, second)) != merge_candidates.end()) {
+                // Don't check this pair twice (if it's in the set it either has been or will be checked)
+                ROS_DEBUG_STREAM("No merge because this pair was already in the list");
+                continue;
+            }
 
-        if (!first_surface.has_plane()) {
-            first_surface.update_plane(build_surface_.compute_plane(first_surface, v));
-        }
-        if (!second_surface.has_plane()) {
-            second_surface.update_plane(build_surface_.compute_plane(second_surface, v));
-        }
+            Surface &first_surface = get_surface(first);
+            Surface &second_surface = get_surface(second);
 
-        if (pcl::getAngle3D(first_surface.normal4(), second_surface.normal4()) > max_angle) {
-            ROS_DEBUG_STREAM("No merge because the angle between the normals is too large ("
-                             << pcl::getAngle3D(first_surface.normal4(), second_surface.normal4()) << ")");
-            continue;
-        }
+            if (!first_surface.has_plane()) {
+                first_surface.update_plane(build_surface_.compute_plane(first_surface, v));
+            }
+            if (!second_surface.has_plane()) {
+                second_surface.update_plane(build_surface_.compute_plane(second_surface, v));
+            }
 
-        auto in_order = (first_surface.size() < second_surface.size());
-        Surface &smaller = in_order ? first_surface : second_surface;
-        Surface &larger = in_order ? second_surface : first_surface;
-        auto plane = Eigen::Vector4f(larger.model().values.data());
+            if (pcl::getAngle3D(first_surface.normal4(), second_surface.normal4()) > max_angle) {
+                ROS_DEBUG_STREAM("No merge because the angle between the normals is too large ("
+                                 << pcl::getAngle3D(first_surface.normal4(), second_surface.normal4()) << ")");
+                continue;
+            }
 
-        int outliers_allowed = static_cast<int>(smaller.size() * 0.05);
-        for (const auto pt : smaller.inliers()) {
-            if (pcl::pointToPlaneDistance(pt, plane) > perpendicular_distance_) {
-                outliers_allowed--;
-                if (outliers_allowed <= 0) {
-                    break;
+            auto in_order = (first_surface.size() < second_surface.size());
+            Surface &smaller = in_order ? first_surface : second_surface;
+            Surface &larger = in_order ? second_surface : first_surface;
+            auto plane = Eigen::Vector4f(larger.model().values.data());
+
+            int outliers_allowed = static_cast<int>(smaller.size() * 0.05);
+            for (const auto pt : smaller.inliers()) {
+                if (pcl::pointToPlaneDistance(pt, plane) > perpendicular_distance_) {
+                    outliers_allowed--;
+                    if (outliers_allowed <= 0) {
+                        break;
+                    }
                 }
             }
-        }
 
-        if (outliers_allowed > 0) {
-            // Then fewer than 5% of smaller was outside of the plane of larger, so do merge
-            ROS_DEBUG_STREAM(smaller.print_color() << "Merging surface " << smaller.id() << larger.print_color()
-                                                   << " into surface " << larger.id());
-            larger.add_inliers(smaller.inliers());
-            deleted_surfaces.insert(smaller.id());
-            collected_surfaces.erase(smaller.id());
-            updated_surfaces.erase(smaller.id());
-            merged[smaller.id()] = larger.id();
-            remove_surface(smaller);
-        } else {
-            ROS_DEBUG_STREAM("No merge because there would be too many outliers");
+            if (outliers_allowed > 0) {
+                // Then fewer than 5% of smaller was outside of the plane of larger, so do merge
+                ROS_DEBUG_STREAM(smaller.print_color() << "Merging surface " << smaller.id() << larger.print_color()
+                                                       << " into surface " << larger.id());
+                larger.add_inliers(smaller.inliers());
+                deleted_surfaces.insert(smaller.id());
+                collected_surfaces.erase(smaller.id());
+                updated_surfaces.erase(smaller.id());
+                merged[smaller.id()] = larger.id();
+                remove_surface(smaller);
+            } else {
+                ROS_DEBUG_STREAM("No merge because there would be too many outliers");
+            }
         }
     }
+
     t_merge = high_resolution_clock::now() - t_merge_start;
 
     // Make an object to populate
@@ -368,11 +374,12 @@ SurfaceDetection::Surfaces SurfaceDetection::detect_surfaces_within(const Eigen:
         bool get_mesh =
             (provide_mesh == Surface::ALWAYS || (provide_mesh == Surface::IF_AVAILABLE && surface.has_mesh()));
 
-        // Make sure all necessary data is actually avalible
+        // Make sure all necessary data is actually available
         // TODO If multiple need computing, compute them together, because it can share data that way
         if (!surface.has_plane()) {
             ROS_WARN("Once refactoring is done, I think surfaces should always have an updated plane at the end of "
                      "detect_surfaces?");
+            std::cout.setf( std::ios_base::unitbuf );
             ROS_DEBUG_STREAM(surface.print_color() << "Updating surface " << surface.id()
                                                    << "'s plane before returning");
             surface.update_plane(build_surface_.compute_plane(surface, v));

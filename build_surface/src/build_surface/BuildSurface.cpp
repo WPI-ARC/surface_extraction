@@ -22,6 +22,11 @@
 #include <pcl/search/kdtree.h>
 #include <build_surface/cgal_utils.hpp>
 
+#include <pcl/pcl_config.h>
+#if PCL_VERSION_COMPARE(<, 1, 8, 0)
+#error "BuildSurface requires PCL 1.8.0 or greater "
+#endif
+
 using surfaces_pcl_utils::model_normal;
 
 BuildSurface::BuildSurface(double perpendicular_distance, double parallel_distance, double point_inside_d, double alpha,
@@ -54,6 +59,9 @@ BuildSurface::compute_shape(const Surface &surface, const SurfaceVisualizationCo
         return std::all_of(poly.vertices.begin(), poly.vertices.end(),
                            boost::bind(std::less<uint32_t>(), _1, boundary.size()));
     }) && "Reindexer gave an index outside of the boundary cloud");
+
+    assert(boundary.size() > 0 && "Computed no boundary for this surface");
+    assert(polygons.size() > 0 && "Computed no polygons for this surface");
 
     return std::make_pair(boundary, polygons);
 }
@@ -241,19 +249,29 @@ pcl::ModelCoefficients BuildSurface::find_model_for_inliers(const PointCloud &cl
 
 Eigen::Affine3d BuildSurface::adjust_pose_to_model(Eigen::Affine3d pose, pcl::ModelCoefficients model,
                                                    const SurfaceVisualizationController &p) const {
+    assert(!pose.matrix().hasNaN() && "Got pose with NaN");
+//    assert(!Eigen::Map<Eigen::Vector4f>(model.values.data()).isNaN() && "Got model with NaN");
+
     // Promote all the floats coming from model to doubles
-    const auto plane_normal = Eigen::Map<Eigen::Vector3f>(model.values.data()).cast<double>();
+    const Eigen::Vector3d plane_normal = Eigen::Map<Eigen::Vector3f>(model.values.data()).cast<double>();
     const auto plane_distance = static_cast<double>(model.values[3]);
     assert(std::abs(plane_normal.norm() - 1) < 1e-2 && "Plane normal from model was not a unit vector");
 
+    assert(!pose.matrix().hasNaN() && "Got a NaN pose");
+
     Eigen::Affine3d pose_before_inv(pose.inverse());
+
     p.pose("pose_before", pose_before_inv * pose); // Yes, this is intentionally identity
+
+    assert(!pose_before_inv.matrix().hasNaN() && "Got a NaN pose inverse");
 
     // 1. Rotate to align z^ with the plane normal
     // (Rotate the pose by the same quaterion that aligns z^ with the plane normal, expressed relative to the pose)
-    const auto normal_relative_to_pose = pose.rotation().inverse() * plane_normal;
-    p.vector("normal", normal_relative_to_pose, Eigen::Vector3d::Zero());
-    auto quaternion = Eigen::Quaterniond::FromTwoVectors(Eigen::Vector3d::UnitZ(), normal_relative_to_pose);
+    const Eigen::Vector3d normal_relative_to_pose = pose.rotation().inverse() * plane_normal;
+    assert(!normal_relative_to_pose.matrix().hasNaN() && "Normal had NaN");
+    p.vector("normal", plane_normal, Eigen::Vector3d::Zero());
+    p.vector("normal_relative_to_pose", normal_relative_to_pose, Eigen::Vector3d::Zero());
+    Eigen::Quaterniond quaternion = Eigen::Quaterniond::FromTwoVectors(Eigen::Vector3d::UnitZ(), normal_relative_to_pose);
     pose.rotate(quaternion);
 
     geometry_msgs::Pose geom_pose;
@@ -261,6 +279,7 @@ Eigen::Affine3d BuildSurface::adjust_pose_to_model(Eigen::Affine3d pose, pcl::Mo
     p.pose("rotation", geom_pose);
 
     p.pose("pose_after", pose_before_inv * pose);
+
 
     // At this point, z axis should be identical to the plane normal (within floating point error)
     ROS_ERROR_STREAM_COND(!(pose.linear() * Eigen::Vector3d::UnitZ()).isApprox(plane_normal, 1e-06),

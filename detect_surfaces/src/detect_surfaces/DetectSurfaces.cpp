@@ -80,6 +80,8 @@ void DetectSurfaces::detect_surfaces(const PointCloud &cloud, const std::vector<
                     auto inlier_indices = surfaces_pcl_utils::reindex(filtered_indices, segment.indices);
                     auto surface = Surface({cloud, inlier_indices}, model, transform.cast<double>());
 
+                    v.plane_normal("new_surface_normal", surface);
+
                     // Update new_labels (note new_labels[i] refers to cloud[i])
                     for (auto &idx : inlier_indices) {
                         new_labels[idx] = static_cast<int>(surface.id());
@@ -228,7 +230,7 @@ DetectSurfaces::sac_segmentation_and_fit(NormalCloud::Ptr &normals, NormalSearch
         // The inliers have no guarantee of sorted-ness
         std::sort(inliers.indices.begin(), inliers.indices.end());
 
-        // Copies everything in remaining_src EXCEPT the contents of inliners into remaining_temp
+        // Copies everything in remaining_src EXCEPT the contents of inliers into remaining_temp
         std::set_difference(remaining_indices->indices.begin(), remaining_indices->indices.end(),
                             inliers.indices.begin(), inliers.indices.end(),
                             std::back_inserter(remaining_indices_tmp.indices));

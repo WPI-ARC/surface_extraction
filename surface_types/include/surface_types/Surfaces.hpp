@@ -23,13 +23,13 @@ struct Surfaces {
 
 public:
     void add_surface(const SurfaceData &s) {
-        s.validate();
+//        s.validate();
 
         surfaces.push_back(s);
     }
 
     void update_surface(const SurfaceData &s) {
-        s.validate();
+//        s.validate();
 
         auto posn = find_id(s.id);
         assert(posn != surfaces.end() && "Tried to update surface that isn't in this Surfaces object");

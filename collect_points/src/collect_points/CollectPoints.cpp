@@ -85,7 +85,7 @@ bool CollectPoints::inside_any_surface(const Point &point) const {
 
 // TODO refactor and/or rename to reflect the fact that this removes points within the extents, but not the padding
 std::tuple<CollectPoints::CloudIndexPair, std::vector<int>>
-CollectPoints::pending_points_within(const Eigen::Affine3f &center, const Eigen::Vector3f &extents, float padding) {
+CollectPoints::pending_points_within(const Eigen::Affine3f &center, const Eigen::Vector3f &extents, float padding)  {
     // pcl::ScopeTime st("CollectPoints::pending_points_within");
     auto result = std::make_pair(get_pending_points(), std::vector<int>());
     Eigen::Vector3f xyz, rpy;
@@ -93,7 +93,7 @@ CollectPoints::pending_points_within(const Eigen::Affine3f &center, const Eigen:
 
     pcl::CropBox<Point> crop;
 
-    crop.setInputCloud(boost::shared_ptr<PointCloud>(&result.first, null_deleter()));
+    crop.setInputCloud(boost_fake_shared(result.first));
     crop.setMax({extents[0] + padding, extents[1] + padding, extents[2] + padding, 1});
     crop.setMin({-(extents[0] + padding), -(extents[1] + padding), -(extents[2] + padding), 1});
     crop.setTranslation(xyz);
@@ -101,11 +101,16 @@ CollectPoints::pending_points_within(const Eigen::Affine3f &center, const Eigen:
     crop.filter(result.second);
 
     std::vector<int> pts_to_remove;
-    // query box with padding is always a superset of query box without padding
-    crop.setIndices(boost_fake_shared(result.second));
-    crop.setMax({extents[0], extents[1], extents[2], 1});
-    crop.setMin({-extents[0], -extents[1], -extents[2], 1});
-    crop.filter(pts_to_remove);
+    if (!result.second.empty()) {
+        // query box with padding is always a superset of query box without padding
+        crop.setIndices(boost_fake_shared(result.second));
+        crop.setMax({extents[0], extents[1], extents[2], 1});
+        crop.setMin({-extents[0], -extents[1], -extents[2], 1});
+        crop.filter(pts_to_remove);
+    }
+
+    ROS_DEBUG_STREAM("Result size " << result.second.size() << "/" << result.first.size() << ", " << pts_to_remove.size());
+
 
     return std::make_tuple(result, pts_to_remove);
 }

@@ -101,6 +101,7 @@ int main(int argc, char **argv) {
             cloud.header.frame_id = target_frame;
 
             ROS_DEBUG_STREAM_DELAYED_THROTTLE(10, "Currently have " << cloud.size() << " pending points");
+            ROS_DEBUG_STREAM_ONCE("Publishing first pending-points cloud of size " << cloud.size());
 
             pp_pub.publish(cloud);
 

@@ -22,6 +22,8 @@ find_package(PCL 1.8 REQUIRED)
 find_package(CGAL REQUIRED COMPONENTS Core)
 include(${CGAL_USE_FILE})
 
+MESSAGE( STATUS "PCL_INCLUDE_DIRS:         " ${PCL_INCLUDE_DIRS} )
+
 ## Uncomment this if the package has a setup.py. This macro ensures
 ## modules and global scripts declared therein get installed
 ## See http://ros.org/doc/api/catkin/html/user_guide/setup_dot_py.html
@@ -130,10 +132,11 @@ include_directories(
 )
 include_directories(SYSTEM
     ${Boost_INCLUDE_DIRS}
-    ${PCL_INCLUDE_DIRS}
     ${Eigen3_INCLUDE_DIRS}
     ${CGAL_INCLUDE_DIRS}
     )
+include_directories(BEFORE SYSTEM
+        ${PCL_INCLUDE_DIRS})
 
 ## Declare a C++ library
  add_library(build_surface
@@ -146,7 +149,7 @@ include_directories(SYSTEM
  add_dependencies(build_surface ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 target_link_libraries(build_surface
-    ${catkin_LIBRARIES} ${Boost_LIBRARIES} ${Eigen3_LIBRARIES} ${PCL_LIBRARIES} ${CGAL_LIBS}
+        ${PCL_LIBRARIES} ${catkin_LIBRARIES} ${Boost_LIBRARIES} ${Eigen3_LIBRARIES} ${CGAL_LIBS}
     )
 ## Declare a C++ executable
 # add_executable(build_surface_node src/build_surface_node.cpp)

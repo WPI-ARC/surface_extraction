@@ -73,6 +73,10 @@ CollectPoints::PointCloud CollectPoints::get_pending_points() {
         return cloud; // Return an empty cloud
     }
     pending_points_.getVoxelCentroids(cloud.points);
+    cloud.height = 1;
+    cloud.width = static_cast<uint32_t>(cloud.size());
+
+    assert(cloud.width * cloud.height == cloud.size() && "Pending points cloud had incorrect height and/or width");
     return cloud;
 }
 
@@ -90,8 +94,9 @@ CollectPoints::pending_points_within(const Eigen::Affine3f &center, const Eigen:
     auto result = std::make_pair(get_pending_points(), std::vector<int>());
     Eigen::Vector3f xyz, rpy;
     pcl::getTranslationAndEulerAngles(center, xyz[0], xyz[1], xyz[2], rpy[0], rpy[1], rpy[2]);
+    ROS_INFO_STREAM("Box translation: " << xyz.transpose() << " rotation: " << rpy.transpose() << " extents: " << extents.transpose());
 
-    pcl::CropBox<Point> crop;
+    pcl::CropBox<Point> crop(true); // true might work around an apparent PCL bug
 
     crop.setInputCloud(boost_fake_shared(result.first));
     crop.setMax({extents[0] + padding, extents[1] + padding, extents[2] + padding, 1});

@@ -11,7 +11,7 @@
 #include <pcl/octree/octree_impl.h>
 
 namespace pcl {
-    class PointIndices;
+    struct PointIndices;
 }
 
 #include <pcl/octree/impl/octree_base.hpp>

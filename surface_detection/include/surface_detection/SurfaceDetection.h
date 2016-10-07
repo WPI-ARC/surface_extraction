@@ -66,7 +66,8 @@ private:
     bool optimistic_;
 
     // State
-    std::map<int, Surface> surfaces_;
+    // (this was so nice before i needed the aligned allocator)
+    std::map<int, Surface, std::less<int>, Eigen::aligned_allocator<std::pair<const int, Surface>>> surfaces_;
 
     // Implementation
     CollectPoints collect_points_;

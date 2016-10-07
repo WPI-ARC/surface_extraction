@@ -16,7 +16,7 @@
 namespace pcl {
 struct PointXYZ;
 class PointIndices;
-class Vertices;
+struct Vertices;
 }
 
 class Surface;

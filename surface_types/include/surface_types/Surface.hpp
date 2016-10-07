@@ -31,6 +31,8 @@ private:
     }
 
 public:
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
     typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
 
     ////////////////////////////// Constructor(s) //////////////////////////////
@@ -73,20 +75,21 @@ public:
         return Eigen::Vector4f(normal3[0], normal3[1], normal3[2], 1);
     }
 
-    const Eigen::Affine3d &pose_approx() const {
+    // Note this isn't just a simple non-converting return because of the DontAlign
+    Eigen::Affine3d pose_approx() const {
         assert(has_plane_approx() && "Tried to get pose, but it has never been provided");
         return data_.pose;
     }
-    const Eigen::Affine3d &pose() const {
+    Eigen::Affine3d pose() const {
         assert(has_plane() && "Tried to get out-of-date pose (use pose_approx if that's OK)");
         return data_.pose;
     }
 
-    const Eigen::Affine3f pose_float_approx() const {
+    Eigen::Affine3f pose_float_approx() const {
         assert(has_plane_approx() && "Tried to get pose, but it has never been provided");
         return data_.pose.cast<float>();
     }
-    const Eigen::Affine3f pose_float() const {
+    Eigen::Affine3f pose_float() const {
         assert(has_plane() && "Tried to get out-of-date pose (use pose_float_approx if that's OK)");
         return data_.pose.cast<float>();
     }

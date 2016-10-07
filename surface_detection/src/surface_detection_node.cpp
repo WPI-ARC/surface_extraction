@@ -71,7 +71,8 @@ int main(int argc, char **argv) {
     // We want the alpha shape corresponding to a disc of diameter = parallel_distance.
     // CGAL defines alpha as the square of the radius of the disc (different to the original definition in the paper)
     auto parallel_distance = pn.param("parallel_distance", 0.06);
-    auto alpha = std::pow(parallel_distance / 2.0, 2);
+//    auto alpha = std::pow(parallel_distance / 2.0, 2);
+    auto alpha = pn.param("polygon_alpha", 0.005);
 
     SurfaceDetection surface_detection(
         pn.param("discretization", 0.02), pn.param("perpendicular_distance", 0.04), parallel_distance,
@@ -138,6 +139,13 @@ int main(int argc, char **argv) {
     cloud.header.frame_id = target_frame;
     pp_pub.publish(cloud);
     pp_timer.stop();
+
+    // Everything happening to the cloud up to now is deterministic, idempotent, and pretty fragile in its setup. It's
+    // about time I just save it as a .pcd that I can then load
+//    const SurfaceDetection::PointCloud &cld = getter.surface_detection.get_pending_points();
+//    ROS_INFO_STREAM("Width: " << cld.width << " Height: " << cld.height << " Size: " << cld.size());
+//    assert(cld.width * cld.height == cld.size() && "Cloud width and/or height are incorrect");
+//    pcl::io::savePCDFileASCII("/home/will/Desktop/processed_cloud.pcd", cld);
 
     // Make service provider
     auto srv = n.advertiseService("get_surfaces", &get_surfaces::go, &getter);

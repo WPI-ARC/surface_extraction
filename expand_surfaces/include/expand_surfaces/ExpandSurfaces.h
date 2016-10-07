@@ -15,7 +15,7 @@
 // Forward declarations
 namespace pcl {
 struct PointXYZ;
-class ModelCoefficients;
+struct ModelCoefficients;
 namespace search {
 template <typename PointT>
 class Search;

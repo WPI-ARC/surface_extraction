@@ -359,6 +359,11 @@ public:
     }
 
     void bounding_box(const Eigen::Affine3f &center, const Eigen::Vector3f &extents) {
+        // Aligned Eigen objects must be passed by reference, but if I do that it might go away
+        // Easy fix: do everything I need from it before dispatching the thread and capture the result
+        geometry_msgs::Pose pose;
+        tf::poseEigenToMsg(center.cast<double>(), pose);
+
         with_marker_publisher([=](const ros::Publisher &pub) {
             visualization_msgs::Marker m;
             m.header.frame_id = frame_;
@@ -367,7 +372,7 @@ public:
             m.id = 0;
             m.type = visualization_msgs::Marker::LINE_LIST;
             m.action = visualization_msgs::Marker::ADD;
-            tf::poseEigenToMsg(center.cast<double>(), m.pose);
+            m.pose = pose;
             m.scale.x = 0.01;
             // m.scale otherwise not needed
             m.color.r = 1;

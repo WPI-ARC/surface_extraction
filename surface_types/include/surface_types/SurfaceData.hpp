@@ -29,12 +29,14 @@ struct SurfaceData {
     std_msgs::ColorRGBA color;
     pcl::PointCloud<pcl::PointXYZ> inliers;
     pcl::ModelCoefficients model;
-    Eigen::Affine3d pose;
+    // An Eigen::Affine3d with a DontAlign option
+    Eigen::Transform<double, 3, Eigen::Affine, Eigen::DontAlign> pose;
     pcl::PointCloud<pcl::PointXYZ> boundary;
     std::vector<pcl::Vertices> polygons;
     shape_msgs::Mesh mesh;
 
 public:
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     SurfaceData() : id(0), color(), inliers(), model(), pose(), boundary(), polygons(), mesh() {}
     SurfaceData(uint32_t i, std_msgs::ColorRGBA c, pcl::PointCloud<pcl::PointXYZ> p) :
             id(std::move(i)), color(std::move(c)), inliers(std::move(p)), model(), pose(), boundary(), polygons(), mesh() {}
@@ -51,7 +53,11 @@ public:
         s_ros.id = id;
         s_ros.color = color;
         pcl_conversions::fromPCL(model, s_ros.model);
-        tf::poseEigenToMsg(pose, s_ros.pose);
+
+        // The aligned-ness of the pose member makes inference fail, so make a quick copy
+        // Technically inefficient but effect should be negligible
+        Eigen::Affine3d pose_aligned(pose);
+        tf::poseEigenToMsg(pose_aligned, s_ros.pose);
 
         // Inliers
         pcl::PCLPointCloud2 inliers_pointcloud2;
@@ -213,7 +219,10 @@ struct Serializer<surface_types::SurfaceData> {
         s.validate_complete();
 
         geometry_msgs::Pose geom_pose;
-        tf::poseEigenToMsg(s.pose, geom_pose);
+        // The aligned-ness of the pose member makes inference fail, so make a quick copy
+        // Technically inefficient but effect should be negligible
+        Eigen::Affine3d pose_aligned(s.pose);
+        tf::poseEigenToMsg(pose_aligned, geom_pose);
 
         stream.next(s.id);
         stream.next(s.color);
@@ -238,12 +247,19 @@ struct Serializer<surface_types::SurfaceData> {
         stream.next(s.polygons);
         stream.next(s.mesh);
 
-        tf::poseMsgToEigen(geom_pose, s.pose);
+        // The aligned-ness of the pose member makes inference fail, so make a quick copy
+        // Technically inefficient but effect should be negligible
+        Eigen::Affine3d pose_aligned;
+        tf::poseMsgToEigen(geom_pose, pose_aligned);
+        s.pose = pose_aligned;
     }
 
     inline static uint32_t serializedLength(const surface_types::SurfaceData &s) {
         geometry_msgs::Pose geom_pose;
-        tf::poseEigenToMsg(s.pose, geom_pose);
+        // The aligned-ness of the pose member makes inference fail, so make a quick copy
+        // Technically inefficient but effect should be negligible
+        Eigen::Affine3d pose_aligned(s.pose);
+        tf::poseEigenToMsg(pose_aligned, geom_pose);
 
         uint32_t size = 0;
 

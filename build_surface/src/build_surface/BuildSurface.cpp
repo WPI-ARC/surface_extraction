@@ -37,7 +37,10 @@ BuildSurface::BuildSurface(double perpendicular_distance, double parallel_distan
 std::tuple<pcl::ModelCoefficients, Eigen::Affine3d>
 BuildSurface::compute_plane(const Surface &surface, const SurfaceVisualizationController &v) const {
     auto model = find_model_for_inliers(surface.inliers(), surface.model_approx());
-    auto pose = adjust_pose_to_model(surface.pose_approx(), model, v);
+
+    ROS_INFO_STREAM("DEBUG " << surface.size());
+    Eigen::Affine3d pose_before = surface.pose_approx(); // Converts to aligned
+    auto pose = adjust_pose_to_model(pose_before, model, v);
 
     return std::make_tuple(model, pose);
 }

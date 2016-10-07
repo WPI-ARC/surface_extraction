@@ -41,7 +41,7 @@ public:
 
     void detect_surfaces(const PointCloud &input, const std::vector<int> &indices,
                              std::vector<int> &new_labels, const SurfaceVisualizationController &v,
-                             std::function<void(Surface)> callback);
+                             std::function<void(const Surface &)> callback);
 
 private:
     std::vector<int> radius_filter(const PointCloud &cloud, const std::vector<int> &indices);

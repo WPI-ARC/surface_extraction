@@ -16,7 +16,7 @@ struct Surfaces {
 
     pcl::PCLHeader header;
 
-    std::vector<SurfaceData> surfaces;
+    std::vector<SurfaceData, Eigen::aligned_allocator<SurfaceData>> surfaces;
 
     std::vector<uint32_t> deleted_surfaces;
     std::vector<uint32_t> unchanged_surfaces;
@@ -36,7 +36,7 @@ public:
         (*posn) = s;
     }
 
-    std::vector<SurfaceData>::iterator find_id(uint32_t surface_id) {
+    decltype(surfaces)::iterator find_id(uint32_t surface_id) {
         return std::find_if(surfaces.begin(), surfaces.end(),
                             [&surface_id](const SurfaceData &s) { return s.id == surface_id; });
     }

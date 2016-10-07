@@ -15,6 +15,7 @@ namespace surface_types {
 // Defined similarly to pcl::PointIndices
     struct SurfaceStamped
     {
+        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
         SurfaceStamped() : header(), surface()
         {}
 

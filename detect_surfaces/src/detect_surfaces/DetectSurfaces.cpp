@@ -38,7 +38,7 @@ DetectSurfaces::DetectSurfaces(double perpendicular_dist, double parallel_dist, 
 
 void DetectSurfaces::detect_surfaces(const PointCloud &cloud, const std::vector<int> &indices,
                                      std::vector<int> &new_labels, const SurfaceVisualizationController &v,
-                                     std::function<void(Surface)> callback) {
+                                     std::function<void(const Surface &)> callback) {
     std::vector<int> filtered_indices = radius_filter(cloud, indices);
     ROS_DEBUG_STREAM("Radius filter reduced " << indices.size() << " indices to " << filtered_indices.size());
 
